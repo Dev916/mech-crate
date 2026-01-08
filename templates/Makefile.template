@@ -5,17 +5,9 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 ROOT_DIR := $(abspath $(CURDIR))
-APP_AI_DIR := $(ROOT_DIR)/apps/app
+PROJECT_NAME ?= $(notdir $(ROOT_DIR))
+APP_DIR := $(ROOT_DIR)/apps/app
 MAKEFILES := $(wildcard make/*.mk)
-
-.PHONY: help
-help: ## Show all available targets
-	@if [ -z "$(MAKEFILES)" ]; then \
-		printf "No module targets loaded yet.\n"; \
-	else \
-		printf "Available targets:\n"; \
-		grep -hE '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILES) | awk 'BEGIN {FS = ":.*##"}; {printf "  %-25s %s\n", $$1, $$2}'; \
-	fi
 
 # Key generation utilities
 BYTES ?= 32
@@ -30,26 +22,28 @@ make-key: ## Generate a secret key (BYTES=32, FORMAT=hex|base64|uuid)
 		*)      echo "Unknown format: $(FORMAT). Use hex, base64, or uuid" && exit 1 ;; \
 	esac
 
+# Include all make modules
 ifneq ($(strip $(MAKEFILES)),)
 include $(MAKEFILES)
 endif
 
-# Display this help message
-help:
+# ─────────────────────────────────────────────────────────────────────────────
+# Core Targets
+# ─────────────────────────────────────────────────────────────────────────────
+
+.PHONY: help init test ps doctor
+
+help: ## Show available commands
 	@./scripts/help.sh
 
-# Init the environment
-init:
+init: ## Initialize project environment
 	@./scripts/init.sh
 
-# Run tests
-test:
+test: ## Run tests
 	@./scripts/test.sh
 
-# List all running services
-ps:
+ps: ## List running services
 	@./scripts/ps.sh
 
-# Check project health
-doctor:
+doctor: ## Check project health
 	@./scripts/doctor.sh
