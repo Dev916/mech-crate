@@ -188,6 +188,12 @@ Or manually:
 
 See `reference/mono/` for a complete working example with multiple services.
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Cloudflare Infrastructure](docs/cloudflare.md) | Deploy apps to Cloudflare Workers + Containers |
+
 ## Development
 
 The MechCrate tool lives in:
