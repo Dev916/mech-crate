@@ -1,6 +1,5 @@
 # Start commands (resume from saved state)
 .PHONY: start
 
-# Resume services from saved state
-start:
+start: ## Resume services from saved state
 	@./scripts/start.sh
