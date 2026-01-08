@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mechcrate-logo.png" alt="MechCrate Logo" width="200">
+</p>
+
 # MechCrate (mx)
 
 🦝 **Crate Raccoon is the mascot.** MechCrate is the project scaffolding kit for Docker-based development.
