@@ -1,8 +1,7 @@
 # Restart commands
 .PHONY: restart _restart
 
-# Restart a service (s=[service] required)
-restart:
+restart: ## Restart a service (s=[service] required)
 	@$(MAKE) _restart service=$(call get_service)
 
 _restart:
