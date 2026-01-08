@@ -1,15 +1,13 @@
 # Run commands
 .PHONY: run _run exec _exec
 
-# Run command in new container (s=[service] c=[cmd])
-run:
+run: ## Run command in new container (s=[service] c=[cmd])
 	@$(MAKE) _run service=$(call get_service) cmd=$(call get_cmd)
 
 _run:
 	@./scripts/run.sh $(service) $(cmd)
 
-# Exec command in running container (s=[service] c=[cmd])
-exec:
+exec: ## Exec command in running container (s=[service] c=[cmd])
 	@$(MAKE) _exec service=$(call get_service) cmd=$(call get_cmd)
 
 _exec:
