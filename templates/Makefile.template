@@ -1,18 +1,38 @@
 # MechCrate Project Makefile
 # 🦝 Crate Raccoon is ready to serve
 
-include make/common.mk
+.SILENT:
+SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
+ROOT_DIR := $(abspath $(CURDIR))
+APP_AI_DIR := $(ROOT_DIR)/apps/app
+MAKEFILES := $(wildcard make/*.mk)
 
-include make/dev.mk
-include make/up.mk
-include make/down.mk
-include make/build.mk
-include make/logs.mk
-include make/restart.mk
-include make/sh.mk
-include make/run.mk
-include make/start.mk
-include make/stop.mk
+.PHONY: help
+help: ## Show all available targets
+	@if [ -z "$(MAKEFILES)" ]; then \
+		printf "No module targets loaded yet.\n"; \
+	else \
+		printf "Available targets:\n"; \
+		grep -hE '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILES) | awk 'BEGIN {FS = ":.*##"}; {printf "  %-25s %s\n", $$1, $$2}'; \
+	fi
+
+# Key generation utilities
+BYTES ?= 32
+FORMAT ?= hex
+
+.PHONY: make-key
+make-key: ## Generate a secret key (BYTES=32, FORMAT=hex|base64|uuid)
+	@case "$(FORMAT)" in \
+		hex)    openssl rand -hex $(BYTES) ;; \
+		base64) openssl rand -base64 $(BYTES) ;; \
+		uuid)   uuidgen | tr '[:upper:]' '[:lower:]' ;; \
+		*)      echo "Unknown format: $(FORMAT). Use hex, base64, or uuid" && exit 1 ;; \
+	esac
+
+ifneq ($(strip $(MAKEFILES)),)
+include $(MAKEFILES)
+endif
 
 # Display this help message
 help:
