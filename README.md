@@ -41,13 +41,13 @@ mx doctor            # Check project health and dependencies
 mx help              # Show all commands
 
 # Project commands (run from project root)
-mx dev [service]     # Start services in development mode
-mx up [service]      # Start services in production mode
-mx down [service]    # Stop services
-mx logs [service]    # Tail service logs
-mx build <service>   # Build a service image
-mx restart <service> # Restart a service
-mx sh <service>      # Shell into a service
+mx dev [s=service]     # Start services in development mode
+mx up [s=service]      # Start services in production mode
+mx down [s=service]    # Stop services
+mx logs [s=service]    # Tail service logs
+mx build <s=service>   # Build a service image
+mx restart <s=service> # Restart a service
+mx sh <s=service>      # Shell into a service
 mx ps                # List running services
 ```
 
