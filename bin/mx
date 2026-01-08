@@ -69,10 +69,24 @@ show_help() {
     echo ""
     echo -e "${BOLD}COMMANDS:${NC}"
     echo "    new <name>        Create a new MechCrate project"
+    echo "    upgrade           Update current project with latest scaffolding"
     echo "    add <service>     Add a new service to existing project"
+    echo "    cf <subcommand>   Cloudflare management commands"
     echo "    doctor            Check project health and dependencies"
     echo "    version           Show version information"
     echo "    help              Show this help message"
+    echo ""
+    echo -e "${BOLD}CLOUDFLARE COMMANDS (mx cf):${NC}"
+    echo "    mx cf setup                    Run Cloudflare setup wizard"
+    echo "    mx cf init <app>               Initialize a new worker (interactive)"
+    echo "    mx cf init <app> --type=TYPE   Initialize with specific type"
+    echo "    mx cf status                   Show all Cloudflare apps"
+    echo "    mx cf deploy <app>             Deploy to production"
+    echo ""
+    echo -e "${BOLD}    Worker Types:${NC}"
+    echo "        worker      Standard edge worker (APIs, proxies)"
+    echo "        cron        Scheduled worker (background jobs)"
+    echo "        container   Docker container backend (SSR apps)"
     echo ""
     echo -e "${BOLD}PROJECT COMMANDS (run from project root):${NC}"
     echo "    dev [service]     Start services in development mode"
@@ -94,12 +108,12 @@ show_help() {
     echo "    mx new my-app --with db redis          # With specific services"
     echo "    mx new my-app --infra cloudflare       # With Cloudflare infra"
     echo "    mx new my-app --no-prompt              # Quick setup, no prompts"
+    echo "    mx upgrade                             # Update project with latest tools"
+    echo "    mx upgrade --diff                      # Show diffs before updating"
+    echo "    mx upgrade --yes                       # Auto-accept all updates"
     echo "    mx add api                             # Add 'api' service to project"
-    echo ""
-    echo -e "${BOLD}INFRASTRUCTURE:${NC}"
-    echo "    cloudflare        Cloudflare Workers + Containers"
-    echo "    aws               AWS via Terraform (coming soon)"
-    echo "    digitalocean      DigitalOcean via Terraform (coming soon)"
+    echo "    mx cf init api.example.com             # Initialize CF worker (interactive)"
+    echo "    mx cf init my-job --type=cron          # Initialize cron worker"
     echo ""
     echo -e "${CYAN}🦝 Crate Raccoon says: Happy building!${NC}"
 }
@@ -429,26 +443,90 @@ EOF
 make cf-setup                  # Configure credentials
 
 # Initialize an app
-make cf-init a=pricelove.co    # Create app structure
+make cf-init a=myapp           # Interactive - choose worker type
+make cf-init a=myapp type=worker     # Regular edge worker
+make cf-init a=myapp type=cron       # Scheduled worker
+make cf-init a=myapp type=container  # Container-backed worker
 
 # Deploy
-make cf-deploy a=pricelove.co  # Deploy single app
+make cf-deploy a=myapp         # Deploy single app
 make cf-deploy-all             # Deploy all apps
 ```
 
 | Command | Description |
 |---------|-------------|
 | `make cf-setup` | Interactive setup wizard |
-| `make cf-init a=<app>` | Initialize a new app |
+| `make cf-init a=<app>` | Initialize a new app (interactive) |
 | `make cf-status` | Show all apps status |
 | `make cf-deploy a=<app>` | Deploy to production |
 | `make cf-deploy-all` | Deploy all apps |
+
+### Worker Types
+
+| Type | Description |
+|------|-------------|
+| `worker` | Standard edge worker (APIs, proxies, static sites) |
+| `cron` | Scheduled worker (background jobs, data sync) |
+| `container` | Docker container backend (SSR apps, stateful services) |
 
 See `infra/cloudflare/README.md` for detailed documentation.
 EOF
     fi
     
     success "Project '$project_name' created successfully!"
+    echo ""
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Interactive Cloudflare App Setup
+    # ─────────────────────────────────────────────────────────────────────────
+    if [[ "$has_cloudflare" == "true" && "$no_prompt" == "false" ]]; then
+        echo ""
+        echo -e "${CYAN}╭────────────────────────────────────────────────────────────╮${NC}"
+        echo -e "${CYAN}│${NC}  ${BOLD}🌐 Cloudflare Setup${NC}                                      ${CYAN}│${NC}"
+        echo -e "${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
+        echo ""
+        
+        if prompt_yn "Would you like to initialize a Cloudflare Worker app now?"; then
+            echo ""
+            
+            # Run cf-setup first if needed
+            if [[ ! -f "infra/cloudflare/.env.cloudflare" ]]; then
+                info "First, let's configure your Cloudflare credentials..."
+                echo ""
+                ./scripts/cf-setup.sh || {
+                    warn "Cloudflare setup incomplete. You can run 'make cf-setup' later."
+                }
+            fi
+            
+            # Only continue if setup was successful
+            if [[ -f "infra/cloudflare/.env.cloudflare" ]]; then
+                echo ""
+                read -r -p "Enter your app name (e.g., api.example.com, my-worker): " cf_app_name
+                
+                if [[ -n "$cf_app_name" ]]; then
+                    echo ""
+                    ./scripts/cf-init-app.sh "$cf_app_name"
+                else
+                    warn "No app name provided. You can initialize apps later with 'make cf-init a=<app>'"
+                fi
+            fi
+        else
+            echo ""
+            info "You can initialize Cloudflare apps later:"
+            echo "    make cf-setup              # Configure credentials"
+            echo "    make cf-init a=myapp       # Initialize an app"
+        fi
+        
+        echo ""
+    fi
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Final Summary
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo -e "${CYAN}╭────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}📦 Project Ready!${NC}                                        ${CYAN}│${NC}"
+    echo -e "${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
     echo ""
     info "Next steps:"
     echo "    cd $project_name"
@@ -457,10 +535,10 @@ EOF
     
     if [[ "$has_cloudflare" == "true" ]]; then
         echo ""
-        info "Cloudflare setup:"
-        echo "    make cf-setup     # Run setup wizard"
-        echo "    make cf-init a=myapp.co  # Initialize an app"
-        echo "    make cf-deploy a=myapp.co  # Deploy to Cloudflare"
+        info "Cloudflare commands:"
+        echo "    make cf-setup              # Run setup wizard"
+        echo "    make cf-init a=myapp       # Initialize an app"
+        echo "    make cf-deploy a=myapp     # Deploy to Cloudflare"
     fi
     
     echo ""
@@ -682,6 +760,477 @@ doctor() {
     fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Upgrade - Update project with latest scaffolding
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Known tooling files that should be prompted for updates
+TOOLING_FILES=(
+    "Makefile:Makefile.template"
+    "scripts/.bashrc:scripts/.bashrc"
+    "scripts/build.sh:scripts/build.sh"
+    "scripts/dev.sh:scripts/dev.sh"
+    "scripts/doctor.sh:scripts/doctor.sh"
+    "scripts/down.sh:scripts/down.sh"
+    "scripts/exec.sh:scripts/exec.sh"
+    "scripts/help.sh:scripts/help.sh"
+    "scripts/init.sh:scripts/init.sh"
+    "scripts/logs.sh:scripts/logs.sh"
+    "scripts/ps.sh:scripts/ps.sh"
+    "scripts/restart.sh:scripts/restart.sh"
+    "scripts/run.sh:scripts/run.sh"
+    "scripts/sh.sh:scripts/sh.sh"
+    "scripts/start.sh:scripts/start.sh"
+    "scripts/stop.sh:scripts/stop.sh"
+    "scripts/test.sh:scripts/test.sh"
+    "scripts/up.sh:scripts/up.sh"
+    "scripts/cf-setup.sh:scripts/cf-setup.sh"
+    "scripts/cf-init-app.sh:scripts/cf-init-app.sh"
+    "scripts/simple-release.sh:scripts/simple-release.sh"
+    "scripts/release-sync-versions.mjs:scripts/release-sync-versions.mjs"
+    "scripts/app-version.mjs:scripts/app-version.mjs"
+)
+
+# Make modules - always check for updates
+MAKE_MODULES=(
+    "make/build.mk"
+    "make/cloudflare.mk"
+    "make/common.mk"
+    "make/dev.mk"
+    "make/down.mk"
+    "make/logs.mk"
+    "make/release.mk"
+    "make/restart.mk"
+    "make/run.mk"
+    "make/sh.mk"
+    "make/start.mk"
+    "make/stop.mk"
+    "make/up.mk"
+)
+
+# Check if file differs from template
+file_differs() {
+    local project_file="$1"
+    local template_file="$2"
+    
+    if [[ ! -f "$project_file" ]]; then
+        return 1  # File doesn't exist, so doesn't "differ"
+    fi
+    
+    if [[ ! -f "$template_file" ]]; then
+        return 1  # Template doesn't exist
+    fi
+    
+    ! diff -q "$project_file" "$template_file" &>/dev/null
+}
+
+# Show diff between files
+show_diff() {
+    local project_file="$1"
+    local template_file="$2"
+    
+    echo -e "${CYAN}─────────────────────────────────────────────────────${NC}"
+    echo -e "${BOLD}Changes in $project_file:${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────${NC}"
+    
+    # Use colordiff if available, otherwise regular diff
+    if command -v colordiff &>/dev/null; then
+        diff -u "$project_file" "$template_file" | colordiff | head -50
+    else
+        diff -u "$project_file" "$template_file" | head -50
+    fi
+    
+    echo ""
+}
+
+# Upgrade project
+upgrade_project() {
+    local show_diff_flag=false
+    local auto_yes=false
+    local dry_run=false
+    
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --diff|-d)
+                show_diff_flag=true
+                shift
+                ;;
+            --yes|-y)
+                auto_yes=true
+                shift
+                ;;
+            --dry-run|-n)
+                dry_run=true
+                shift
+                ;;
+            --help|-h)
+                echo -e "${BOLD}mx upgrade${NC} - Update project with latest MechCrate scaffolding"
+                echo ""
+                echo -e "${BOLD}USAGE:${NC}"
+                echo "    mx upgrade [options]"
+                echo ""
+                echo -e "${BOLD}OPTIONS:${NC}"
+                echo "    --diff, -d      Show diff for each changed file"
+                echo "    --yes, -y       Auto-accept all updates (non-interactive)"
+                echo "    --dry-run, -n   Show what would be done without making changes"
+                echo "    --help, -h      Show this help"
+                echo ""
+                echo -e "${BOLD}BEHAVIOR:${NC}"
+                echo "    • Missing files are added automatically"
+                echo "    • Tooling files (make/*.mk, scripts/*.sh) prompt for update"
+                echo "    • User config files are never touched"
+                echo ""
+                return 0
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    if ! is_mech_crate_project; then
+        error "Not in a MechCrate project. Run 'mx new <name>' first."
+    fi
+    
+    raccoon
+    info "Upgrading MechCrate project..."
+    echo ""
+    
+    local added_count=0
+    local updated_count=0
+    local skipped_count=0
+    local pending_updates=()
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 1: Check for missing directories
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    local required_dirs=("make" "scripts" "docker/.config" "docker/compose" "docker/system" "docker/dockerfiles" "tmp/up")
+    
+    for dir in "${required_dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would create directory: $dir"
+            else
+                mkdir -p "$dir"
+                success "Created directory: $dir"
+            fi
+        fi
+    done
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 2: Add missing make modules
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo ""
+    echo -e "${BOLD}Checking make modules...${NC}"
+    
+    for mk_file in "${MAKE_MODULES[@]}"; do
+        local template_path="$TEMPLATES_DIR/$mk_file"
+        local project_path="$mk_file"
+        
+        if [[ ! -f "$template_path" ]]; then
+            continue
+        fi
+        
+        # Special handling for cloudflare.mk - only add if infra/cloudflare exists
+        if [[ "$mk_file" == "make/cloudflare.mk" && ! -d "infra/cloudflare" ]]; then
+            continue
+        fi
+        
+        if [[ ! -f "$project_path" ]]; then
+            # File is missing - add it
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would add: $project_path"
+            else
+                cp "$template_path" "$project_path"
+                success "Added: $project_path"
+            fi
+            ((added_count++))
+        elif file_differs "$project_path" "$template_path"; then
+            # File exists but differs - queue for update prompt
+            pending_updates+=("$project_path:$template_path")
+        fi
+    done
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 3: Add missing scripts
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo ""
+    echo -e "${BOLD}Checking scripts...${NC}"
+    
+    # Enable dotglob to include hidden files like .bashrc
+    shopt -s dotglob
+    for template_script in "$TEMPLATES_DIR/scripts/"*; do
+        if [[ ! -f "$template_script" ]]; then
+            continue
+        fi
+        
+        local script_name=$(basename "$template_script")
+        local project_path="scripts/$script_name"
+        local template_path="$template_script"
+        
+        if [[ ! -f "$project_path" ]]; then
+            # File is missing - add it
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would add: $project_path"
+            else
+                cp "$template_path" "$project_path"
+                [[ "$script_name" == *.sh ]] && chmod +x "$project_path"
+                success "Added: $project_path"
+            fi
+            ((added_count++))
+        elif file_differs "$project_path" "$template_path"; then
+            # File exists but differs - queue for update prompt
+            pending_updates+=("$project_path:$template_path")
+        fi
+    done
+    shopt -u dotglob
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 4: Check Makefile
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo ""
+    echo -e "${BOLD}Checking Makefile...${NC}"
+    
+    local makefile_template="$TEMPLATES_DIR/Makefile.template"
+    if [[ -f "$makefile_template" ]]; then
+        if [[ ! -f "Makefile" ]]; then
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would add: Makefile"
+            else
+                cp "$makefile_template" "Makefile"
+                success "Added: Makefile"
+            fi
+            ((added_count++))
+        elif file_differs "Makefile" "$makefile_template"; then
+            pending_updates+=("Makefile:$makefile_template")
+        fi
+    fi
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 5: Add missing Docker compose templates (only if not present)
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo ""
+    echo -e "${BOLD}Checking Docker compose templates...${NC}"
+    
+    for template_compose in "$TEMPLATES_DIR/docker/compose/"*; do
+        if [[ ! -f "$template_compose" ]]; then
+            continue
+        fi
+        
+        local compose_name=$(basename "$template_compose")
+        local project_path="docker/compose/$compose_name"
+        
+        if [[ ! -f "$project_path" ]]; then
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would add: $project_path"
+            else
+                cp "$template_compose" "$project_path"
+                success "Added: $project_path"
+            fi
+            ((added_count++))
+        fi
+        # Note: We don't prompt to update compose files - those are user-customized
+    done
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 6: Add missing Docker config templates
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo ""
+    echo -e "${BOLD}Checking Docker config templates...${NC}"
+    
+    for config in "$TEMPLATES_DIR/docker/config/"*; do
+        if [[ ! -f "$config" ]]; then
+            continue
+        fi
+        
+        local filename=$(basename "$config")
+        local target_name="${filename/env./.env.}"
+        local project_path="docker/.config/$target_name"
+        
+        # Only add template files, never overwrite user config
+        if [[ ! -f "$project_path" ]]; then
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would add: $project_path"
+            else
+                cp "$config" "$project_path"
+                success "Added: $project_path"
+            fi
+            ((added_count++))
+        fi
+    done
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 7: Add missing Cloudflare infra templates (if cloudflare is enabled)
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    if [[ -d "infra/cloudflare" ]]; then
+        echo ""
+        echo -e "${BOLD}Checking Cloudflare templates...${NC}"
+        
+        # Check for README
+        if [[ ! -f "infra/cloudflare/README.md" && -f "$TEMPLATES_DIR/infra/cloudflare/README.md" ]]; then
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would add: infra/cloudflare/README.md"
+            else
+                cp "$TEMPLATES_DIR/infra/cloudflare/README.md" "infra/cloudflare/README.md"
+                success "Added: infra/cloudflare/README.md"
+            fi
+            ((added_count++))
+        fi
+        
+        # Ensure apps directory exists
+        if [[ ! -d "infra/cloudflare/apps" ]]; then
+            if [[ "$dry_run" == "true" ]]; then
+                info "[DRY RUN] Would create: infra/cloudflare/apps/"
+            else
+                mkdir -p "infra/cloudflare/apps"
+                success "Created: infra/cloudflare/apps/"
+            fi
+        fi
+    fi
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Phase 8: Prompt for tooling file updates
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    if [[ ${#pending_updates[@]} -gt 0 ]]; then
+        echo ""
+        echo -e "${CYAN}╭────────────────────────────────────────────────────────────╮${NC}"
+        echo -e "${CYAN}│${NC}  ${BOLD}📝 Tooling Updates Available${NC}                              ${CYAN}│${NC}"
+        echo -e "${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
+        echo ""
+        echo -e "The following tooling files have updates available:"
+        echo ""
+        
+        for entry in "${pending_updates[@]}"; do
+            local project_file="${entry%%:*}"
+            echo "    • $project_file"
+        done
+        
+        echo ""
+        
+        if [[ "$dry_run" == "true" ]]; then
+            info "[DRY RUN] Would prompt to update ${#pending_updates[@]} file(s)"
+        else
+            for entry in "${pending_updates[@]}"; do
+                local project_file="${entry%%:*}"
+                local template_file="${entry##*:}"
+                
+                echo ""
+                echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${BOLD}$project_file${NC}"
+                echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                
+                if [[ "$show_diff_flag" == "true" ]]; then
+                    show_diff "$project_file" "$template_file"
+                fi
+                
+                local update_file=false
+                
+                if [[ "$auto_yes" == "true" ]]; then
+                    update_file=true
+                else
+                    echo ""
+                    echo -e "Options:"
+                    echo "    [y] Yes, update this file"
+                    echo "    [n] No, skip this file"
+                    echo "    [d] Show diff first"
+                    echo "    [a] Accept all remaining updates"
+                    echo "    [q] Quit (skip all remaining)"
+                    echo ""
+                    
+                    while true; do
+                        read -r -p "Update $project_file? [y/n/d/a/q]: " response
+                        case "$response" in
+                            y|Y)
+                                update_file=true
+                                break
+                                ;;
+                            n|N)
+                                break
+                                ;;
+                            d|D)
+                                show_diff "$project_file" "$template_file"
+                                ;;
+                            a|A)
+                                auto_yes=true
+                                update_file=true
+                                break
+                                ;;
+                            q|Q)
+                                info "Skipping remaining updates."
+                                pending_updates=()
+                                break 2
+                                ;;
+                            *)
+                                echo "Invalid option. Please enter y, n, d, a, or q."
+                                ;;
+                        esac
+                    done
+                fi
+                
+                if [[ "$update_file" == "true" ]]; then
+                    # Backup original file
+                    cp "$project_file" "$project_file.bak"
+                    cp "$template_file" "$project_file"
+                    
+                    # Preserve execute permission for scripts
+                    if [[ "$project_file" == *.sh ]]; then
+                        chmod +x "$project_file"
+                    fi
+                    
+                    success "Updated: $project_file (backup: $project_file.bak)"
+                    ((updated_count++))
+                else
+                    warn "Skipped: $project_file"
+                    ((skipped_count++))
+                fi
+            done
+        fi
+    fi
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Summary
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    echo ""
+    echo -e "${CYAN}╭────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${CYAN}│${NC}  ${BOLD}📊 Upgrade Summary${NC}                                        ${CYAN}│${NC}"
+    echo -e "${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
+    echo ""
+    
+    if [[ "$dry_run" == "true" ]]; then
+        echo -e "  ${BLUE}[DRY RUN]${NC} No changes were made"
+        echo ""
+    fi
+    
+    if [[ $added_count -gt 0 ]]; then
+        echo -e "  ${GREEN}✓${NC} Added:   $added_count file(s)"
+    fi
+    
+    if [[ $updated_count -gt 0 ]]; then
+        echo -e "  ${GREEN}✓${NC} Updated: $updated_count file(s)"
+    fi
+    
+    if [[ $skipped_count -gt 0 ]]; then
+        echo -e "  ${YELLOW}○${NC} Skipped: $skipped_count file(s)"
+    fi
+    
+    if [[ $added_count -eq 0 && $updated_count -eq 0 && $skipped_count -eq 0 && ${#pending_updates[@]} -eq 0 ]]; then
+        echo -e "  ${GREEN}✓${NC} Project is up to date!"
+    fi
+    
+    echo ""
+    echo -e "${CYAN}🦝 Crate Raccoon says: Your tooling is fresh!${NC}"
+}
+
 # Proxy commands to Make when in project
 proxy_to_make() {
     if ! is_mech_crate_project; then
@@ -689,6 +1238,130 @@ proxy_to_make() {
     fi
     
     make "$@"
+}
+
+# Cloudflare commands
+cloudflare_cmd() {
+    local subcmd="${1:-help}"
+    shift 2>/dev/null || true
+    
+    if ! is_mech_crate_project; then
+        error "Not in a MechCrate project. Run 'mx new <name> --infra cloudflare' first."
+    fi
+    
+    if [[ ! -d "infra/cloudflare" ]]; then
+        error "Cloudflare infrastructure not set up. Create a new project with --infra cloudflare"
+    fi
+    
+    case "$subcmd" in
+        setup)
+            ./scripts/cf-setup.sh
+            ;;
+        init)
+            local app_name="$1"
+            shift 2>/dev/null || true
+            
+            if [[ -z "$app_name" ]]; then
+                echo -e "${BOLD}Usage:${NC} mx cf init <app-name> [--type=worker|cron|container]"
+                echo ""
+                echo "Initializes a new Cloudflare Worker with interactive setup."
+                echo ""
+                echo -e "${BOLD}Worker Types:${NC}"
+                echo "    worker      Standard edge worker (APIs, proxies, static sites)"
+                echo "    cron        Scheduled worker (background jobs, data sync)"
+                echo "    container   Docker container backend (SSR apps, stateful services)"
+                echo ""
+                echo -e "${BOLD}Examples:${NC}"
+                echo "    mx cf init api.example.com              # Interactive mode"
+                echo "    mx cf init api.example.com --type=worker"
+                echo "    mx cf init sync-job --type=cron"
+                echo "    mx cf init app.example.com --type=container"
+                exit 1
+            fi
+            
+            # Check if cf-setup has been run
+            if [[ ! -f "infra/cloudflare/.env.cloudflare" ]]; then
+                warn "Cloudflare not configured yet."
+                if prompt_yn "Would you like to run setup now?"; then
+                    ./scripts/cf-setup.sh || {
+                        error "Setup failed. Please run 'mx cf setup' manually."
+                    }
+                    echo ""
+                else
+                    error "Run 'mx cf setup' first to configure your Cloudflare account."
+                fi
+            fi
+            
+            ./scripts/cf-init-app.sh "$app_name" "$@"
+            ;;
+        status)
+            make cf-status
+            ;;
+        deploy)
+            local app_name="$1"
+            if [[ -z "$app_name" ]]; then
+                error "Usage: mx cf deploy <app-name>"
+            fi
+            make cf-deploy a="$app_name"
+            ;;
+        deploy-all)
+            make cf-deploy-all
+            ;;
+        list)
+            make cf-list
+            ;;
+        dev)
+            local app_name="$1"
+            if [[ -z "$app_name" ]]; then
+                error "Usage: mx cf dev <app-name>"
+            fi
+            make cf-dev a="$app_name"
+            ;;
+        logs)
+            local app_name="$1"
+            if [[ -z "$app_name" ]]; then
+                error "Usage: mx cf logs <app-name>"
+            fi
+            make cf-logs a="$app_name"
+            ;;
+        help|--help|-h)
+            echo -e "${BOLD}mx cf${NC} - Cloudflare Management Commands"
+            echo ""
+            echo -e "${BOLD}USAGE:${NC}"
+            echo "    mx cf <command> [options]"
+            echo ""
+            echo -e "${BOLD}COMMANDS:${NC}"
+            echo "    setup                 Run Cloudflare setup wizard"
+            echo "    init <app> [opts]     Initialize a new worker (interactive)"
+            echo "    status                Show all Cloudflare apps status"
+            echo "    list                  List configured apps"
+            echo "    deploy <app>          Deploy app to production"
+            echo "    deploy-all            Deploy all apps"
+            echo "    dev <app>             Run worker locally"
+            echo "    logs <app>            Tail production logs"
+            echo ""
+            echo -e "${BOLD}INIT OPTIONS:${NC}"
+            echo "    --type=worker         Standard edge worker"
+            echo "    --type=cron           Scheduled worker"
+            echo "    --type=container      Docker container backend"
+            echo ""
+            echo -e "${BOLD}EXAMPLES:${NC}"
+            echo "    mx cf setup"
+            echo "    mx cf init api.example.com"
+            echo "    mx cf init my-job --type=cron"
+            echo "    mx cf init app.example.com --type=container"
+            echo "    mx cf deploy api.example.com"
+            echo "    mx cf deploy-all"
+            ;;
+        *)
+            # Try to proxy to make cf-* command
+            if make -n "cf-$subcmd" &>/dev/null 2>&1; then
+                make "cf-$subcmd" "$@"
+            else
+                error "Unknown Cloudflare command: $subcmd. Run 'mx cf help' for usage."
+            fi
+            ;;
+    esac
 }
 
 # Main command router
@@ -700,8 +1373,14 @@ main() {
         new)
             create_project "$@"
             ;;
+        upgrade)
+            upgrade_project "$@"
+            ;;
         add)
             add_service "$@"
+            ;;
+        cf|cloudflare)
+            cloudflare_cmd "$@"
             ;;
         doctor)
             doctor
