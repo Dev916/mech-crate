@@ -1,7 +1,0 @@
-global:
-  scrape_interval: 10s
-
-scrape_configs:
-  - job_name: 'sqs-exporter'
-    static_configs:
-      - targets: ['sqs-exporter:8080']

@@ -1,3 +1,0 @@
-#!/bin/bash
-
-/srv/wp/vendor/bin/wp --allow-root --path=/srv/wp/web --url=/ $@

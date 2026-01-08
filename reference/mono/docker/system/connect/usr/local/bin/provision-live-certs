@@ -1,6 +1,0 @@
-#!/bin/bash
-
-email=$1
-domain=$2
-
-/home/zulip/deployments/current/scripts/setup/setup-certbot --email=$email $domain

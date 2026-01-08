@@ -1,5 +1,0 @@
-#!/bin/bash
-
-cd /srv/app
-
-cargo watch -x run

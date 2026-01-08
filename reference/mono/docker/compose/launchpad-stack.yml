@@ -1,8 +1,0 @@
-include:
-  - ./docker/compose/launchpad-api.yml
-  - ./docker/compose/connect.yml
-  - ./docker/compose/WordPress.yml
-  - ./docker/compose/WordPress-cron.yml
-  - ./docker/compose/redis.yml
-  - ./docker/compose/mysql.yml
-  - ./docker/compose/postgres.yml

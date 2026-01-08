@@ -1,6 +1,0 @@
-WordPress
-launchpad
-redis
-memcached
-rabbitmq
-postgres

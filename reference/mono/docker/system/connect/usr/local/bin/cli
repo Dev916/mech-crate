@@ -1,6 +1,0 @@
-#!/bin/sh -e
-
-sudo -u zulip bash <<EOF
-    cd /home/zulip/deployments/current
-    python3 manage.py "$@"
-EOF

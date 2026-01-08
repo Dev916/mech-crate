@@ -1,3 +1,0 @@
-#!/bin/bash
-
-su zulip -c "/home/zulip/deployments/current/manage.py change_user_role ${1:-integration-bot@connect.localhost} can_create_users -r 2"

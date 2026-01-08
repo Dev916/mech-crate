@@ -1,9 +1,0 @@
-analytics
-data-dashboard-charts
-launchpad-api-entities
-launchpad-core
-map-response
-redis-client
-resource-router
-types
-

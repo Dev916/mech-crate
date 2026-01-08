@@ -1,3 +1,0 @@
-#!/bin/sh
-
-apk add curl redis vim

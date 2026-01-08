@@ -1,5 +1,0 @@
-#!/bin/bash
-
-cd /srv/app/priority-api-docs
-
-LIVE_TEST_WS_URL=ws://priority-api.theblockpro.localhost/api-public/v1/news/live cargo leptos watch

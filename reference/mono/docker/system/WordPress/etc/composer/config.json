@@ -1,7 +1,0 @@
-{
-  "config": {
-    "platform": {
-      "ext-pcntl": "1.0.0"
-    }
-  }
-}

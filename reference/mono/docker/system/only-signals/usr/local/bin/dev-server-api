@@ -1,7 +1,0 @@
-#!/bin/bash
-
-cd /srv/app/backend
-
-export PORT=4000
-
-exec cargo watch -x 'run --bin only-signals'

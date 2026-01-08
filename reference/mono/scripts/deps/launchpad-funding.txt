@@ -1,4 +1,0 @@
-redis
-postgres
-launchpad
-launchpad-api

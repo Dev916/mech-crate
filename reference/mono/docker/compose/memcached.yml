@@ -1,7 +1,0 @@
-services:
-  memcached:
-    container_name: memcached
-    image: "memcached:${MEMCACHED_IMAGE_TAG:-alpine}"
-    env_file:
-      - ../.config/.env.memcached
-    restart: unless-stopped

@@ -1,7 +1,0 @@
-#!/bin/bash
-
-set -e
-
-pecl82 channel-update pecl.php.net
-
-pecl82 -q install excimer-1.2.3

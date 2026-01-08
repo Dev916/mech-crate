@@ -1,7 +1,0 @@
-FROM ghcr.io/theblockcrypto/campus-lms:latest
-
-COPY docker/system/campus-lms /
-
-COPY --chown=www-data:www-data ./apps/campus-lms .
-
-RUN rm -rf /etc/nginx/http.d/default.conf

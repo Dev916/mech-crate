@@ -1,8 +1,0 @@
-#!/bin/sh -e
-
-
-cd /srv/app
-
-rm /srv/app/core/package.json
-
-/node_modules/.bin/nuxt storybook -c /srv/app/nuxt.config.js -p 6060 -h 0.0.0.0

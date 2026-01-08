@@ -1,5 +1,0 @@
-#!/bin/bash
-
-export PGPASSWORD=$SECRETS_postgres_password
-
-pg_dump -h $DB_HOST -U $DB_USER -d zulip | gzip >/tmp/exports/zulip-latest.sql.gz

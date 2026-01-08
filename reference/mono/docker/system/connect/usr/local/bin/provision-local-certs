@@ -1,5 +1,0 @@
-#!/bin/bash
-
-domain=${1:-localhost.localdomain}
-
-/home/zulip/deployments/current/scripts/setup/generate-self-signed-cert $domain
