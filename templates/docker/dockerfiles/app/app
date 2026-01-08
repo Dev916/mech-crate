@@ -11,12 +11,12 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
+# Install dependencies (from apps/app)
+COPY apps/app/package*.json ./
 RUN npm ci --only=production
 
 # Copy source and build
-COPY . .
+COPY apps/app/ .
 RUN npm run build
 
 # ----- Development Stage -----
@@ -25,11 +25,11 @@ FROM node:20-alpine AS development
 WORKDIR /app
 
 # Install all dependencies (including devDependencies)
-COPY package*.json ./
+COPY apps/app/package*.json ./
 RUN npm install
 
 # Copy source (will be overridden by volume mount)
-COPY . .
+COPY apps/app/ .
 
 # Expose app and debugger ports
 EXPOSE 3000 9229
@@ -53,7 +53,7 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
 
-# Copy 1:1 filesystem structure
+# Copy system files (configs, etc.)
 COPY docker/system/app/ /
 
 USER nodejs
