@@ -1,6 +1,14 @@
 # Cloudflare Infrastructure
 
-Multi-app deployment infrastructure for Cloudflare Workers + Containers.
+Multi-app deployment infrastructure for Cloudflare Workers.
+
+## Supported Worker Types
+
+| Type | Description | Best For |
+|------|-------------|----------|
+| **worker** | Standard edge worker | APIs, proxies, static sites |
+| **cron** | Scheduled worker | Background jobs, data sync |
+| **container** | Docker container backend | SSR apps, stateful services |
 
 ## Directory Structure
 
@@ -8,13 +16,9 @@ Multi-app deployment infrastructure for Cloudflare Workers + Containers.
 infra/cloudflare/
 ├── .env.cloudflare          # Credentials (gitignored)
 ├── apps/
-│   ├── pricelove.co/        # App: pricelove.co
-│   │   ├── src/index.ts
-│   │   ├── wrangler.toml
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   └── theblock.co/         # App: theblock.co
-│       └── ...
+│   ├── api.example.com/     # Regular Worker
+│   ├── sync-job/            # Cron Worker  
+│   └── app.example.com/     # Container Worker
 └── README.md
 ```
 
@@ -34,19 +38,25 @@ This interactive wizard will:
 ### 2. Initialize an App
 
 ```bash
-make cf-init a=pricelove.co
+# Interactive mode (choose type)
+make cf-init a=myapp
+
+# Or specify type directly
+make cf-init a=myapp type=worker      # Regular worker
+make cf-init a=myapp type=cron        # Cron worker  
+make cf-init a=myapp type=container   # Container worker
 ```
 
 This creates:
-- `infra/cloudflare/apps/pricelove.co/` - Worker code
-- `docker/dockerfiles/pricelove.co/app` - Dockerfile
-- `docker/.config/.env.pricelove_co` - Environment config
+- `infra/cloudflare/apps/<app>/` - Worker code
+- `docker/dockerfiles/<app>/app` - Dockerfile (container only)
+- `docker/.config/.env.<app>` - Environment config
 
 ### 3. Deploy
 
 ```bash
 # Deploy single app
-make cf-deploy a=pricelove.co
+make cf-deploy a=myapp
 
 # Deploy all apps
 make cf-deploy-all
