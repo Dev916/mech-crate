@@ -84,10 +84,22 @@ show_help() {
     echo "    sh <service>      Shell into a service"
     echo "    ps                List running services"
     echo ""
+    echo -e "${BOLD}OPTIONS:${NC}"
+    echo "    --with <svc>      Include services (db, redis, nginx, etc.)"
+    echo "    --infra <type>    Include infrastructure (cloudflare, aws, digitalocean)"
+    echo "    --no-prompt       Skip interactive prompts, use defaults"
+    echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
-    echo "    mx new my-app              # Create new project 'my-app'"
-    echo "    mx new my-app --with db    # Create with database service"
-    echo "    mx add api                 # Add 'api' service to project"
+    echo "    mx new my-app                          # Interactive setup"
+    echo "    mx new my-app --with db redis          # With specific services"
+    echo "    mx new my-app --infra cloudflare       # With Cloudflare infra"
+    echo "    mx new my-app --no-prompt              # Quick setup, no prompts"
+    echo "    mx add api                             # Add 'api' service to project"
+    echo ""
+    echo -e "${BOLD}INFRASTRUCTURE:${NC}"
+    echo "    cloudflare        Cloudflare Workers + Containers"
+    echo "    aws               AWS via Terraform (coming soon)"
+    echo "    digitalocean      DigitalOcean via Terraform (coming soon)"
     echo ""
     echo -e "${CYAN}🦝 Crate Raccoon says: Happy building!${NC}"
 }
@@ -102,6 +114,21 @@ is_mech_crate_project() {
     [[ -f "Makefile" && -d "docker" && -d "make" && -d "scripts" ]]
 }
 
+# Prompt for yes/no with default
+prompt_yn() {
+    local prompt="$1"
+    local default="${2:-n}"
+    local response
+    
+    if [[ "$default" == "y" ]]; then
+        read -r -p "$prompt [Y/n]: " response
+        [[ -z "$response" || "$response" =~ ^[Yy] ]]
+    else
+        read -r -p "$prompt [y/N]: " response
+        [[ "$response" =~ ^[Yy] ]]
+    fi
+}
+
 # Create new project
 create_project() {
     local project_name="$1"
@@ -109,6 +136,9 @@ create_project() {
     
     # Parse additional options
     local with_services=()
+    local with_infra=()
+    local no_prompt=false
+    
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --with)
@@ -117,6 +147,17 @@ create_project() {
                     with_services+=("$1")
                     shift
                 done
+                ;;
+            --infra)
+                shift
+                while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                    with_infra+=("$1")
+                    shift
+                done
+                ;;
+            --no-prompt)
+                no_prompt=true
+                shift
                 ;;
             *)
                 shift
@@ -134,6 +175,27 @@ create_project() {
     
     raccoon
     info "Creating new MechCrate project: ${BOLD}$project_name${NC}"
+    
+    # Interactive infrastructure selection (unless --no-prompt or already specified)
+    if [[ "$no_prompt" == "false" && ${#with_infra[@]} -eq 0 ]]; then
+        echo ""
+        echo -e "${BOLD}Infrastructure Options:${NC}"
+        echo ""
+        
+        if prompt_yn "  Include ${CYAN}Cloudflare${NC} Workers + Containers?"; then
+            with_infra+=("cloudflare")
+        fi
+        
+        # Future: Add more infrastructure options here
+        # if prompt_yn "  Include ${CYAN}AWS${NC} via Terraform?"; then
+        #     with_infra+=("aws")
+        # fi
+        # if prompt_yn "  Include ${CYAN}DigitalOcean${NC} via Terraform?"; then
+        #     with_infra+=("digitalocean")
+        # fi
+        
+        echo ""
+    fi
     
     # Create project directory
     mkdir -p "$project_name"
@@ -196,6 +258,52 @@ create_project() {
         cp -r "$TEMPLATES_DIR/docker/system/"* "docker/system/" 2>/dev/null || true
     fi
     
+    # ─────────────────────────────────────────────────────────────────────────
+    # Infrastructure Setup
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    local has_cloudflare=false
+    
+    for infra in "${with_infra[@]}"; do
+        case "$infra" in
+            cloudflare)
+                has_cloudflare=true
+                info "Setting up Cloudflare infrastructure..."
+                mkdir -p infra/cloudflare
+                
+                # Copy cloudflare templates
+                if [[ -d "$TEMPLATES_DIR/infra/cloudflare" ]]; then
+                    cp -r "$TEMPLATES_DIR/infra/cloudflare/"* "infra/cloudflare/"
+                    
+                    # Replace placeholders with project name
+                    local project_slug=$(echo "$project_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+                    
+                    # Update all template files with project name
+                    find "infra/cloudflare" -type f \( -name "*.ts" -o -name "*.toml" -o -name "*.json" -o -name "*.md" \) \
+                        -exec sed -i '' "s/{{PROJECT_NAME}}/$project_slug/g" {} \; 2>/dev/null || \
+                    find "infra/cloudflare" -type f \( -name "*.ts" -o -name "*.toml" -o -name "*.json" -o -name "*.md" \) \
+                        -exec sed -i "s/{{PROJECT_NAME}}/$project_slug/g" {} \; 2>/dev/null || true
+                fi
+                
+                success "Cloudflare infrastructure added"
+                ;;
+            aws)
+                warn "AWS infrastructure not yet implemented - coming soon!"
+                ;;
+            digitalocean)
+                warn "DigitalOcean infrastructure not yet implemented - coming soon!"
+                ;;
+            *)
+                warn "Unknown infrastructure: $infra (skipping)"
+                ;;
+        esac
+    done
+    
+    # Remove cloudflare.mk if Cloudflare not selected
+    if [[ "$has_cloudflare" == "false" && -f "make/cloudflare.mk" ]]; then
+        rm "make/cloudflare.mk"
+    fi
+    
     # Create .gitignore
     cat > .gitignore << 'EOF'
 # MechCrate
@@ -226,6 +334,13 @@ logs/
 # Build artifacts
 dist/
 build/
+
+# Infrastructure secrets
+infra/**/.env
+infra/**/*.tfvars
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/.terraform/
 EOF
 
     # Create README
@@ -303,12 +418,51 @@ EOF
         add_service_internal "$svc"
     done
     
+    # Add Cloudflare section to README if enabled
+    if [[ "$has_cloudflare" == "true" ]]; then
+        cat >> README.md << 'EOF'
+
+## Cloudflare Deployment
+
+```bash
+# Initial setup (run once)
+make cf-setup                  # Configure credentials
+
+# Initialize an app
+make cf-init a=pricelove.co    # Create app structure
+
+# Deploy
+make cf-deploy a=pricelove.co  # Deploy single app
+make cf-deploy-all             # Deploy all apps
+```
+
+| Command | Description |
+|---------|-------------|
+| `make cf-setup` | Interactive setup wizard |
+| `make cf-init a=<app>` | Initialize a new app |
+| `make cf-status` | Show all apps status |
+| `make cf-deploy a=<app>` | Deploy to production |
+| `make cf-deploy-all` | Deploy all apps |
+
+See `infra/cloudflare/README.md` for detailed documentation.
+EOF
+    fi
+    
     success "Project '$project_name' created successfully!"
     echo ""
     info "Next steps:"
     echo "    cd $project_name"
     echo "    make doctor       # Check dependencies"
     echo "    make dev          # Start development"
+    
+    if [[ "$has_cloudflare" == "true" ]]; then
+        echo ""
+        info "Cloudflare setup:"
+        echo "    make cf-setup     # Run setup wizard"
+        echo "    make cf-init a=myapp.co  # Initialize an app"
+        echo "    make cf-deploy a=myapp.co  # Deploy to Cloudflare"
+    fi
+    
     echo ""
     echo -e "${CYAN}🦝 Crate Raccoon says: Your stack is ready!${NC}"
 }
