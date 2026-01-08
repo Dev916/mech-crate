@@ -1,8 +1,7 @@
 # Log commands
 .PHONY: logs _logs
 
-# Tail service logs (s=[service] for specific)
-logs:
+logs: ## Tail service logs (s=[service] for specific)
 	@$(MAKE) _logs service=$(call get_service_optional)
 
 _logs:
