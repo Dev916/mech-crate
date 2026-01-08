@@ -68,11 +68,15 @@ cf-status: ## Show all Cloudflare apps status
 	fi
 	@echo ""
 
-cf-init: ## Init new CF app (a=domain.com)
+cf-init: ## Init new CF app (a=app type=worker|cron|container)
 ifndef a
-	$(error Usage: make cf-init a=myapp.co)
+	$(error Usage: make cf-init a=myapp [type=worker|cron|container])
 endif
+ifdef type
+	@./scripts/cf-init-app.sh "$(APP_NAME)" --type=$(type)
+else
 	@./scripts/cf-init-app.sh "$(APP_NAME)"
+endif
 
 cf-list: ## List all CF apps
 	@echo "Configured Cloudflare Apps:"
