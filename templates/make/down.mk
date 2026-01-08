@@ -1,8 +1,7 @@
 # Service down commands
 .PHONY: down _down
 
-# Stop and remove services (s=[service] for specific)
-down:
+down: ## Stop and remove services (s=[service] for specific)
 	@$(MAKE) _down service=$(call get_service_optional)
 
 _down:
