@@ -7,13 +7,23 @@ MAKEFILES_DIR="make"
 COMMON_MK="$MAKEFILES_DIR/common.mk"
 
 # Function to display help from a makefile
+# Looks for lines with ## comments (standard help format)
 display_help() {
     local mkfile=$1
     awk '
     /^\.PHONY/ {next}
-    /^#/{gsub("# ", ""); comment=$0}
-    /^[^#].*:/ && !/help/ && !/@awk/ && !/^_/ && !/\$\(shell/ {
-        gsub(":", ""); printf "\033[0;36m%-20s\033[0m : \033[0;35m%s\033[0m\n", $1, comment
+    /^[a-zA-Z_-]+:.*##/ {
+        # Parse "target: deps ## description" format
+        split($0, parts, /##/)
+        target = parts[1]
+        desc = parts[2]
+        # Clean up target (remove : and deps)
+        gsub(/:.*/, "", target)
+        gsub(/^[ \t]+|[ \t]+$/, "", target)
+        gsub(/^[ \t]+|[ \t]+$/, "", desc)
+        if (target != "" && desc != "") {
+            printf "\033[0;36m%-20s\033[0m : \033[0;35m%s\033[0m\n", target, desc
+        }
     }
     ' "$mkfile"
 }
