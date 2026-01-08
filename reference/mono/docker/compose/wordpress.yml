@@ -1,0 +1,22 @@
+include:
+  - ./mysql.yml
+  - ./redis.yml
+  - ./traefik.yml
+
+services:
+  WordPress:
+    container_name: wordpress
+    depends_on:
+      - mysql
+      - redis
+      - redis-ro
+      - traefik
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.wordpress
+    image: ghcr.io/theblockcrypto/wordpress:${WORDPRESS_IMAGE_TAG:-latest}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wordpress.rule=(PathPrefix(`/wp-`) || PathPrefix(`/edit`) || PathRegexp(`(?i)\\.php$`) || PathRegexp(`(?i)\\.xml$`))"
+      - "traefik.http.services.wordpress.loadbalancer.server.port=80"

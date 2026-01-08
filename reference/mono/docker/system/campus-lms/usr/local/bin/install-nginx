@@ -1,0 +1,71 @@
+#!/bin/sh
+
+set -e
+
+NGINX_VERSION=${NGINX_VERSION:-1.23.3}
+
+echo "Installing NGINX version $NGINX_VERSION..."
+
+# PCRE
+mkdir -p /build/pcre
+#
+cd /build/pcre
+#
+curl -O https://ftp.exim.org/pub/pcre/pcre-8.41.tar.gz
+#
+tar -zxf pcre-8.41.tar.gz
+#
+cd pcre-8.41
+#
+./configure
+#
+make
+#
+make install
+#
+## ZLIB
+mkdir -p /build/zlib
+
+cd /build/zlib
+
+curl -O http://zlib.net/fossils/zlib-1.2.11.tar.gz
+tar -zxf zlib-1.2.11.tar.gz
+cd zlib-1.2.11
+./configure
+make
+make install
+# Open SSL
+mkdir -p /build/ossl
+
+cd /build/ossl
+
+wget http://www.openssl.org/source/openssl-1.0.2k.tar.gz
+
+tar -zxf openssl-1.0.2k.tar.gz
+
+cd openssl-1.0.2k
+
+./config --prefix=/usr
+
+make
+
+make install
+# NGINX
+
+mkdir -p /build/nginx
+
+cd /build/nginx
+
+curl -O http://nginx.org/download/nginx-1.12.2.tar.gz
+
+tar zxf nginx-1.12.2.tar.gz
+
+cd nginx-1.12.2
+
+./configure --with-openssl=../../ossl/openssl-1.0.2k --with-zlib=../../zlib/zlib-1.2.11 --with-http_ssl_module --with-pcre=../../pcre/pcre-8.41 --with-http_gzip_static_module --with-http_v2_module --sbin-path=/usr/local/nginx/nginx --conf-path=/usr/local/nginx/nginx.conf --pid-path=/usr/local/nginx/nginx.pid --with-stream --with-mail=dynamic --user=nobody
+
+make
+
+make install
+
+ln -s /usr/local/nginx/nginx /usr/local/bin/nginx

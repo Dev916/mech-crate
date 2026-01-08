@@ -1,0 +1,66 @@
+# static assets
+^/_?tbp/                           public, max-age=31536000, stale-while-revalidate=3600, stale-if-error=86400
+^/img/                              public, max-age=31536000, stale-while-revalidate=3600, stale-if-error=86400
+^/tbco/                             public, max-age=31536000, stale-while-revalidate=3600, stale-if-error=86400
+/android-chrome-512x512.png         public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400
+/android-chrome-192x192.png         public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400
+/apple-touch-icon-precomposed.png   public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400
+/robots.txt                         public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400
+/favicon.ico                        public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400
+^/charting_library/                 public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400
+
+# mapped to the legacy routes in theblock.co. the longer s-maxage rule exists because WordPress purges the api route cache when a post is published.
+^/api/tbco/ping$                    private, must-revalidate, max-age=0
+^/api/tbco/home$                    public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/post/\d+$                public, max-age=10, s-maxage=300, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/amp-post/\d+$            public, max-age=10, s-maxage=300, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/price-ticker-cache$      public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/prices$                  public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/prices/home$             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/prices/history$          public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/indices/article-fallback$ public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/indices/home$            public, max-age=10, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/pages/access$            public, max-age=10, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/learn/pages/latest$      public, max-age=10, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/newsletters$             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/category/[^/]+$          public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/tag/[^/]+$               public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+
+^/api/tbco/post/related-indices     public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/charts/category/all/[^/]+/[^/]+$   public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/charts/chart/[^/]+/[^/]+/[^/]+$    public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/charts/chart/news$       public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/charts/menus$            public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/indices/index/\d+$       public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/learn/categories/[^/]+$  public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/learn/related/\d+$       public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/learn/articles$          public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/learn/index$             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/pages/[^/]+$             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/pages/press$             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/podcasts/[^/]+$          public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/ratings/\d+$             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/ratings/index$           public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/research/[^/]+$          public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/sponsorship/[^/]+/[^/]+/[^/]+$ private, must-revalidate, max-age=0
+^/api/tbco/sponsorships              private, must-revalidate, max-age=0
+^/api/tbco/token/index$             public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/token/search$            public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/banner$                  public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/menu$                    public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/api/tbco/search$                  public, max-age=60, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+
+# heavy HTML content resources
+^/$                                 public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/latest                            public, max-age=3600, s-maxage=3600, stale-while-revalidate=60, stale-if-error=86400
+^/latest-crypto-news                public, max-age=10, s-maxage=60, stale-while-revalidate=60, stale-if-error=86400
+^/(post|linked)/\d+/[^/]+/preview$  private, must-revalidate, max-age=0
+^/(post|linked)/\d+/[^/]+           public, max-age=60, s-maxage=300, stale-while-revalidate=60, stale-if-error=86400
+^/data/.*                           public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/ratings/.*                           public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/category/*                        public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/tag/*                             public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+^/prices                            public, max-age=10, s-maxage=10, stale-while-revalidate=60, stale-if-error=86400
+
+# default fallback
+^/*                                 private, must-revalidate, max-age=0

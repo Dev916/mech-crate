@@ -1,0 +1,15 @@
+services:
+  pro-api:
+    build:
+      context: ../..
+      dockerfile: docker/dockerfiles/pro-api/app
+    ports:
+      - 8082:80
+    volumes:
+      - ../../apps/pro-api:/srv/app
+      - /srv/app/target
+    env_file:
+      - ../.config/pro-api/dev.env
+    environment:
+      # Override any env_file values here
+      - DEV_MODE=true

@@ -1,0 +1,55 @@
+#!/bin/sh -e
+
+echo -e "\n ##### $(date) #####\n"
+
+set -x
+
+PACKAGE_JSON="package.json"
+PACKAGE_JSON_OLD="package.json-old"
+
+usage() {
+  echo "Usage: $0 [-b] [-f]"
+  echo "    -b             build the app"
+  echo "    -f             force install dependencies"
+  exit 1
+}
+
+install_dependencies() {
+  echo "Installing dependencies..."
+
+  if [ -f "node_modules" ]; then
+    rm -rf node_modules
+  fi
+
+  chown nobody:nobody .
+  sudo -u nobody -g nobody UV_THREADPOOL_SIZE=64 NODE_ENV=development yarn install --force --network-timeout=99999
+  cp $PACKAGE_JSON $PACKAGE_JSON_OLD
+  sudo -u nobody -g nobody touch yarn-error.log
+}
+
+cd /srv/app/frontend
+
+if cmp -s "$PACKAGE_JSON" "$PACKAGE_JSON_OLD"; then
+  echo "The contents of $PACKAGE_JSON and $PACKAGE_JSON_OLD are the same. Skipping yarn install."
+else
+  install_dependencies
+fi
+
+# Parse command line arguments
+while getopts "f:b" opt; do
+  case $opt in
+  f)
+    echo "Force install dependencies..."
+    install_dependencies
+    ;;
+  b)
+    rm -rf .nuxt
+    yarn nuxt:build
+    ;;
+  *)
+    usage
+    ;;
+  esac
+done
+
+echo "Done installing dependencies"

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+cd /srv/app
+
+php artisan test:prep
+#Export DB vars
+export $(cat .env | grep -E 'CAMPUS_DB|CAMPUS_DB_HOST|CAMPUS_DB_PORT|CAMPUS_DB_USER|CAMPUS_DB_PASSWORD' | xargs)
+
+#create testing db
+PGPASSWORD="$CAMPUS_DB_PASSWORD" psql -U "$CAMPUS_DB_USER" -h "$CAMPUS_DB_HOST" -p "$CAMPUS_DB_PORT" -c "CREATE DATABASE testing;"
+
+php artisan test
+
+#remove testing db
+PGPASSWORD="$CAMPUS_DB_PASSWORD" psql -U "$CAMPUS_DB_USER" -h "$CAMPUS_DB_HOST" -p "$CAMPUS_DB_PORT" -c "DROP DATABASE IF EXISTS testing;"
+

@@ -1,0 +1,6 @@
+services:
+  launchpad-public-api:
+    #command: start-storybook
+    volumes:
+      - ../../apps/launchpad-public-api/:/app
+

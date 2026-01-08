@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e
+
+cd
+
+rm /usr/local/bin/yarn
+rm /usr/local/bin/yarnpkg
+
+npm install -g yarn commitizen cz-conventional-changelog
+
+npm install -g puppeteer --ignore-scripts
+
+echo '{ "path": "cz-conventional-changelog" }' > ~/.czrc

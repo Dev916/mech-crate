@@ -1,0 +1,38 @@
+include:
+  - ./redis.yml
+  - ./postgres.yml
+  - ./launchpad-api.yml
+
+services:
+  launchpad:
+    volumes:
+      - ../../apps/launchpad/assets:/srv/app/assets
+      - ../../apps/launchpad/clients:/srv/app/clients
+      - ../../apps/launchpad/components:/srv/app/components
+      - ../../apps/launchpad/config:/srv/app/config
+      - ../../apps/launchpad/constants:/srv/app/constants
+      - ../../apps/launchpad/layouts:/srv/app/layouts
+      - ../../apps/launchpad/middleware:/srv/app/middleware
+      - ../../apps/launchpad/mixins:/srv/app/mixins
+      - ../../apps/launchpad/pages:/srv/app/pages
+      - ../../apps/launchpad/plugins:/srv/app/plugins
+      - ../../apps/launchpad/server:/srv/app/server
+      - ../../apps/launchpad/server-middleware:/srv/app/server-middleware
+      - ../../apps/launchpad/services:/srv/app/services
+      - ../../apps/launchpad/static:/srv/app/static
+      - ../../apps/launchpad/store:/srv/app/store
+      - ../../apps/launchpad/styles:/srv/app/styles
+      - ../../apps/launchpad/transformers:/srv/app/transformers
+      - ../../apps/launchpad/types:/srv/app/types
+      - ../../apps/launchpad/utils:/srv/app/utils
+      - ../../apps/launchpad/.env.defaults:/srv/app/.env.defaults
+      - ../../apps/launchpad/.env.example:/srv/app/.env.example
+      - ../../apps/launchpad/.eslintrc.js:/srv/app/.eslintrc.js
+      - ../../apps/launchpad/i18n.template.json:/srv/app/i18n.template.json
+      - ../../apps/launchpad/nuxt.config.js:/srv/app/nuxt.config.js
+      # - ../../lib/launchpad-core:/srv/app/node_modules/@theblockcrypto/launchpad-core:ro
+      # - ../../libs/data-dashboard-charts:/srv/app/node_modules/@theblockcrypto/data-dashboard-charts
+
+    environment:
+      - NUXT_COMMAND=dev-server
+      - NUXT_NUM_PROCS=1

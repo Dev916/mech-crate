@@ -1,0 +1,12 @@
+services:
+  launchpad-api:
+    command: dev-server
+    volumes:
+      - /app/node_modules
+      - ../../apps/launchpad-api:/app
+#      - ../../apps/launchpad-api/docker/entrypoint-dev.sh:/entrypoint
+#      - ../../lib/launchpad-api-entities:/app/node_modules/@theblockcrypto/launchpad-api-entities:ro
+#      - ../../lib/launchpad-core:/app/node_modules/@theblockcrypto/launchpad-core:ro
+
+volumes:
+  launchpad-api:

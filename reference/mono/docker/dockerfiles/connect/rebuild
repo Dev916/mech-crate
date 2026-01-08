@@ -1,0 +1,3 @@
+FROM ghcr.io/theblockcrypto/connect:latest
+
+COPY ./docker/system/connect /

@@ -1,0 +1,27 @@
+include:
+  - ./redis.yml
+  - ./postgres.yml
+  - ./traefik.yml
+
+services:
+  campus-lms:
+    container_name: campus
+    depends_on:
+      - postgres
+      - redis
+      - traefik
+    image: ghcr.io/theblockcrypto/campus-lms:${CAMPUS_LMS_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.campus-lms
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.campus-lms.rule=HostRegexp(`clms\\..*\\.tblk\\.us|clms\\.theblockpro\\.localhost`)"
+      - "traefik.http.routers.campus-lms.entrypoints=http"
+      - "traefik.http.services.campus-lms.loadbalancer.server.port=80"
+    networks:
+      default:
+        aliases:
+          - clms.theblockpro.localhost

@@ -1,0 +1,32 @@
+#!/bin/bash -ex
+
+version=$(</srv/wp/composer.json grep composer/composer | grep -oE "[0-9\.]+")
+
+expectedSignature=$(curl -s https://composer.github.io/installer.sig)
+curl -s https://getcomposer.org/installer > composer-setup.php
+actualSignature=$(php -r "echo hash_file('sha384', 'composer-setup.php');")
+
+if [ "$expectedSignature" != "$actualSignature" ]; then
+    >&2 echo 'ERROR: Invalid installer signature'
+    rm composer-setup.php
+    exit 1
+fi
+
+php composer-setup.php \
+    --install-dir=./ \
+    --filename=composer.phar \
+    $( [ "$version" != "latest" ] && echo --version="$version"; ) \
+    --quiet
+
+./composer.phar --version
+./composer.phar install
+./composer.phar install # swapping/moving plugins requires two installs
+
+rm composer-setup.php composer.phar
+rm -rf web/wp-content
+
+ln -sf /srv/wp/vendor/bin/composer /usr/local/bin/
+ln -sf /srv/wp/php/bin/tests /usr/local/bin/
+
+curl -LO https://github.com/DataDog/dd-trace-php/releases/latest/download/datadog-setup.php
+php datadog-setup.php --php-bin=all --enable-profiling

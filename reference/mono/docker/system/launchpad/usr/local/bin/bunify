@@ -1,0 +1,9 @@
+#!/bin/sh
+
+NUXT_EXEC=/srv/app/node_modules/nuxt/bin/nuxt.js
+
+cat $NUXT_EXEC
+
+sed -i 's|#!/usr/bin/env node|#!/usr/bin/env bun|' $NUXT_EXEC
+
+sed -i 's|../package.json|/srv/app/package.json|g' $NUXT_EXEC

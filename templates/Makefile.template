@@ -1,0 +1,35 @@
+# MechCrate Project Makefile
+# 🦝 Crate Raccoon is ready to serve
+
+include make/common.mk
+
+include make/dev.mk
+include make/up.mk
+include make/down.mk
+include make/build.mk
+include make/logs.mk
+include make/restart.mk
+include make/sh.mk
+include make/run.mk
+include make/start.mk
+include make/stop.mk
+
+# Display this help message
+help:
+	@./scripts/help.sh
+
+# Init the environment
+init:
+	@./scripts/init.sh
+
+# Run tests
+test:
+	@./scripts/test.sh
+
+# List all running services
+ps:
+	@./scripts/ps.sh
+
+# Check project health
+doctor:
+	@./scripts/doctor.sh

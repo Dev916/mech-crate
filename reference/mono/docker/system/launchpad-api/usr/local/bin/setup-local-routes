@@ -1,0 +1,30 @@
+#!/bin/sh
+
+TRAEFIK_IP=$(getent hosts traefik | awk '{ print $1 }')
+
+# Check if the IP address was found
+if [ -z "$TRAEFIK_IP" ]; then
+    echo "Error: Unable to find IP address for service traefik"
+    exit 1
+fi
+
+update_hosts() {
+    local ip_address="$1"
+    local hostname="$2"
+
+    # Create a temporary hosts file
+    local tmp_hosts="/tmp/hosts"
+
+    # Copy the existing /etc/hosts to the temporary file, excluding any old entry for the hostname
+    grep -v "$hostname" /etc/hosts >$tmp_hosts
+
+    # Prepend the new entry
+    echo "$ip_address $hostname" | cat - $tmp_hosts >/etc/hosts
+}
+
+# Remove any existing entry for connect.localhost
+sed -i.bak "/connect.localhost/d" /etc/hosts
+
+update_hosts "$TRAEFIK_IP" "connect.localhost"
+
+echo "Added $TRAEFIK_IP connect.localhost to /etc/hosts"

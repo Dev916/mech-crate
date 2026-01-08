@@ -1,0 +1,25 @@
+#!/bin/sh -e
+
+FILES=${1:-/srv/app/}
+appSlug=$2
+
+srcFiles=$(find $FILES -print)
+
+if [ -z "$appSlug" ]; then
+    read -p "Please enter application slug (e.g. next-awesome-launchpad-app): " appSlug
+fi
+
+for currentFile in $srcFiles; do
+    if [[ $currentFile == *".git"* ]]; then
+        continue
+    fi
+
+    if [[ $currentFile == *"node_modules"* ]]; then
+        continue
+    fi
+    echo "Processing $currentFile for $appSlug"
+    if  [ -f $currentFile ]; then
+        sed -i $currentFile -e "s/{{app_slug}}/${appSlug:-launchpad-app-$(date +"%m-%d-%y")}/g"
+        sed -i $currentFile -e "s/bloxt-app/${appSlug:-launchpad-app-$(date +"%m-%d-%y")}/g"
+    fi
+done

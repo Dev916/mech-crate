@@ -1,0 +1,22 @@
+include:
+  - ./redis.yml
+  - ./postgres.yml
+  - ./launchpad-api.yml
+
+services:
+  launchpad:
+    image: ghcr.io/theblockcrypto/launchpad:${LAUNCHPAD_IMAGE_TAG:-latest}
+    container_name: launchpad
+    depends_on:
+      - redis
+      - postgres
+      - launchpad-api
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.launchpad
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.launchpad.rule=PathPrefix(`/`)"
+      - "traefik.http.services.launchpad.loadbalancer.server.port=3000"
+    working_dir: /srv/app

@@ -1,0 +1,18 @@
+ARG BASE_IMAGE=ghcr.io/theblockcrypto/launchpad:latest
+
+FROM $BASE_IMAGE
+
+ARG IMAGE_TAG
+ARG COMMIT_HASH
+ARG IMAGE_VERSION
+
+ENV IMAGE_VERSION=${IMAGE_VERSION}
+
+COPY ./docker/system/launchpad /
+
+COPY --chown=nobody:nobody ./apps/launchpad .
+
+#RUN chown -R nobody:nobody $APP_ROOT/*
+RUN chown -R nobody:nobody $APP_ROOT/.nuxt
+
+# COPY --chown=nobody:nobody ./apps/launchpad-core /node_modules/@theblockcrypto/launchpad-core

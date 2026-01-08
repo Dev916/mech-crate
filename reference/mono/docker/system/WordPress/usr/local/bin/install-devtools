@@ -1,0 +1,17 @@
+#!/bin/bash -xe
+
+apt update && apt install -y \
+    unzip \
+    curl \
+    netcat \
+    default-mysql-client \
+    pv \
+    redis-tools \
+    less \
+    vim
+
+apt install -y --reinstall procps
+
+echo -e "syntax on\nset mouse-=a" > ~/.vimrc
+
+exit $result

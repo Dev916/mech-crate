@@ -1,0 +1,34 @@
+include:
+  - ./redis.yml
+  - ./postgres.yml
+  - ./launchpad-api.yml
+
+services:
+  theblock.co:
+    volumes:
+      - ../../apps/theblock.co/assets:/srv/tbco/assets
+      - ../../apps/theblock.co/clients:/srv/tbco/clients
+      - ../../apps/theblock.co/components:/srv/tbco/components
+      - ../../apps/theblock.co/config:/srv/tbco/config
+      - ../../apps/theblock.co/constants:/srv/tbco/constants
+      - ../../apps/theblock.co/layouts:/srv/tbco/layouts
+      - ../../apps/theblock.co/middleware:/srv/tbco/middleware
+      - ../../apps/theblock.co/mixins:/srv/tbco/mixins
+      - ../../apps/theblock.co/pages:/srv/tbco/pages
+      - ../../apps/theblock.co/plugins:/srv/tbco/plugins
+      - ../../apps/theblock.co/server:/srv/tbco/server
+      - ../../apps/theblock.co/server-middleware:/srv/tbco/server-middleware
+      - ../../apps/theblock.co/services:/srv/tbco/services
+      - ../../apps/theblock.co/static:/srv/tbco/static
+      - ../../apps/theblock.co/store:/srv/tbco/store
+      - ../../apps/theblock.co/styles:/srv/tbco/styles
+      - ../../apps/theblock.co/transformers:/srv/tbco/transformers
+      - ../../apps/theblock.co/types:/srv/tbco/types
+      - ../../apps/theblock.co/.env.defaults:/srv/tbco/.env.defaults
+      - ../../apps/theblock.co/nuxt.config.js:/srv/tbco/nuxt.config.js
+      # - ../../libs/launchpad-core:/srv/tbco/node_modules/@theblockcrypto/launchpad-core:rw
+      # - ../../libs/data-dashboard-charts:/srv/tbco/node_modules/@theblockcrypto/data-dashboard-charts
+
+    environment:
+      - NUXT_COMMAND=dev-server
+      - NUXT_NUM_PROCS=1

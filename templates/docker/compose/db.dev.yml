@@ -1,0 +1,15 @@
+# Database service - Development Overrides
+
+services:
+  db:
+    ports:
+      - "5432:5432"  # Expose for local tools (pgAdmin, DBeaver)
+    environment:
+      POSTGRES_LOG_STATEMENT: all
+    command:
+      - postgres
+      - -c
+      - log_statement=all
+      - -c
+      - log_duration=on
+    restart: "no"

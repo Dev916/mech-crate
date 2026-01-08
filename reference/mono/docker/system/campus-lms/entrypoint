@@ -1,0 +1,140 @@
+#!/bin/sh
+
+_forwardTerm() {
+    echo "Caught signal SIGTERM, passing it to child processes..."
+    pgrep -P $$ | xargs kill -15 2>/dev/null
+    wait
+    exit $?
+}
+
+trap _forwardTerm TERM
+
+_setupLogs() {
+    local service="$1"
+    local num_procs="$2"
+
+    procs="$(seq 0 $(($num_procs - 1)))"
+    echo "Setting up logs for $service with $procs procs"
+    for i in $procs; do
+        touch "/var/log/supervisor/${service}-0${i}.log"
+        chown nobody:nobody "/var/log/supervisor/${service}-0${i}.log"
+    done
+
+    tail -f /var/log/supervisor/${service}-*.log &
+    
+    # Dynamic log tailing that handles files created after startup and log rotation
+    _tailLaravelLogs &
+}
+
+_tailLaravelLogs() {
+    local log_dir="/srv/app/storage/logs"
+    local tail_pid=""
+    local previous_files=""
+    
+    echo "Starting dynamic Laravel log monitoring for $log_dir"
+    
+    # Create the logs directory if it doesn't exist
+    mkdir -p "$log_dir"
+    
+    while true; do
+        # Find all .log files in the directory
+        current_files=$(find "$log_dir" -maxdepth 1 -name "*.log" -type f 2>/dev/null | sort)
+        
+        # Only restart tail if the file list has changed
+        if [ "$current_files" != "$previous_files" ]; then
+            if [ -n "$current_files" ]; then
+                # Kill existing tail process if running
+                if [ -n "$tail_pid" ]; then
+                    echo "Log files changed, restarting tail process..."
+                    kill $tail_pid 2>/dev/null || true
+                    wait $tail_pid 2>/dev/null || true
+                fi
+                
+                # Use tail -F (uppercase) which:
+                # 1. Retries if file doesn't exist initially
+                # 2. Follows the file by name (handles rotation)
+                # 3. Continues even if file is recreated
+                echo "Tailing Laravel logs: $current_files"
+                tail -F $current_files 2>/dev/null &
+                tail_pid=$!
+                previous_files="$current_files"
+            else
+                if [ -n "$tail_pid" ]; then
+                    # No files anymore, stop tailing
+                    echo "No Laravel log files found, stopping tail process..."
+                    kill $tail_pid 2>/dev/null || true
+                    tail_pid=""
+                    previous_files=""
+                else
+                    # No files and no tail running yet
+                    echo "No Laravel log files found yet in $log_dir, waiting..."
+                fi
+            fi
+        fi
+        
+        # Check for new files every 10 seconds
+        sleep 10
+    done
+}
+
+_writeConfig() {
+    local service="$1"
+    local num_procs="$2"
+    local port_base="$3"
+
+    procs="$(seq 0 $(($num_procs - 1)))"
+    echo "Writing config for $service with $procs procs"
+    for i in $procs; do
+        echo "$service-0$i going to /etc/haproxy/cfg/haproxy_${service}_1.cfg"
+
+        echo "" >/etc/haproxy/cfg/haproxy_${service}_1.cfg
+
+        echo "    server $service-0$i 127.0.0.1:$port_base$i check" >>/etc/haproxy/cfg/haproxy_${service}_1.cfg
+    done
+}
+
+_configureHAProxy() {
+    local image_version=$1
+    local php_num_procs=$2
+
+    echo "Configure haproxy with: IMAGE_VERSION=$image_version, PHP_NUM_PROCS=$php_num_procs"
+
+    echo "" >/etc/haproxy/cfg/servers.cfg
+
+    _writeConfig app $php_num_procs 900
+
+    echo "" >/etc/haproxy/haproxy.cfg
+
+    cat /etc/haproxy/cfg/*.cfg >/etc/haproxy/haproxy.cfg
+
+    cat /etc/haproxy/haproxy.cfg
+}
+
+_main() {
+    export PHP_SERVER_COMMAND=${PHP_SERVER_COMMAND:-$([[ "$CANONICAL_URL" =~ "localhost" ]] && echo "/usr/local/bin/server -s php -D" || echo "/usr/local/bin/server -s php")}
+    export PHP_NUM_PROCS=${PHP_NUM_PROCS:-$([[ "$CANONICAL_URL" =~ "localhost" ]] && echo 4 || echo 4)}
+    export PHP_COMMAND=${PHP_COMMAND:-$([[ "$CANONICAL_URL" =~ "localhost" ]] && echo $PHP_FPM_COMMAND || echo $PHP_FPM_COMMAND)}
+    export DEV_SERVER_COMMAND=${DEV_SERVER_COMMAND:-$([[ "$CANONICAL_URL" =~ "localhost" ]] && echo "/usr/local/bin/yarn dev" || echo "echo 'Production mode, skipping dev server'")}
+    export SUPERVISOR_CONFIG=${SUPERVISOR_CONFIG:-/etc/supervisor/conf.d/stack.conf}
+    
+    if [ "$SUPERVISOR_CONFIG" == "/etc/supervisor/conf.d/stack.conf" ]; then
+        _setupLogs app $PHP_NUM_PROCS
+        _configureHAProxy $IMAGE_VERSION $PHP_NUM_PROCS
+    fi
+
+    echo "Starting php via supervisor with: IMAGE_VERSION=$IMAGE_VERSION, PHP_NUM_PROCS=$PHP_NUM_PROCS, PHP_COMMAND=$PHP_COMMAND, DEV_SERVER_COMMAND=$DEV_SERVER_COMMAND"
+
+    /usr/bin/supervisord -c $SUPERVISOR_CONFIG
+
+    sleep 10
+
+    while true; do
+        sleep 60
+    done
+}
+
+if [ $# -eq 0 ]; then
+    _main
+else
+    exec "$@"
+fi

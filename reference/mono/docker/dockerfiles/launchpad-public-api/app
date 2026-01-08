@@ -1,0 +1,52 @@
+FROM ghcr.io/theblockcrypto/bloxt:latest AS bloxt
+
+FROM node:16-alpine
+ENV APP_ROOT=/srv/app \
+    HOST=0.0.0.0 \
+    NPM_CONFIG_LOGLEVEL=warn
+
+WORKDIR $APP_ROOT
+EXPOSE 80
+ENTRYPOINT [ "/entrypoint" ]
+
+RUN apk add --no-cache haproxy jq sudo supervisor
+
+RUN mkdir -p /var/log/supervisor
+
+RUN yarn global add merge-packages --prefix /usr/local
+
+COPY --chown=nobody:nobody --from=bloxt /.npmrc /
+COPY --chown=nobody:nobody --from=bloxt /package.json /
+COPY --chown=nobody:nobody --from=bloxt /package-core.json /
+COPY --chown=nobody:nobody --from=bloxt /yarn.lock /
+COPY --chown=nobody:nobody --from=bloxt /node_modules /node_modules
+COPY --chown=nobody:nobody --from=bloxt $APP_ROOT $APP_ROOT
+
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/.env.defaults $APP_ROOT/
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/.npmrc $APP_ROOT/
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/package.json $APP_ROOT/
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/yarn.lock $APP_ROOT/
+
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/.npmrc /
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/package.json /
+COPY --chown=nobody:nobody ./apps/launchpad-public-api/yarn.lock /
+
+COPY ./docker/system/launchpad-public-api /
+COPY ./apps/launchpad-public-api/variables.json /
+COPY ./apps/launchpad-public-api/secrets.dev.json /
+COPY ./apps/launchpad-public-api/secrets.stage.json /
+
+COPY --chown=nobody:nobody ./apps/launchpad-public-api .
+
+RUN yarn-install build
+
+ENV NODE_ENV=production
+
+ARG IMAGE_VERSION
+ENV IMAGE_VERSION=$IMAGE_VERSION
+
+LABEL image.name="launchpad-public-api"
+LABEL image.version="$IMAGE_VERSION"
+
+ARG IMAGE_TAG
+LABEL image.tag="$IMAGE_TAG"

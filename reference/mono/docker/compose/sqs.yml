@@ -1,0 +1,15 @@
+services:
+  sqs:
+    image: localstack/localstack:4.7
+    container_name: sqs
+    environment:
+      - SERVICES=sqs
+      - EDGE_PORT=4566
+      - AWS_DEFAULT_REGION=us-east-1
+      - DATA_DIR=/var/lib/localstack
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+    restart: always
+    volumes:
+      - "../system/localstack/load:/load"

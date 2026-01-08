@@ -1,0 +1,10 @@
+#!/bin/bash
+# Production mode for pro-docs
+
+set -e
+cd /srv/app/pro-docs
+
+export DOCS_PORT=${DOCS_PORT:-3081}
+export RUST_LOG=${RUST_LOG:-pro_docs=info}
+
+exec /srv/app/target/release/pro-docs

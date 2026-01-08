@@ -1,0 +1,43 @@
+FROM node:16-alpine
+
+ENV APP_ROOT=/srv/tbco \
+  HOST=0.0.0.0 \
+  NPM_CONFIG_LOGLEVEL=warn
+
+WORKDIR $APP_ROOT
+EXPOSE 80
+ENTRYPOINT [ "/entrypoint" ]
+
+RUN apk add --no-cache haproxy jq sudo supervisor
+
+RUN mkdir -p /var/log/supervisor
+
+COPY --chown=nobody:nobody apps/theblock.co/.env.defaults $APP_ROOT/
+COPY --chown=nobody:nobody apps/theblock.co/.npmrc $APP_ROOT/
+COPY --chown=nobody:nobody apps/theblock.co/package.json $APP_ROOT/
+COPY --chown=nobody:nobody apps/theblock.co/yarn.lock $APP_ROOT/
+
+COPY --chown=nobody:nobody apps/theblock.co/.npmrc /
+COPY --chown=nobody:nobody apps/theblock.co/package.json /
+COPY --chown=nobody:nobody apps/theblock.co/yarn.lock /
+
+RUN apk add --no-cache jq nodejs sudo supervisor yarn git
+
+COPY apps/theblock.co/docker /
+
+COPY --chown=nobody:nobody apps/theblock.co .
+
+RUN yarn-install build
+
+#RUN archive-prev-next
+
+ENV NODE_ENV=production
+
+ARG IMAGE_VERSION
+ENV IMAGE_VERSION=$IMAGE_VERSION
+
+LABEL image.name="theblock.co"
+LABEL image.version="$IMAGE_VERSION"
+
+ARG IMAGE_TAG
+LABEL image.tag="$IMAGE_TAG"

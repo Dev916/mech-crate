@@ -1,0 +1,4 @@
+#!/bin/sh -e
+
+
+cross-env NODE_ENV=production ts-node -O '{\"module\": \"commonjs\"}' -r tsconfig-paths/register -r ts-node/register --project /srv/app/tsconfig.json /srv/app/server.ts;

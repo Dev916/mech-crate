@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -e
+
+cd $APP_ROOT
+
+# Clear the cache database tables using the custom artisan command
+php artisan app:clear-cache-tables --force

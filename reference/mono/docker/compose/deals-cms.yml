@@ -1,0 +1,19 @@
+include:
+  - ./postgres.yml
+  - ./redis.yml
+
+services:
+  deals-cms:
+    container_name: deals-cms
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.deals-cms
+    image: ghcr.io/theblockcrypto/deals-cms:${DEALS_CMS_TAG:-latest}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.deals_cms.rule=PathPrefix(`/deals-cms`)"
+      - "traefik.http.services.deals_cms.loadbalancer.server.port=80"

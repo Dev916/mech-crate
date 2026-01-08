@@ -1,0 +1,78 @@
+#!/bin/sh
+
+SUPERVISOR=${1:-"default-supervisor --queue=default"}
+
+_forwardTerm() {
+    echo "Caught signal SIGTERM, passing it to child processes..."
+    pgrep -P $$ | xargs kill -15 2>/dev/null
+    wait
+    exit $?
+}
+
+trap _forwardTerm TERM
+
+_setupLogs() {
+    local num_procs="$1"
+
+    procs="$(seq 0 $(($num_procs - 1)))"
+    echo "Setting up logs for queue with $procs procs"
+    for i in $procs; do
+        touch "/var/log/supervisor/campus-queue-0${i}.log"
+        chown nobody:nobody "/var/log/supervisor/campus-queue-0${i}.log"
+    done
+}
+
+_setupCron() {
+    echo "Configuring cron job for Laravel..."
+
+    touch /etc/crontabs/www-data
+    # Create crontab using heredoc for better readability
+    cat <<'EOF' > /etc/crontabs/www-data
+# Laravel Scheduler - runs every minute
+* * * * * /usr/bin/php /srv/app/artisan schedule:run >> /var/log/cron/cron.log 2>&1
+
+# Horizon Metrics Snapshot - captures queue metrics every minute
+* * * * * /usr/bin/php /srv/app/artisan horizon:snapshot >> /var/log/cron/horizon-snapshot.log 2>&1
+EOF
+
+    mkdir -p /var/log/cron
+    chmod 0755 /var/log/cron
+    touch /var/log/cron/cron.log
+    chmod 0644 /var/log/cron/cron.log
+
+    chmod 0644 /etc/crontabs/www-data
+    chown -R www-data:www-data /var/log/cron
+
+    crond reload
+}
+
+_main() {
+
+    if [ -z "$QUEUE_CONNECTION" ]; then
+        echo "QUEUE_CONNECTION is empty, defaulting to redis"
+        export QUEUE_CONNECTION=redis
+    else
+        echo "Using queue connection: $QUEUE_CONNECTION"
+    fi
+
+    _setupLogs 1
+    _setupCron
+
+    echo "Setup app cache"
+    php /srv/app/artisan config:cache
+
+    echo "Discover packages"
+    php /srv/app/artisan package:discover
+    #php /srv/app/artisan opcache:reset
+
+    if [ "$QUEUE_CONNECTION" = "sqs" ]; then
+        echo "Running SQS worker (queue:work)..."
+        php /srv/app/artisan queue:work sqs --queue="$QUEUE_NAME" --sleep=1 --tries=3
+    else
+        echo "Starting php via supervisor ($SUPERVISOR) with: IMAGE_VERSION=$IMAGE_VERSION"
+        echo "Running Horizon supervisor..."
+        php /srv/app/artisan horizon:supervisor $SUPERVISOR $QUEUE_CONNECTION
+    fi
+}
+
+_main

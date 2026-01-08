@@ -1,0 +1,5 @@
+FROM memcached:alpine
+
+COPY docker/dockerfiles/memcached/entrypoint /entrypoint
+
+ENTRYPOINT ['/entrypoint']

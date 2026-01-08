@@ -1,0 +1,16 @@
+
+set -e
+
+cd /srv/app
+
+echo "Building priority-api..."
+cargo build --release &
+
+
+echo "Building priority-api-docs..."
+cd priority-api-docs
+cargo leptos build --release &
+
+wait
+
+echo "Build complete"

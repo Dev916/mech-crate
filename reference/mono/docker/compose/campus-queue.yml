@@ -1,0 +1,15 @@
+include:
+  - ./postgres.yml
+
+services:
+  campus-queue:
+    container_name: campus-queue
+    depends_on:
+      - postgres
+    image: ghcr.io/theblockcrypto/campus-lms:${CAMPUS_LMS_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.campus-lms
+      - ../.config/.env.campus-queue

@@ -1,0 +1,4 @@
+#!/bin/sh -e
+
+
+cross-env NODE_ENV=production ts-node -O '{\"module\": \"commonjs\"}' --project /srv/app/tsconfig.json /srv/app/priority-server.ts

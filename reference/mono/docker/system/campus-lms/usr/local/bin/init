@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+
+cd $APP_ROOT
+
+php artisan --force migrate:fresh --seed
+php artisan app:import-curriculum --legacy
+php artisan app:import-curriculum --curriculum=campus/curriculums/campus_launch_sheet.xlsx --test-bank="campus/question_banks/Digital Assets Essentials.csv" --course-title='Digital Assets Essentials'
+php artisan db:seed --force --class=UsersSeeder
+php artisan test:import
+php artisan app:issue-credits

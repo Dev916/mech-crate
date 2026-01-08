@@ -1,0 +1,32 @@
+# Application service - Development Overrides
+# Use with: docker compose -f app.yml -f app.dev.yml up
+
+services:
+  app:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      ENABLE_DEBUG: "true"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+      - "9229:9229"  # Node.js debugger
+    volumes:
+      # Mount source code for hot-reload
+      - ../../src:/app/src:cached
+      - ../../package.json:/app/package.json:ro
+      - ../../tsconfig.json:/app/tsconfig.json:ro
+      # Volume mount over node_modules for performance
+      - app_node_modules:/app/node_modules
+      # Mount logs for inspection
+      - app_logs:/var/log/app
+    command: npm run dev
+    restart: "no"
+    # Disable healthcheck in development
+    healthcheck:
+      disable: true
+
+volumes:
+  app_node_modules:
+  app_logs:

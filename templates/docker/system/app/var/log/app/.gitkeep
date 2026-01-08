@@ -1,0 +1,2 @@
+# This directory maps to /var/log/app in the container
+# Application logs will be written here

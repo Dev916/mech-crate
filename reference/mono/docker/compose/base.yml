@@ -1,0 +1,6 @@
+include:
+  - ./traefik.yml
+  - ./mysql.yml
+  - ./redis.yml
+  - ./wordpress.yml
+  - ./postgres.yml

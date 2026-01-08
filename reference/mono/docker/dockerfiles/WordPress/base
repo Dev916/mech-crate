@@ -1,0 +1,44 @@
+FROM php:7.4-fpm
+
+WORKDIR /srv/wp
+
+RUN mkdir -p /root/.composer
+RUN apt update && apt install -y apt-utils && apt install -y \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libzip-dev \
+    zlib1g-dev \
+    libicu-dev \
+    g++ \
+    git \
+    nginx &&
+    rm -rf /etc/nginx/sites-enabled/default
+
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg &&
+    docker-php-ext-install -j$(nproc) gd &&
+    docker-php-ext-install -j$(nproc) zip &&
+    docker-php-ext-install -j$(nproc) mysqli &&
+    docker-php-ext-install -j$(nproc) pdo_mysql &&
+    docker-php-ext-install -j$(nproc) intl &&
+    docker-php-ext-install -j$(nproc) opcache
+
+RUN pecl install redis &&
+    rm -rf /tmp/pear &&
+    docker-php-ext-enable redis
+
+RUN ln -sf /dev/stdout /var/log/nginx/access.log &&
+    ln -sf /dev/stderr /var/log/nginx/error.log &&
+    ln -sf /dev/stdout /var/log/nginx/tblk.us-access.log &&
+    ln -sf /dev/stderr /var/log/nginx/tblk.us-error.log &&
+    ln -sf /dev/stdout /var/log/nginx/local-access.log &&
+    ln -sf /dev/stderr /var/log/nginx/local-error.log
+
+COPY --chown=www-data:www-data ./docker/system/WordPress /
+COPY --chown=www-data:www-data ./docker/.config/.env.wordpress /srv/wp/.env
+COPY --chown=www-data:www-data ./apps/WordPress/composer.json /srv/wp/
+COPY --chown=www-data:www-data ./apps/WordPress/composer.lock /srv/wp/
+
+ENV COMPOSER_HOME=/etc/composer
+
+RUN composer-install

@@ -1,0 +1,188 @@
+#!/bin/sh
+
+# Manual tarball install of New Relic Infrastructure agent (Alpine/musl friendly)
+# - Installs binary to /usr/local/bin/newrelic-infra
+# - Seeds /etc/newrelic-infra.yml with license and display name
+# - Configures log forwarding via /etc/newrelic-infra/logging.d/*.yml
+# - Starts agent in background (no systemd/sysv) or via service wrapper if present
+#
+# Required env:
+#   NEW_RELIC_LICENSE_KEY
+# Optional env:
+#   NEW_RELIC_APP_NAME              (default: campus-lms)
+#   NEW_RELIC_INFRA_TARBALL_URL     (full URL to tar.gz; overrides autodiscovery)
+#   NEW_RELIC_INFRA_VERSION         (pin version; else latest is used)
+#   NEW_RELIC_LOG_PATHS             (space/comma-separated globs; default: /srv/app/storage/logs/*.log)
+#   NEW_RELIC_INFRA_LOG_LEVEL       (default: info)
+#   NEW_RELIC_FORCE_REINSTALL_LOGS  (true to force reinstall/restart)
+
+set -eu
+
+if [ -z "${NEW_RELIC_LICENSE_KEY:-}" ]; then
+  echo "[newrelic] Infra install skipped: NEW_RELIC_LICENSE_KEY not set" >&2
+  exit 0
+fi
+
+APP_NAME=${NEW_RELIC_APP_NAME:-campus-lms}
+LOG_LEVEL=${NEW_RELIC_INFRA_LOG_LEVEL:-info}
+LOG_PATHS_RAW=${NEW_RELIC_LOG_PATHS:-/srv/app/storage/logs/*.log}
+LEGACY_MARKER="/var/lib/newrelic/.infra-installed"
+MARKER="/var/db/newrelic-infra/.installed"
+BIN_PATH="/usr/local/bin/newrelic-infra"
+SERVICE_BIN="/usr/local/bin/newrelic-infra-service"
+CONF_DIR="/etc/newrelic-infra"
+LOGGING_DIR="$CONF_DIR/logging.d"
+CONF_FILE="$CONF_DIR/newrelic-infra.yml"
+WORKDIR=${NR_TMP_DIR:-/tmp/newrelic-infra}
+LOG_DIR="/var/log/newrelic-infra"
+DB_DIR="/var/db/newrelic-infra"
+
+# Normalize architecture to New Relic naming (amd64/arm64)
+NR_ARCH="amd64"
+case "$(uname -m)" in
+  x86_64) NR_ARCH="amd64" ;;
+  aarch64|arm64) NR_ARCH="arm64" ;;
+  *) NR_ARCH="amd64" ;;
+esac
+BASE_URL="https://download.newrelic.com/infrastructure_agent/binaries/linux/${NR_ARCH}"
+
+mkdir -p "$(dirname "$LEGACY_MARKER")" "$(dirname "$MARKER")" "$CONF_DIR" "$LOGGING_DIR" "$WORKDIR" "$LOG_DIR" "$DB_DIR"
+touch "$LOG_DIR/newrelic-infra.log" || true
+
+# Helper: determine if running
+is_running() {
+  pgrep -x newrelic-infra >/dev/null 2>&1
+}
+
+# Detect if a file is an ELF binary (without relying on external 'file')
+is_elf() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  # Read first 4 bytes and compare to 0x7F 45 4C 46 ("\x7FELF")
+  local magic
+  magic=$(dd if="$f" bs=4 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+  [ "$magic" = "7f454c46" ]
+}
+
+# Stop if running and force reinstall requested
+if is_running && [ "${NEW_RELIC_FORCE_REINSTALL_LOGS:-false}" = "true" ]; then
+  echo "[newrelic] Stopping existing infra agent for forced reinstall"
+  pkill -x newrelic-infra || true
+  sleep 1
+fi
+
+# If binary exists, config has license, and process running (or marker exists), treat as installed
+if [ -x "$BIN_PATH" ] && [ -f "$CONF_FILE" ] && grep -q "^license_key:" "$CONF_FILE" 2>/dev/null && { [ -f "$MARKER" ] || [ -f "$LEGACY_MARKER" ]; } && is_running; then
+  echo "[newrelic] Infra agent already installed and running; skipping"
+else
+  # Resolve tarball URL: explicit URL > pinned version > latest for arch
+  if [ -n "${NEW_RELIC_INFRA_TARBALL_URL:-}" ]; then
+    TARBALL_URL="$NEW_RELIC_INFRA_TARBALL_URL"
+  elif [ -n "${NEW_RELIC_INFRA_VERSION:-}" ]; then
+    TARBALL_URL="${BASE_URL}/newrelic-infra_linux_${NEW_RELIC_INFRA_VERSION}_${NR_ARCH}.tar.gz"
+  else
+    # Fetch latest by scraping the arch directory listing
+    LATEST_FILE=$(curl -fsSL "${BASE_URL}/" \
+      | grep -oE 'newrelic-infra_linux_[0-9]+(\.[0-9]+)*_'"${NR_ARCH}"'\.tar\.gz' \
+      | sort -V \
+      | tail -n1 || true)
+    if [ -n "$LATEST_FILE" ]; then
+      TARBALL_URL="${BASE_URL}/${LATEST_FILE}"
+    else
+      echo "[newrelic] Unable to resolve latest infra tarball for arch ${NR_ARCH}" >&2
+      exit 0
+    fi
+  fi
+
+  echo "[newrelic] Downloading infra agent: $TARBALL_URL"
+  cd "$WORKDIR"
+  curl -fsSL "$TARBALL_URL" -o infra.tar.gz
+  rm -rf pkg && mkdir -p pkg
+  tar -xzf infra.tar.gz -C pkg
+
+  # Locate binary within extracted content (avoid picking up upstart/system files)
+  CANDIDATE=""
+  for path in $(find pkg -type f -name 'newrelic-infra' 2>/dev/null | sort); do
+    if [ -x "$path" ] && is_elf "$path"; then
+      CANDIDATE="$path"; break
+    fi
+  done
+  # Fallback: look under */bin/* if not found
+  if [ -z "$CANDIDATE" ]; then
+    for path in $(find pkg -type f -path '*/bin/newrelic-infra' 2>/dev/null | sort); do
+      if [ -x "$path" ] && is_elf "$path"; then
+        CANDIDATE="$path"; break
+      fi
+    done
+  fi
+  if [ -z "$CANDIDATE" ]; then
+    echo "[newrelic] ERROR: Could not find a valid ELF newrelic-infra binary in tarball" >&2
+    echo "[newrelic] NOTE: Found the following candidates:" >&2
+    find pkg -type f -name 'newrelic-infra*' 2>/dev/null | sed 's/^/[newrelic]   /' >&2 || true
+    exit 0
+  fi
+
+  install -m 0755 "$CANDIDATE" "$BIN_PATH"
+  echo "[newrelic] Installed infra binary to $BIN_PATH (source: $CANDIDATE)"
+
+  # Optionally install service wrapper if present
+  SERVICE_CANDIDATE=$(find pkg -type f -name 'newrelic-infra-service' | head -n1 || true)
+  if [ -n "$SERVICE_CANDIDATE" ]; then
+    install -m 0755 "$SERVICE_CANDIDATE" "$SERVICE_BIN"
+    echo "[newrelic] Installed service wrapper to $SERVICE_BIN"
+  fi
+
+  # Seed main config
+  if [ ! -f "$CONF_FILE" ]; then
+    cat > "$CONF_FILE" <<EOF
+license_key: ${NEW_RELIC_LICENSE_KEY}
+display_name: ${APP_NAME}
+log_file: ${LOG_DIR}/newrelic-infra.log
+log_level: ${LOG_LEVEL}
+EOF
+    echo "[newrelic] Wrote $CONF_FILE"
+  else
+    # Ensure license/app are present/updated
+    grep -q '^license_key:' "$CONF_FILE" && sed -i "s#^license_key:.*#license_key: ${NEW_RELIC_LICENSE_KEY}#" "$CONF_FILE" || echo "license_key: ${NEW_RELIC_LICENSE_KEY}" >> "$CONF_FILE"
+    grep -q '^display_name:' "$CONF_FILE" && sed -i "s#^display_name:.*#display_name: ${APP_NAME}#" "$CONF_FILE" || echo "display_name: ${APP_NAME}" >> "$CONF_FILE"
+    grep -q '^log_level:' "$CONF_FILE" && sed -i "s#^log_level:.*#log_level: ${LOG_LEVEL}#" "$CONF_FILE" || echo "log_level: ${LOG_LEVEL}" >> "$CONF_FILE"
+  fi
+
+  # Sanity check: verify binary runs (print version) and try to self-heal on Alpine
+  if ! "$BIN_PATH" -version >/dev/null 2>&1; then
+    echo "[newrelic] WARNING: infra binary failed to execute; attempting to install compatibility libs (Alpine)" >&2
+    if command -v apk >/dev/null 2>&1; then
+      apk add --no-cache libc6-compat >/dev/null 2>&1 || true
+    fi
+  fi
+
+  # # Seed logging integration config from paths
+  # LOG_CFG="$LOGGING_DIR/logging.yml"
+  # echo "logs:" > "$LOG_CFG"
+  # echo "  - name: campus-lms-dev-logs" >> "$LOG_CFG"
+  # echo "    file: $LOG_PATHS_RAW" >> "$LOG_CFG"
+  # echo "[newrelic] Wrote log sources to $LOG_CFG"
+
+  # Start agent (prefer service wrapper if present)
+  if ! is_running; then
+    if [ -x "$SERVICE_BIN" ]; then
+      "$SERVICE_BIN" -config "$CONF_FILE" start >>"$LOG_DIR/startup.out" 2>>"$LOG_DIR/startup.err" || true
+    else
+      nohup env NRIA_IS_CONTAINERIZED=true "$BIN_PATH" -config "$CONF_FILE" >>"$LOG_DIR/startup.out" 2>>"$LOG_DIR/startup.err" &
+    fi
+    sleep 1
+  fi
+
+  # Mark installation complete (both legacy and new markers for idempotency)
+  touch "$LEGACY_MARKER" "$MARKER"
+  if is_running; then
+    echo "[newrelic] Infra agent started (config: $CONF_FILE)"
+  else
+    echo "[newrelic] ERROR: infra agent not running after start attempt" >&2
+    echo "[newrelic] Diagnostics: file/ldd outputs:" >&2
+    command -v file >/dev/null 2>&1 && file "$BIN_PATH" >&2 || true
+    command -v ldd >/dev/null 2>&1 && ldd "$BIN_PATH" >&2 || true
+    echo "[newrelic] Last 50 lines of startup.err:" >&2
+    tail -n 50 "$LOG_DIR/startup.err" 2>/dev/null >&2 || true
+  fi
+fi

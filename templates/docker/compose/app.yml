@@ -1,0 +1,40 @@
+# Application service - Baseline (Production)
+# This is the production configuration
+# Use app.dev.yml for development overrides
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: docker/dockerfiles/app/app
+      target: production
+    container_name: app
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.app
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  default:
+    name: mech-network
+    external: true

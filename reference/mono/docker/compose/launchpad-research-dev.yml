@@ -1,0 +1,4 @@
+services:
+  launchpad-research:
+    volumes:
+      - ../../apps/launchpad-research:/app

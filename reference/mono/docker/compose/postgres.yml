@@ -1,0 +1,12 @@
+services:
+  postgres:
+    ports: [ "5432:5432", "5434:5434" ]
+    container_name: postgres
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+    image: zulip/zulip-postgresql:14
+    restart: always
+    volumes:
+      - ../../data/postgres:/var/lib/postgresql/data/
+      - ../system/postgres/docker-entrypoint-initdb.d/init-stack.sh:/docker-entrypoint-initdb.d/init-stack.sh

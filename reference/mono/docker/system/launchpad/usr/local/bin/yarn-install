@@ -1,0 +1,66 @@
+#!/bin/sh -e
+
+build=$1
+
+echo -e "\n ##### $(date) #####\n"
+
+set -x
+
+cd "/"
+
+echo "Copying install files from $APP_ROOT to /"
+
+cp $APP_ROOT/package.json /
+cp $APP_ROOT/bunfig.toml ./
+cp $APP_ROOT/yarn.lock /
+
+chown nobody:nobody .
+
+if [ ! -d /.cache/yarn ]; then
+    mkdir -p /.cache/yarn /.yarn
+    chown -R nobody:nobody /.cache/yarn /.yarn
+fi
+
+echo "Wiping /node_modules/*"
+
+unlink /node_modules || true
+
+cd "$APP_ROOT"
+
+bun install
+
+echo "linking /node_modules to $APP_ROOT/node_modules"
+
+ln -s $APP_ROOT/node_modules /node_modules
+
+echo "linking node binaries to /usr/local/bin"
+
+if [ ! -f "/usr/local/bin/nuxt" ]; then
+  rm -rf /usr/local/bin/nuxt
+  ln -s /node_modules/.bin/nuxt /usr/local/bin/nuxt
+fi
+
+if [ ! -f "/usr/local/bin/ts-node" ]; then
+  rm -rf /usr/local/bin/ts-node
+  ln -s /node_modules/.bin/ts-node /usr/local/bin/ts-node
+fi
+
+if [ ! -f "/usr/local/bin/cross-env" ]; then
+  rm -rf /usr/local/bin/cross-env
+  ln -s /node_modules/.bin/cross-env /usr/local/bin/cross-env
+fi
+
+chown nobody:nobody .
+
+rm -rf .nuxt
+
+if [ -n "$build" ]; then
+ bun run build
+ 
+ tar -czf static/nuxt.tar.gz --directory=.nuxt/ . && \
+    if [ -e nuxt-first.tar.gz ]; then mv nuxt-first.tar.gz static && tar -xzf static/nuxt-first.tar.gz --directory=.nuxt/; fi && \
+    if [ -e nuxt-prev.tar.gz ]; then mv nuxt-prev.tar.gz static && tar -xzf static/nuxt-prev.tar.gz --directory=.nuxt/; fi && \
+    tar -xzf static/nuxt.tar.gz --directory=.nuxt/
+fi
+
+echo "Done installing dependencies"

@@ -1,0 +1,12 @@
+#!/bin/sh -e
+
+cp /app/.npmrc /
+cp /app/package.json /
+cp /app/yarn.lock /
+
+cd /
+
+yarn add $@
+
+cp package.json /app/
+cp yarn.lock /app/

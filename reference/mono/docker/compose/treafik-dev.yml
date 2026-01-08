@@ -1,0 +1,6 @@
+services:
+  traefik:
+    ports:
+     - "8080:8080"
+    labels:
+      - "mcp.service.url=http://localhost:8080/dashboard/"

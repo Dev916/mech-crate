@@ -1,0 +1,30 @@
+# Database service - Baseline (Production)
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: db
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ../system/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - default
+    restart: unless-stopped
+
+volumes:
+  db_data:
+
+networks:
+  default:
+    name: mech-network
+    external: true

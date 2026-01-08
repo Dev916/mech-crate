@@ -1,0 +1,25 @@
+include:
+  - ./mysql.yml
+  - ./redis.yml
+  - ./traefik.yml
+
+services:
+  theblock.co:
+    image: ghcr.io/theblockcrypto/theblock.co:${THEBLOCK_CO_IMAGE_TAG:-latest}
+    container_name: theblock.co
+    depends_on:
+      - mysql
+      - redis
+      - redis-ro
+      - traefik
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.theblock.co
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tc.rule=HostRegexp(`{subdomain:[a-z]+}\\.co\\.tblk\\.us|tbco\\.localhost`)"
+      - "traefik.http.services.tc.loadbalancer.server.port=80"
+    working_dir: /srv/tbco
+    tty: true
+    stdin_open: true

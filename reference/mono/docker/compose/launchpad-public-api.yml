@@ -1,0 +1,17 @@
+include:
+  - ./redis.yml
+
+services:
+  launchpad-public-api:
+    container_name: launchpad-public-api
+    depends_on:
+      - redis
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.launchpad-public-api
+    image: ghcr.io/theblockcrypto/launchpad-public-api:${LAUNCHPAD_PUBLIC_API_IMAGE_TAG:-latest}
+    labels:
+      - "traefik.http.routers.launchpad_public_api.rule=PathPrefix(`/api-public`)"
+      - "traefik.http.services.launchpad_public_api.loadbalancer.server.port=3000"
+#      - "traefik.http.middlewares.launchpad_public_api-strip.stripprefix.prefixes=/api-public"

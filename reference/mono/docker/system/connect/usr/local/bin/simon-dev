@@ -1,0 +1,28 @@
+#!/bin/bash
+
+cd /home/zulip/connect/zulip-bots/simon-ai
+
+# Function to start the Simon Bot
+start_simon_bot() {
+
+    stopfile="/tmp/simon.stop"
+
+    # Create the stop file
+    touch "$stopfile"
+
+    while [ -f "$stopfile" ]; do
+        echo "Starting Simon Bot..."
+        python3 bot.py >/var/log/simon.log 2>&1
+
+        echo "Simon bot process ended."
+        if [ -f "$stopfile" ]; then
+            echo "Restarting..."
+        else
+            echo "Stopfile removed, not restarting."
+        fi
+    done
+}
+
+start_simon_bot &
+
+wait

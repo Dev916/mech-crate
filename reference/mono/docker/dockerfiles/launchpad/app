@@ -1,0 +1,50 @@
+FROM oven/bun:alpine
+
+ARG IMAGE_TAG
+ARG COMMIT_HASH
+ARG IMAGE_VERSION
+ARG NODE_ENV
+ARG TBLK_VERSION
+
+ENV APP_ROOT=/srv/app
+ENV HOST=0.0.0.0
+ENV IMAGE_VERSION=${IMAGE_VERSION}
+
+ENV NPM_CONFIG_LOGLEVEL=warn
+ENV NODE_ENV=${NODE_ENV:-production}
+ENV COMMIT_SHA_FRONT=${COMMIT_SHA_FRONT:-${IMAGE_VERSION}}
+ENV COMMIT_HASH=${COMMIT_SHA_FRONT}
+
+LABEL image.name="theblock.pro"
+LABEL image.version="$IMAGE_VERSION"
+LABEL image.tag="$IMAGE_TAG"
+
+WORKDIR $APP_ROOT
+EXPOSE 80
+ENTRYPOINT [ "/entrypoint" ]
+
+RUN apk add --no-cache jq haproxy nodejs sudo supervisor yarn git
+
+RUN mkdir -p /var/log/supervisor
+
+RUN yarn global add merge-packages --prefix /usr/local
+
+COPY ./docker/system/launchpad /
+
+COPY --chown=nobody:nobody ./apps/launchpad .
+
+COPY --chown=nobody:nobody ./apps/launchpad/.env.defaults $APP_ROOT/
+COPY --chown=nobody:nobody ./apps/launchpad/.npmrc $APP_ROOT/
+COPY --chown=nobody:nobody ./apps/launchpad/package.json $APP_ROOT/
+COPY --chown=nobody:nobody ./apps/launchpad/yarn.lock $APP_ROOT/
+
+COPY --chown=nobody:nobody ./apps/launchpad/.npmrc /
+COPY --chown=nobody:nobody ./apps/launchpad/package.json /
+COPY --chown=nobody:nobody ./apps/launchpad/yarn.lock /
+
+RUN cp nuxt.config.js nuxt.config.base.js
+RUN cp config/index.js config/index.base.js
+
+RUN yarn-install build
+
+RUN chown -R nobody:nobody $APP_ROOT/.nuxt

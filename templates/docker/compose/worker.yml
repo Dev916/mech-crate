@@ -1,0 +1,31 @@
+# Background worker service
+
+services:
+  worker:
+    build:
+      context: ../..
+      dockerfile: docker/dockerfiles/app/app
+      target: production
+    container_name: worker
+    command: npm run worker
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.app
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - default
+    restart: unless-stopped
+
+networks:
+  default:
+    name: mech-network
+    external: true

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+n=0
+until [ $n -ge 24 ]
+do
+    nc -z -v -w30 $MYSQL_HOST 3306 && exit
+
+    n=$[$n+1]
+
+    echo -e "\nWaiting for database connection...\n"
+    sleep 5
+done
+
+echo -e "Timed out waiting for mysql."
+exit 1

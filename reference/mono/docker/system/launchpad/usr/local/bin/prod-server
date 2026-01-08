@@ -1,0 +1,5 @@
+#!/bin/sh -e
+
+cd /srv/app
+
+/srv/app/node_modules/.bin/nuxt start

@@ -1,0 +1,17 @@
+services:
+  postgres-connect:
+    container_name: postgres-connect
+    image: "zulip/zulip-postgresql:${POSTGRES_IMAGE_TAG:-14}"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "zulip"
+      POSTGRES_USER: "zulip"
+      # Note that you need to do a manual `ALTER ROLE` query if you
+      # change this on a system after booting the postgres container
+      # the first time on a host.  Instructions are available in README.md.
+      POSTGRES_PASSWORD: "postgres"
+    volumes:
+      - "postgresql-connect:/var/lib/postgresql/data:rw"
+
+volumes:
+  postgresql-connect:

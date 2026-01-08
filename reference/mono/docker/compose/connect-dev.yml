@@ -1,0 +1,7 @@
+services:
+  connect:
+    volumes:
+      - ../../apps/connect/zulip-bots/simon-ai:/srv/simon
+      - ../../exports:/tmp/exports
+      - ../../apps/connect/docker/system/connect/root/custom_zulip/zerver/lib/rate_limiter.py:/home/zulip/deployments/current/zerver/lib/rate_limiter.py
+      - ../../apps/connect/docker/system/connect/root/custom_zulip/zerver/views/user_groups.py:/home/zulip/deployments/current/zerver/views/user_groups.py

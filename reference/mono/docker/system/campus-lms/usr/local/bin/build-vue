@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+echo "Building Vue components..."
+
+yarn run build
+
+echo "Finished building Vue components"

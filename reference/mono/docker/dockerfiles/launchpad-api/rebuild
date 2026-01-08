@@ -1,0 +1,4 @@
+FROM ghcr.io/theblockcrypto/launchpad-api:latest
+
+COPY ./apps/launchpad-api/docker /
+COPY ./docker/system/launchpad-api /

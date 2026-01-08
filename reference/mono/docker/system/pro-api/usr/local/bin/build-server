@@ -1,0 +1,43 @@
+#!/bin/bash
+
+set -e
+
+cd /srv/app
+
+# Ensure toolchain is fully installed before parallel builds
+# This prevents race conditions in rustup downloads
+echo "Ensuring Rust toolchain is ready..."
+cargo --version > /dev/null
+
+# Pre-fetch all dependencies (single-threaded to avoid lock contention)
+echo "Fetching dependencies..."
+cargo fetch
+
+echo "Building pro-api and pro-docs concurrently..."
+
+# Build both packages in parallel
+cargo build --release --package pro-api &
+PID_API=$!
+
+cargo build --release --package pro-docs --features ssr &
+PID_DOCS=$!
+
+# Wait for both and capture exit codes
+wait $PID_API
+STATUS_API=$?
+
+wait $PID_DOCS
+STATUS_DOCS=$?
+
+# Check if either failed
+if [ $STATUS_API -ne 0 ]; then
+    echo "pro-api build failed"
+    exit $STATUS_API
+fi
+
+if [ $STATUS_DOCS -ne 0 ]; then
+    echo "pro-docs build failed"
+    exit $STATUS_DOCS
+fi
+
+echo "Build complete"

@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+	CREATE USER campus WITH PASSWORD '$POSTGRES_DB';
+	CREATE DATABASE campus;
+	GRANT ALL PRIVILEGES ON DATABASE campus TO campus;
+EOSQL
+
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+	CREATE USER treasuries WITH PASSWORD '$POSTGRES_DB';
+	CREATE DATABASE treasuries;
+	GRANT ALL PRIVILEGES ON DATABASE treasuries TO treasuries;
+EOSQL
+
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+	CREATE USER pro_api WITH PASSWORD '$POSTGRES_DB';
+	CREATE DATABASE pro_api;
+	GRANT ALL PRIVILEGES ON DATABASE pro_api TO pro_api;
+EOSQL

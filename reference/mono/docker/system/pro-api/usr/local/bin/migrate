@@ -1,0 +1,537 @@
+#!/bin/bash
+#
+# Database migration management for Launchpad Pro API
+#
+# Usage:
+#   migrate run              - Run all pending migrations
+#   migrate run --fresh      - Drop DB, recreate, and run all migrations from scratch
+#   migrate fresh            - Same as 'migrate run --fresh'
+#   migrate status           - Show migration status
+#   migrate info             - Show detailed info about each migration
+#   migrate revert           - Revert the last migration
+#   migrate revert --all     - Revert all migrations
+#   migrate add <name>       - Create a new migration file
+#   migrate force <version>  - Force set migration version (dangerous!)
+#
+# Environment:
+#   DATABASE_URL or APP__DATABASE__URL - PostgreSQL connection string
+#
+
+set -euo pipefail
+
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-/srv/app/migrations}"
+SCRIPT_NAME=$(basename "$0")
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Get database URL from environment
+get_database_url() {
+    if [[ -n "${DATABASE_URL:-}" ]]; then
+        echo "$DATABASE_URL"
+    elif [[ -n "${APP__DATABASE__URL:-}" ]]; then
+        echo "$APP__DATABASE__URL"
+    else
+        echo -e "${RED}Error: DATABASE_URL or APP__DATABASE__URL must be set${NC}" >&2
+        exit 1
+    fi
+}
+
+# Parse database URL to extract components
+# Format: postgres://user:password@host:port/database
+parse_db_url() {
+    local url="$1"
+    # Remove postgres:// prefix
+    local rest="${url#postgres://}"
+    # Extract user:password
+    local userpass="${rest%%@*}"
+    DB_USER="${userpass%%:*}"
+    DB_PASS="${userpass#*:}"
+    # Extract host:port/database
+    local hostdb="${rest#*@}"
+    local hostport="${hostdb%%/*}"
+    DB_HOST="${hostport%%:*}"
+    DB_PORT="${hostport#*:}"
+    DB_NAME="${hostdb#*/}"
+}
+
+# Print usage
+usage() {
+    echo "Database Migration Management"
+    echo ""
+    echo "Usage: $SCRIPT_NAME <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  run              Run all pending migrations"
+    echo "  run --fresh      Drop DB, recreate, and run all migrations (test migrations)"
+    echo "  fresh            Same as 'run --fresh' - start fresh and apply all migrations"
+    echo "  status           Show migration status (pending/applied)"
+    echo "  info             Show detailed info about each migration"
+    echo "  revert           Revert the last applied migration"
+    echo "  revert --all     Revert all migrations (DANGEROUS)"
+    echo "  add <name>       Create a new migration file"
+    echo "  force <version>  Force set dirty state (for recovery)"
+    echo "  validate         Check migration files for issues"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help       Show this help message"
+    echo "  -v, --verbose    Enable verbose output"
+    echo "  --dry-run        Show what would be done without executing"
+    echo "  --fresh          Drop and recreate database before running (for 'run' command)"
+    echo ""
+    echo "Environment Variables:"
+    echo "  DATABASE_URL         PostgreSQL connection string"
+    echo "  APP__DATABASE__URL   Alternative connection string"
+    echo "  MIGRATIONS_DIR       Path to migrations directory (default: /srv/app/migrations)"
+}
+
+# Drop all objects in the database (fresh start)
+# This approach doesn't require superuser privileges - it drops all tables,
+# types, and the migrations tracking table so migrations run fresh.
+cmd_fresh_db() {
+    local db_url
+    db_url=$(get_database_url)
+    
+    # Parse the URL to get components
+    parse_db_url "$db_url"
+    
+    echo -e "${YELLOW}⚠️  FRESH MODE: Dropping all objects in database '${DB_NAME}'${NC}"
+    echo -e "${RED}    This will DELETE ALL DATA in the database!${NC}"
+    echo ""
+    
+    # Export password for psql
+    export PGPASSWORD="$DB_PASS"
+    
+    # Drop all tables, views, and the migrations table
+    echo -e "    ${BLUE}Dropping all tables...${NC}"
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
+        DO \$\$
+        DECLARE
+            r RECORD;
+        BEGIN
+            -- Drop all tables in public schema
+            FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+            END LOOP;
+        END
+        \$\$;
+    " 2>&1 | grep -v "^DO$" || true
+    
+    # Drop all custom types (enums, etc.)
+    echo -e "    ${BLUE}Dropping all custom types...${NC}"
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
+        DO \$\$
+        DECLARE
+            r RECORD;
+        BEGIN
+            -- Drop all custom types in public schema
+            FOR r IN (
+                SELECT t.typname
+                FROM pg_type t
+                JOIN pg_namespace n ON t.typnamespace = n.oid
+                WHERE n.nspname = 'public'
+                AND t.typtype = 'e'  -- enum types
+            ) LOOP
+                EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';
+            END LOOP;
+        END
+        \$\$;
+    " 2>&1 | grep -v "^DO$" || true
+    
+    # Drop all functions
+    echo -e "    ${BLUE}Dropping all functions...${NC}"
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
+        DO \$\$
+        DECLARE
+            r RECORD;
+        BEGIN
+            FOR r IN (
+                SELECT p.proname, pg_get_function_identity_arguments(p.oid) as args
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'public'
+            ) LOOP
+                EXECUTE 'DROP FUNCTION IF EXISTS public.' || quote_ident(r.proname) || '(' || r.args || ') CASCADE';
+            END LOOP;
+        END
+        \$\$;
+    " 2>&1 | grep -v "^DO$" || true
+    
+    unset PGPASSWORD
+    
+    echo -e "    ${GREEN}✓ Database cleaned successfully${NC}"
+    echo ""
+}
+
+# Run pending migrations
+cmd_run() {
+    local dry_run="${1:-false}"
+    local fresh="${2:-false}"
+    
+    # Handle fresh mode: drop and recreate database first
+    if [[ "$fresh" == "true" ]]; then
+        cmd_fresh_db
+    fi
+    
+    echo -e "${BLUE}==> Running database migrations${NC}"
+    
+    if [[ "$dry_run" == "true" ]]; then
+        echo -e "${YELLOW}Dry run mode - no changes will be made${NC}"
+        sqlx migrate info --source "$MIGRATIONS_DIR"
+        return 0
+    fi
+    
+    # Run migrations
+    if sqlx migrate run --source "$MIGRATIONS_DIR"; then
+        echo -e "${GREEN}✓ Migrations complete${NC}"
+        if [[ "$fresh" == "true" ]]; then
+            echo -e "${GREEN}  All migrations applied from scratch - database is clean and ready!${NC}"
+        fi
+    else
+        echo -e "${RED}✗ Migration failed${NC}"
+        return 1
+    fi
+}
+
+# Show migration status
+cmd_status() {
+    echo -e "${BLUE}==> Migration Status${NC}"
+    echo ""
+    
+    # Get applied migrations from database
+    local db_url
+    db_url=$(get_database_url)
+    
+    # Check if migrations table exists
+    local table_exists
+    table_exists=$(psql "$db_url" -tAc "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = '_sqlx_migrations')")
+    
+    if [[ "$table_exists" != "t" ]]; then
+        echo -e "${YELLOW}No migrations have been applied yet${NC}"
+        echo ""
+        echo "Pending migrations:"
+        ls -1 "$MIGRATIONS_DIR"/*.sql 2>/dev/null | while read -r f; do
+            echo -e "  ${YELLOW}○${NC} $(basename "$f")"
+        done
+        return 0
+    fi
+    
+    # Get applied versions
+    local applied
+    applied=$(psql "$db_url" -tAc "SELECT version FROM _sqlx_migrations ORDER BY version")
+    
+    echo "Applied migrations:"
+    echo "$applied" | while read -r version; do
+        if [[ -n "$version" ]]; then
+            # Find matching file
+            local file
+            file=$(ls "$MIGRATIONS_DIR"/${version}_*.sql 2>/dev/null | head -1)
+            if [[ -n "$file" ]]; then
+                echo -e "  ${GREEN}✓${NC} $(basename "$file")"
+            else
+                echo -e "  ${GREEN}✓${NC} $version (file not found)"
+            fi
+        fi
+    done
+    
+    echo ""
+    echo "Pending migrations:"
+    local has_pending=false
+    for f in "$MIGRATIONS_DIR"/*.sql; do
+        [[ -e "$f" ]] || continue
+        local version
+        version=$(basename "$f" | cut -d'_' -f1)
+        if ! echo "$applied" | grep -q "^${version}$"; then
+            echo -e "  ${YELLOW}○${NC} $(basename "$f")"
+            has_pending=true
+        fi
+    done
+    
+    if [[ "$has_pending" == "false" ]]; then
+        echo -e "  ${GREEN}No pending migrations${NC}"
+    fi
+}
+
+# Show detailed migration info
+cmd_info() {
+    echo -e "${BLUE}==> Migration Info${NC}"
+    echo ""
+    sqlx migrate info --source "$MIGRATIONS_DIR"
+}
+
+# Revert migrations
+cmd_revert() {
+    local revert_all="${1:-false}"
+    
+    local db_url
+    db_url=$(get_database_url)
+    
+    # Check if migrations table exists
+    local table_exists
+    table_exists=$(psql "$db_url" -tAc "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = '_sqlx_migrations')")
+    
+    if [[ "$table_exists" != "t" ]]; then
+        echo -e "${YELLOW}No migrations to revert${NC}"
+        return 0
+    fi
+    
+    if [[ "$revert_all" == "true" ]]; then
+        echo -e "${RED}WARNING: This will revert ALL migrations!${NC}"
+        echo -e "${RED}This is a destructive operation that will drop tables and data.${NC}"
+        read -p "Type 'yes' to continue: " confirm
+        if [[ "$confirm" != "yes" ]]; then
+            echo "Aborted."
+            return 1
+        fi
+        
+        # Get all applied migrations in reverse order
+        local versions
+        versions=$(psql "$db_url" -tAc "SELECT version FROM _sqlx_migrations ORDER BY version DESC")
+        
+        echo "$versions" | while read -r version; do
+            [[ -n "$version" ]] || continue
+            echo -e "${YELLOW}Reverting migration $version...${NC}"
+            sqlx migrate revert --source "$MIGRATIONS_DIR" || true
+        done
+        
+        echo -e "${GREEN}✓ All migrations reverted${NC}"
+    else
+        echo -e "${YELLOW}==> Reverting last migration${NC}"
+        
+        if sqlx migrate revert --source "$MIGRATIONS_DIR"; then
+            echo -e "${GREEN}✓ Migration reverted${NC}"
+        else
+            echo -e "${RED}✗ Revert failed${NC}"
+            return 1
+        fi
+    fi
+}
+
+# Create a new migration
+cmd_add() {
+    local name="${1:-}"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "${RED}Error: Migration name required${NC}"
+        echo "Usage: $SCRIPT_NAME add <name>"
+        return 1
+    fi
+    
+    # Generate timestamp
+    local timestamp
+    timestamp=$(date +%Y%m%d%H%M%S)
+    
+    # Sanitize name (lowercase, underscores)
+    local safe_name
+    safe_name=$(echo "$name" | tr '[:upper:]' '[:lower:]' | tr ' -' '_' | tr -cd '[:alnum:]_')
+    
+    local filename="${timestamp}_${safe_name}.sql"
+    local filepath="$MIGRATIONS_DIR/$filename"
+    
+    # Create migration file with template
+    cat > "$filepath" << 'EOF'
+-- Migration: MIGRATION_NAME
+-- Created: TIMESTAMP
+--
+-- Add your SQL statements here.
+-- This migration will be applied in a transaction.
+
+-- Up Migration
+-- Add tables, columns, indexes, etc.
+
+
+
+-- Note: For rollback support, create a corresponding .down.sql file
+-- or add a DOWN section comment with revert statements.
+EOF
+
+    # Replace placeholders
+    sed -i "s/MIGRATION_NAME/$safe_name/g" "$filepath"
+    sed -i "s/TIMESTAMP/$(date -Iseconds)/g" "$filepath"
+    
+    echo -e "${GREEN}✓ Created migration: $filename${NC}"
+    echo "  Path: $filepath"
+}
+
+# Force set migration version (recovery tool)
+cmd_force() {
+    local version="${1:-}"
+    
+    if [[ -z "$version" ]]; then
+        echo -e "${RED}Error: Version number required${NC}"
+        echo "Usage: $SCRIPT_NAME force <version>"
+        return 1
+    fi
+    
+    echo -e "${RED}WARNING: This is a dangerous operation!${NC}"
+    echo "This will mark migration $version as applied without running it."
+    read -p "Type 'force' to continue: " confirm
+    if [[ "$confirm" != "force" ]]; then
+        echo "Aborted."
+        return 1
+    fi
+    
+    local db_url
+    db_url=$(get_database_url)
+    
+    # Ensure migrations table exists
+    psql "$db_url" -c "
+        CREATE TABLE IF NOT EXISTS _sqlx_migrations (
+            version BIGINT PRIMARY KEY,
+            description TEXT NOT NULL,
+            installed_on TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            success BOOLEAN NOT NULL,
+            checksum BYTEA NOT NULL,
+            execution_time BIGINT NOT NULL
+        )
+    "
+    
+    # Find migration file
+    local file
+    file=$(ls "$MIGRATIONS_DIR"/${version}_*.sql 2>/dev/null | head -1)
+    
+    if [[ -z "$file" ]]; then
+        echo -e "${RED}Error: No migration file found for version $version${NC}"
+        return 1
+    fi
+    
+    local description
+    description=$(basename "$file" .sql | cut -d'_' -f2-)
+    
+    # Calculate checksum
+    local checksum
+    checksum=$(sha256sum "$file" | cut -d' ' -f1)
+    
+    # Insert migration record
+    psql "$db_url" -c "
+        INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+        VALUES ($version, '$description', true, decode('$checksum', 'hex'), 0)
+        ON CONFLICT (version) DO UPDATE SET
+            success = true,
+            installed_on = NOW()
+    "
+    
+    echo -e "${GREEN}✓ Marked migration $version as applied${NC}"
+}
+
+# Validate migration files
+cmd_validate() {
+    echo -e "${BLUE}==> Validating migration files${NC}"
+    echo ""
+    
+    local errors=0
+    local warnings=0
+    
+    for f in "$MIGRATIONS_DIR"/*.sql; do
+        [[ -e "$f" ]] || continue
+        local basename_f
+        basename_f=$(basename "$f")
+        
+        # Check filename format
+        if ! echo "$basename_f" | grep -qE '^[0-9]{14}_[a-z0-9_]+\.sql$'; then
+            echo -e "${YELLOW}⚠ Warning: Non-standard filename: $basename_f${NC}"
+            ((warnings++))
+        fi
+        
+        # Check for empty file
+        if [[ ! -s "$f" ]]; then
+            echo -e "${RED}✗ Error: Empty migration file: $basename_f${NC}"
+            ((errors++))
+            continue
+        fi
+        
+        # Check for basic SQL syntax (has statements)
+        if ! grep -qiE '(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|GRANT|REVOKE)' "$f"; then
+            echo -e "${YELLOW}⚠ Warning: No SQL statements found in: $basename_f${NC}"
+            ((warnings++))
+        fi
+        
+        echo -e "${GREEN}✓${NC} $basename_f"
+    done
+    
+    echo ""
+    if [[ $errors -gt 0 ]]; then
+        echo -e "${RED}Found $errors error(s) and $warnings warning(s)${NC}"
+        return 1
+    elif [[ $warnings -gt 0 ]]; then
+        echo -e "${YELLOW}Found $warnings warning(s)${NC}"
+    else
+        echo -e "${GREEN}All migrations valid${NC}"
+    fi
+}
+
+# Main entry point
+main() {
+    local command="${1:-}"
+    shift || true
+    
+    # Handle help
+    if [[ "$command" == "-h" || "$command" == "--help" || -z "$command" ]]; then
+        usage
+        exit 0
+    fi
+    
+    # Export database URL for sqlx
+    export DATABASE_URL
+    DATABASE_URL=$(get_database_url)
+    
+    case "$command" in
+        run)
+            local dry_run=false
+            local fresh=false
+            for arg in "$@"; do
+                case "$arg" in
+                    --dry-run) dry_run=true ;;
+                    --fresh) fresh=true ;;
+                esac
+            done
+            cmd_run "$dry_run" "$fresh"
+            ;;
+        fresh)
+            # Shorthand for 'run --fresh'
+            local dry_run=false
+            for arg in "$@"; do
+                case "$arg" in
+                    --dry-run) dry_run=true ;;
+                esac
+            done
+            cmd_run "$dry_run" "true"
+            ;;
+        status)
+            cmd_status
+            ;;
+        info)
+            cmd_info
+            ;;
+        revert)
+            local revert_all=false
+            for arg in "$@"; do
+                case "$arg" in
+                    --all) revert_all=true ;;
+                esac
+            done
+            cmd_revert "$revert_all"
+            ;;
+        add)
+            cmd_add "$@"
+            ;;
+        force)
+            cmd_force "$@"
+            ;;
+        validate)
+            cmd_validate
+            ;;
+        *)
+            echo -e "${RED}Unknown command: $command${NC}"
+            echo ""
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

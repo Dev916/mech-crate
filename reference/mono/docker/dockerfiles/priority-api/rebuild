@@ -1,0 +1,15 @@
+ARG PRIORITY_API_IMAGE_TAG=latest
+
+FROM ghcr.io/theblockcrypto/priority-api:${PRIORITY_API_IMAGE_TAG}
+
+COPY ./apps/priority-api/Cargo.toml ./
+
+COPY ./apps/priority-api/Cargo.lock ./
+
+COPY ./apps/priority-api .
+
+COPY docker/system/priority-api /
+
+
+
+ENTRYPOINT [ "/entrypoint" ]

@@ -1,0 +1,27 @@
+#!/bin/sh
+
+apk add --no-cache inotify-tools
+
+npm install -g tsc-node
+npm install -g typescript
+
+if [ ! -d /opt/launchpad-api-entities ]; then
+    echo "No mount found, aborting"
+    exit 1
+fi
+
+# Function to handle the build and copy process
+build_and_copy() {
+    echo "Changes detected, building and copying module..."
+    cp -rf /opt/launchpad-api-entities/* /tmp/launchpad-api-entities/
+    cd /tmp/launchpad-api-entities
+    yarn install
+    yarn build
+    cp -rf /tmp/launchpad-api-entities/dist/* /app/node_modules/@theblockcrypto/launchpad-api-entities/dist/
+}
+
+# Watch for changes in the src directory of the module
+while true; do
+    inotifywait -r -e modify,create,delete,move /opt/launchpad-api-entities/src
+    build_and_copy
+done

@@ -1,0 +1,9 @@
+services:
+  priority-api:
+    ports:
+      - 8080:8080
+    volumes:
+      - ../../apps/priority-api:/srv/app
+      - /srv/app/target
+    environment:
+      - DEV_MODE=true

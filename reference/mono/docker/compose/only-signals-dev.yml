@@ -1,0 +1,10 @@
+services:
+  only-signals:
+    ports:
+      - '24678:24678'
+    volumes:
+      - /srv/app/frontend/node_modules
+      - /srv/app/backend/target
+      - ../../apps/only-signals/app:/srv/app
+    environment:
+      - DEV_MODE=1

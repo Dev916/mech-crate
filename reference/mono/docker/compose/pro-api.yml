@@ -1,0 +1,26 @@
+include:
+  - ./redis.yml
+  - ./postgres.yml
+  - ./traefik.yml
+
+services:
+  pro-api:
+    container_name: pro-api
+    depends_on:
+      - postgres
+      - redis
+      - traefik
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/pro-api/prod.env
+    image: ghcr.io/theblockcrypto/pro-api:${PRO_API_IMAGE_TAG:-latest}
+    working_dir: /srv/app
+    tty: true
+    stdin_open: true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pro-api.rule=HostRegexp(`pro-api\\..*\\.tblk\\.us|pro-api\\.theblockpro\\.localhost`)"
+      - "traefik.http.routers.pro-api.entrypoints=http"
+      - "traefik.http.services.pro-api.loadbalancer.server.port=80"
+      - "mcp.service.url=http://pro-api.theblockpro.localhost"

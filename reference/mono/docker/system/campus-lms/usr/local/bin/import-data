@@ -1,0 +1,21 @@
+#!/bin/bash
+
+S3_KEY=$(aws s3api list-objects-v2 --bucket devops.tblk.us --prefix backups/campus/  --query "sort_by(Contents,&LastModified)[-1].Key" --output text)
+BUCKET_NAME="devops.tblk.us"
+FILENAME=$(basename "$S3_KEY")
+
+echo "Downloading the file s3://$BUCKET_NAME/$S3_KEY ..."
+aws s3 cp "s3://$BUCKET_NAME/$S3_KEY" "/tmp/$FILENAME"
+
+if [ $? -eq 0 ]; then
+    echo "✅ Backup downloaded successfully in /tmp/$FILENAME"
+    rm -f /tmp/campus_backup.sql
+    gunzip -c "/tmp/$FILENAME" > "/tmp/campus_backup.sql"
+else
+    echo "❌ Error downloading the backup from S3"
+fi
+
+PGPASSWORD="$CAMPUS_DB_PASSWORD" psql -U "$CAMPUS_DB_USER" -h "$CAMPUS_DB_HOST" -p "$CAMPUS_DB_PORT" -c "DROP DATABASE IF EXISTS campus;"
+PGPASSWORD="$CAMPUS_DB_PASSWORD" psql -U "$CAMPUS_DB_USER" -h "$CAMPUS_DB_HOST" -p "$CAMPUS_DB_PORT" -c "CREATE DATABASE campus;"
+PGPASSWORD="$CAMPUS_DB_PASSWORD" psql -U "$CAMPUS_DB_USER" -h "$CAMPUS_DB_HOST" -p "$CAMPUS_DB_PORT" -c "CREATE ROLE theblock WITH LOGIN;"
+PGPASSWORD="$CAMPUS_DB_PASSWORD" psql -U "$CAMPUS_DB_USER" -h "$CAMPUS_DB_HOST" -p "$CAMPUS_DB_PORT" -d campus -f /tmp/campus_backup.sql

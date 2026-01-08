@@ -1,0 +1,15 @@
+#!/bin/sh
+
+setup-local-routes &
+
+build-external-deps
+
+cd /app
+
+yarn build
+yarn db:filling
+yarn typeorm schema:sync
+
+watch-external-deps &
+
+yarn start:dev

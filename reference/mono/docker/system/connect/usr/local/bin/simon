@@ -1,0 +1,9 @@
+#!/bin/bash
+
+cd /srv/simon
+
+echo "Starting Simon Bot..."
+
+python3 bot.py
+
+echo "Simon bot process ended."

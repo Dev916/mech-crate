@@ -1,0 +1,50 @@
+#!/bin/bash
+
+source "${CODE_DIR:-/srv/wp}/.env"
+
+if [ -z "$(which mysql)" ] && [ -n "$(which install-devtools)" ]; then
+  install-devtools
+fi
+
+apt-get install -y awscli
+
+wait4mysql || exit 1
+
+echo "Importing database dump..."
+
+echo "Downloading database dump..."
+dump_src=s3://theblockpro-devops/wp/db-dumps/pantheon-latest-d3b07384.sql.gz
+dump_file=/tmp/dump.sql.gz
+
+if [ -e "$dump_file" ]; then
+  rm -rf "$dump_file"
+fi
+
+aws s3 cp "$dump_src" "$dump_file"
+
+ls -l /tmp
+
+echo "Importing database dump..."
+pv <"$dump_file" -s $(stat -c%s "$dump_file") -- | gunzip | mysql -h$MYSQL_HOST -uroot -p$MYSQL_ROOT_PASSWORD $MYSQL_DATABASE
+
+echo "Cleaning up..."
+redis-cli -h redis flushdb
+
+echo "Importing payloads..."
+
+cd /srv/wp/web
+
+dump_src=s3://theblockpro-devops/wp/db-dumps/payloads.jsonl.gz
+dump_file=/tmp/payloads.jsonl.gz
+
+if [ -e "$dump_file" ]; then
+  rm -rf "$dump_file"
+fi
+
+aws s3 cp "$dump_src" "$dump_file"
+
+ls -l /tmp
+
+gunzip -c "$dump_file" >payloads.jsonl
+
+/srv/wp/vendor/bin/wp --allow-root --url=/ payloads import --file=/srv/wp/web/payloads.jsonl

@@ -1,0 +1,27 @@
+# Nginx reverse proxy service
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../system/nginx/etc/nginx:/etc/nginx:ro
+      - ../system/nginx/usr/share/nginx/html:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+    networks:
+      - default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+networks:
+  default:
+    name: mech-network
+    external: true

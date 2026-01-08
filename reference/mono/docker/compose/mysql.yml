@@ -1,0 +1,12 @@
+services:
+  mysql:
+    container_name: mysql
+    image: mysql:${MYSQL_IMAGE_TAG:-8.0.43}
+    volumes:
+      - theblockpro-wp-data:/var/lib/mysql
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+
+volumes:
+  theblockpro-wp-data:

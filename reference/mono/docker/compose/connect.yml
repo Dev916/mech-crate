@@ -1,0 +1,43 @@
+include:
+  - ./redis.yml
+  - ./postgres-connect.yml
+  - ./rabbitmq.yml
+  - ./memcached.yml
+  - ./traefik.yml
+  - ./weaviate.yml
+
+services:
+  connect:
+    depends_on:
+      - memcached
+      - postgres-connect
+      - rabbitmq
+      - redis
+      - traefik
+      - weaviate
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.connect
+    image: "ghcr.io/theblockcrypto/connect:${CONNECT_IMAGE_TAG:-latest}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.connect.rule=HostRegexp(`{subdomain:[a-z]+}\\.connect\\.tblk\\.us|connect\\.localhost`)"
+      - "traefik.http.routers.connect.entrypoints=https"
+      - "traefik.http.routers.connect.tls=true"
+      - "traefik.http.routers.connect-http.rule=HostRegexp(`{subdomain:[a-z]+}\\.connect\\.tblk\\.us|connect\\.localhost`)"
+      - "traefik.http.routers.connect-http.entrypoints=http"
+      - "traefik.http.services.connect.loadbalancer.server.port=80"
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1048576
+    volumes:
+      - connect:/data:rw
+    networks:
+      default:
+        aliases:
+          - connect.localhost
+volumes:
+  connect:

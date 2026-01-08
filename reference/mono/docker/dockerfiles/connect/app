@@ -1,0 +1,22 @@
+FROM ghcr.io/theblockcrypto/zulip:latest
+
+ARG IMAGE_TAG
+ARG COMMIT_HASH
+ARG IMAGE_VERSION
+ARG TBLK_VERSION
+
+ENV APP_ROOT=/srv/app
+ENV APP_BOT_ROOT=/srv/simon
+ENV HOST=0.0.0.0
+ENV IMAGE_VERSION=${IMAGE_VERSION}
+ENV IMAGE_TAG=${IMAGE_TAG}
+
+WORKDIR /srv
+
+COPY ./apps/connect/docker/system/connect /
+
+COPY apps/connect/zulip-bots/simon-ai /srv/simon
+
+RUN install-app-deps
+
+RUN nginx-provision

@@ -1,0 +1,63 @@
+# Base
+FROM node:16-alpine AS base
+WORKDIR /app
+
+# Dependencies
+FROM base AS dependencies
+RUN apk add --update python3 make g++ && rm -rf /var/cache/apk/*
+COPY ./apps/launchpad-api/package*.json ./
+COPY ./apps/launchpad-api/yarn*.lock ./
+COPY ./apps/launchpad-api/.npmrc ./
+RUN yarn install
+
+# Build
+FROM dependencies AS build
+RUN apk add --update python3 make g++ && rm -rf /var/cache/apk/*
+COPY ./apps/launchpad-api/tsconfig*.json ./
+COPY ./apps/launchpad-api/nest-cli.json ./
+COPY ./apps/launchpad-api/src ./src
+RUN yarn build
+
+# Production packages
+FROM node:16-alpine AS production-packages
+RUN apk add --update python3 make g++ && rm -rf /var/cache/apk/*
+RUN apk add curl bash
+WORKDIR /app
+COPY --chown=node:node --from=dependencies /app/package*.json ./
+COPY --chown=node:node --from=dependencies /app/yarn*.lock ./
+COPY --chown=node:node --from=dependencies /app/.npmrc ./
+RUN yarn install --frozen-lockfile --only=production && yarn cache clean --force
+
+# Production
+FROM node:16-alpine AS release
+WORKDIR /app
+RUN apk add --update python3 make g++ && rm -rf /var/cache/apk/*
+COPY --chown=node:node --from=production-packages /app/node_modules ./node_modules
+COPY --chown=node:node --from=dependencies /app/node_modules/googleapis/build/src/apis/docs ./node_modules/googleapis/build/src/apis/docs
+COPY --chown=node:node --from=build /app/dist ./dist
+COPY --chown=node:node --from=dependencies /app/package*.json ./
+EXPOSE 80
+COPY --chown=node:node ./apps/launchpad-api/docker/entrypoint /entrypoint
+ENTRYPOINT [ "/entrypoint" ]
+
+ARG IMAGE_TAG
+LABEL image.tag="$IMAGE_TAG"
+
+ARG IMAGE_VERSION
+ENV IMAGE_VERSION=$IMAGE_VERSION
+LABEL image.version="$IMAGE_VERSION"
+
+RUN apk add nginx
+
+COPY ./apps/launchpad-api/docker /
+COPY ./docker/system/launchpad-api /
+
+COPY ./apps/launchpad-api/reports/*.sql ./reports/
+COPY ./apps/launchpad-api/reports/send-report /usr/local/bin/
+
+RUN symlink-logs
+
+RUN echo "add_header X-Powered-By ${IMAGE_VERSION:-unknown};" >/etc/nginx/snippets/powered-by.conf
+
+ARG COMMIT_SHA
+ENV COMMIT_SHA=$COMMIT_SHA

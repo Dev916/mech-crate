@@ -1,0 +1,31 @@
+log:
+  level: DEBUG
+
+accessLog:
+  format: json
+
+entryPoints:
+  http:
+    address: ":80"
+  https:
+    address: ":443"
+
+api:
+  dashboard: true
+  insecure: true
+
+providers:
+  docker:
+    watch: true
+
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/localhost.localdomain.crt
+        keyFile: /certs/localhost.localdomain.key
+  certificates:
+    - certFile: /certs/localhost.localdomain.crt
+      keyFile: /certs/localhost.localdomain.key
+      stores:
+        - default

@@ -1,0 +1,11 @@
+#!/bin/sh -e
+
+
+read -p "Please enter a Personal Access Token with package read / write permissions: " PACKAGE_PAT
+
+cat << EOF > /app/.npmrc
+always-auth=true
+@theblockcrypto:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=$PACKAGE_PAT
+EOF
+

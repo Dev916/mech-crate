@@ -1,0 +1,9 @@
+#!/bin/bash
+
+cd /srv/wp
+
+export_file=payloads.jsonl.gz
+
+/srv/wp/vendor/bin/wp --allow-root --url=/ payloads export > $export_file
+
+gzip "$export_file.gz"

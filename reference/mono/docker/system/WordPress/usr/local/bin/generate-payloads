@@ -1,0 +1,15 @@
+#!/bin/bash
+
+for arg in "$@"
+do
+    case $arg in
+        -i|--initialize)
+        import-data wordpress-05-24-2022
+        shift # Remove --initialize from processing
+        ;;
+    esac
+done
+
+cd /srv/wp/web
+
+/srv/wp/vendor/bin/wp --allow-root --url=/ payloads ${1:-generate}

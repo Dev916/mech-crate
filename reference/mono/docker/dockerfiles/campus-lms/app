@@ -1,0 +1,71 @@
+ARG BASE_IMAGE=node:20-alpine
+ARG IMAGE_TAG
+ARG IMAGE_VERSION
+ARG NODE_ENV
+ARG TBLK_VERSION
+
+FROM $BASE_IMAGE
+
+ARG IMAGE_TAG
+ARG IMAGE_VERSION
+ARG NODE_ENV
+ARG TBLK_VERSION
+
+FROM alpine:3.20.2
+
+ARG IMAGE_TAG
+ARG IMAGE_VERSION
+ARG NODE_ENV
+ARG TBLK_VERSION
+
+ARG NEW_RELIC_LICENSE_KEY
+
+ENV APP_ROOT=/srv/app
+ENV HOST=0.0.0.0
+ENV NPM_CONFIG_LOGLEVEL=warn
+ENV NODE_ENV=${NODE_ENV:-production}
+ENV APP_DIR=/srv/app
+ENV VENDOR_DIR=/srv/app/vendor
+ENV NODE_MODULES_DIR=/srv/app/node_modules
+ENV IMAGE_VERSION=$IMAGE_VERSION
+ENV TBLK_VERSION=$IMAGE_VERSION
+ENV QUEUE_CONNECTION=redis
+ENV GITHUB_SHA=$IMAGE_VERSION
+ENV NEW_RELIC_LICENSE_KEY=$NEW_RELIC_LICENSE_KEY
+
+LABEL image.name="clms.theblock.pro"
+LABEL image.version="$IMAGE_VERSION"
+LABEL image.tag="$IMAGE_TAG"
+
+
+WORKDIR $APP_ROOT
+EXPOSE 80
+
+COPY docker/system/campus-lms /
+COPY --from=0 /usr /usr
+
+RUN install-base
+
+COPY --chown=www-data:www-data ./apps/campus-lms .
+RUN chown -R www-data:www-data /srv/app
+
+RUN install-php
+
+RUN install-new-relic-tarball
+RUN install-new-relic-infra-tarball
+
+RUN install-excimer
+RUN install-composer
+RUN install-node
+RUN install-app force
+RUN build-vue
+
+RUN rm -rf /etc/nginx/http.d/default.conf
+
+RUN chown -R www-data:www-data /srv/app
+
+RUN apk add --no-cache python3 py3-pip && pip install awscli
+
+RUN chmod +x /usr/local/bin/*
+
+ENTRYPOINT [ "/entrypoint" ]

@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# Generate RSA key pair for JWT signing (RS256)
+#
+# Usage:
+#   generate-jwt-keys                    # Output to stdout
+#   generate-jwt-keys /path/to/output    # Save to files
+#   generate-jwt-keys --env              # Output as environment variables
+#
+
+set -euo pipefail
+
+KEY_SIZE="${KEY_SIZE:-2048}"
+OUTPUT_DIR="${1:-}"
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+generate_keys() {
+    # Generate private key
+    local private_key
+    private_key=$(openssl genrsa "$KEY_SIZE" 2>/dev/null)
+
+    # Extract public key
+    local public_key
+    public_key=$(echo "$private_key" | openssl rsa -pubout 2>/dev/null)
+
+    echo "$private_key"
+    echo "---SPLIT---"
+    echo "$public_key"
+}
+
+output_env_format() {
+    local private_key="$1"
+    local public_key="$2"
+
+    echo "# JWT Keys (RS256 ${KEY_SIZE}-bit)"
+    echo "# Generated: $(date -Iseconds)"
+    echo ""
+    echo "# Private key (for signing tokens - keep secret!)"
+    echo "APP__JWT__PRIVATE_KEY=\"$(echo "$private_key" | tr '\n' '|' | sed 's/|$//')\""
+    echo ""
+    echo "# Public key (for verifying tokens - can be shared)"
+    echo "APP__JWT__PUBLIC_KEY=\"$(echo "$public_key" | tr '\n' '|' | sed 's/|$//')\""
+    echo ""
+    echo "# Note: Replace | with newlines when loading, or use @/path/to/file syntax"
+}
+
+output_files() {
+    local private_key="$1"
+    local public_key="$2"
+    local dir="$3"
+
+    mkdir -p "$dir"
+
+    echo "$private_key" > "$dir/jwt-private.pem"
+    chmod 600 "$dir/jwt-private.pem"
+    echo -e "${GREEN}✓${NC} Private key: $dir/jwt-private.pem"
+
+    echo "$public_key" > "$dir/jwt-public.pem"
+    chmod 644 "$dir/jwt-public.pem"
+    echo -e "${GREEN}✓${NC} Public key:  $dir/jwt-public.pem"
+
+    echo ""
+    echo "Add to your .env file:"
+    echo -e "${BLUE}APP__JWT__PRIVATE_KEY=@$dir/jwt-private.pem${NC}"
+    echo -e "${BLUE}APP__JWT__PUBLIC_KEY=@$dir/jwt-public.pem${NC}"
+}
+
+main() {
+    echo -e "${BLUE}Generating RS256 JWT key pair (${KEY_SIZE}-bit)...${NC}"
+    echo ""
+
+    # Generate keys
+    local output
+    output=$(generate_keys)
+
+    local private_key
+    private_key=$(echo "$output" | sed -n '1,/---SPLIT---/p' | head -n -1)
+
+    local public_key
+    public_key=$(echo "$output" | sed -n '/---SPLIT---/,$p' | tail -n +2)
+
+    if [[ "$OUTPUT_DIR" == "--env" ]]; then
+        output_env_format "$private_key" "$public_key"
+    elif [[ -n "$OUTPUT_DIR" ]]; then
+        output_files "$private_key" "$public_key" "$OUTPUT_DIR"
+    else
+        echo "# Private Key (RS256)"
+        echo "$private_key"
+        echo ""
+        echo "# Public Key (RS256)"
+        echo "$public_key"
+    fi
+}
+
+main "$@"

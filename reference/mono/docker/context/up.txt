@@ -1,0 +1,1 @@
+-f docker/compose/wordpress.yml -f docker/compose/wordpress-dev.yml -f docker/compose/arm64.yml

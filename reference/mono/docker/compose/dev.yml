@@ -1,0 +1,27 @@
+services:
+  app:
+    volumes:
+      - .:/srv/app
+      - app-node-modules:/srv/app/node_modules
+    environment:
+      - CANONICAL_URL=http://theblockpro.localhost
+      - NUXT_COMMAND=dev-server
+
+  api:
+    command: /bin/sh -c "yarn start:dev"
+    volumes:
+      - ./apps/launchpad-api:/app
+      - api-node-modules:/app/node_modules
+  redis:
+    ports:
+      - "6379:6379"
+  redis-ro:
+    ports:
+      - "6380:6379"
+  wp:
+    volumes:
+      - ./apps/WordPress:/srv/wp
+
+volumes:
+  app-node-modules:
+  api-node-modules:

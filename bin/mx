@@ -1,0 +1,562 @@
+#!/bin/bash
+#
+# mx - MechCrate Project Scaffolding Tool
+# Crate Raccoon is unpacking your stack.
+#
+
+set -e
+
+VERSION="0.1.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MECH_CRATE_ROOT="$(dirname "$SCRIPT_DIR")"
+TEMPLATES_DIR="$MECH_CRATE_ROOT/templates"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+# Crate Raccoon ASCII art
+raccoon() {
+    echo -e "${CYAN}"
+    cat << 'EOF'
+    ╭──────────────────────────────────╮
+    │  🦝 Crate Raccoon                │
+    │     is unpacking your stack...   │
+    ╰──────────────────────────────────╯
+EOF
+    echo -e "${NC}"
+}
+
+# Print styled messages
+info() {
+    echo -e "${BLUE}ℹ${NC} $1"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+error() {
+    echo -e "${RED}✗${NC} $1"
+    exit 1
+}
+
+# Show help
+show_help() {
+    echo -e "${BOLD}mx${NC} - MechCrate Project Scaffolding Tool v${VERSION}"
+    echo ""
+    echo -e "${BOLD}USAGE:${NC}"
+    echo "    mx <command> [options]"
+    echo ""
+    echo -e "${BOLD}COMMANDS:${NC}"
+    echo "    new <name>        Create a new MechCrate project"
+    echo "    add <service>     Add a new service to existing project"
+    echo "    doctor            Check project health and dependencies"
+    echo "    version           Show version information"
+    echo "    help              Show this help message"
+    echo ""
+    echo -e "${BOLD}PROJECT COMMANDS (run from project root):${NC}"
+    echo "    dev [service]     Start services in development mode"
+    echo "    up [service]      Start services in production mode"
+    echo "    down [service]    Stop services"
+    echo "    logs [service]    Tail service logs"
+    echo "    build <service>   Build a service image"
+    echo "    restart <service> Restart a service"
+    echo "    sh <service>      Shell into a service"
+    echo "    ps                List running services"
+    echo ""
+    echo -e "${BOLD}EXAMPLES:${NC}"
+    echo "    mx new my-app              # Create new project 'my-app'"
+    echo "    mx new my-app --with db    # Create with database service"
+    echo "    mx add api                 # Add 'api' service to project"
+    echo ""
+    echo -e "${CYAN}🦝 Crate Raccoon says: Happy building!${NC}"
+}
+
+# Show version
+show_version() {
+    echo "mx (MechCrate) version $VERSION"
+}
+
+# Check if we're in a MechCrate project
+is_mech_crate_project() {
+    [[ -f "Makefile" && -d "docker" && -d "make" && -d "scripts" ]]
+}
+
+# Create new project
+create_project() {
+    local project_name="$1"
+    shift
+    
+    # Parse additional options
+    local with_services=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --with)
+                shift
+                while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                    with_services+=("$1")
+                    shift
+                done
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    if [[ -z "$project_name" ]]; then
+        error "Project name is required. Usage: mx new <project-name>"
+    fi
+    
+    if [[ -d "$project_name" ]]; then
+        error "Directory '$project_name' already exists."
+    fi
+    
+    raccoon
+    info "Creating new MechCrate project: ${BOLD}$project_name${NC}"
+    
+    # Create project directory
+    mkdir -p "$project_name"
+    cd "$project_name"
+    
+    # Create directory structure
+    info "Creating directory structure..."
+    mkdir -p make
+    mkdir -p scripts
+    mkdir -p docker/.config
+    mkdir -p docker/compose
+    mkdir -p docker/system
+    mkdir -p docker/dockerfiles
+    mkdir -p tmp/up
+    
+    # Copy templates
+    info "Copying templates..."
+    
+    # Makefile
+    cp "$TEMPLATES_DIR/Makefile.template" "Makefile"
+    
+    # Make modules
+    for mk in "$TEMPLATES_DIR/make/"*.mk; do
+        cp "$mk" "make/$(basename "$mk")"
+    done
+    
+    # Scripts (including hidden files like .bashrc)
+    shopt -s dotglob
+    for script in "$TEMPLATES_DIR/scripts/"*; do
+        if [[ -f "$script" ]]; then
+            cp "$script" "scripts/$(basename "$script")"
+        fi
+    done
+    shopt -u dotglob
+    chmod +x scripts/*.sh 2>/dev/null || true
+    
+    # Docker config templates (rename env.* to .env.*)
+    for config in "$TEMPLATES_DIR/docker/config/"*; do
+        if [[ -f "$config" ]]; then
+            local filename=$(basename "$config")
+            local target_name="${filename/env./.env.}"
+            cp "$config" "docker/.config/$target_name"
+        fi
+    done
+    
+    # Sample compose files
+    for compose in "$TEMPLATES_DIR/docker/compose/"*; do
+        if [[ -f "$compose" ]]; then
+            cp "$compose" "docker/compose/$(basename "$compose")"
+        fi
+    done
+    
+    # Sample dockerfiles
+    if [[ -d "$TEMPLATES_DIR/docker/dockerfiles" ]]; then
+        cp -r "$TEMPLATES_DIR/docker/dockerfiles/"* "docker/dockerfiles/" 2>/dev/null || true
+    fi
+    
+    # Sample system files (1:1 structure)
+    if [[ -d "$TEMPLATES_DIR/docker/system" ]]; then
+        cp -r "$TEMPLATES_DIR/docker/system/"* "docker/system/" 2>/dev/null || true
+    fi
+    
+    # Create .gitignore
+    cat > .gitignore << 'EOF'
+# MechCrate
+tmp/
+docker/.compose/
+docker/.config/.env.secrets
+data/
+
+# Dependencies
+node_modules/
+vendor/
+target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+EOF
+
+    # Create README
+    cat > README.md << EOF
+# $project_name
+
+A MechCrate project.
+
+## Quick Start
+
+\`\`\`bash
+# Check dependencies
+make doctor
+
+# Start development
+make dev
+
+# View logs
+make logs
+
+# Stop services
+make down
+\`\`\`
+
+## Project Structure
+
+\`\`\`
+$project_name/
+├── Makefile              # Root makefile
+├── make/                 # Make modules
+│   ├── common.mk         # Shared helpers
+│   ├── dev.mk            # Development commands
+│   ├── up.mk             # Service management
+│   └── ...
+├── scripts/              # Shell scripts
+│   ├── .bashrc           # Helper functions
+│   ├── dev.sh            # Development script
+│   └── ...
+└── docker/
+    ├── .config/          # Environment files
+    │   ├── .env.shared   # Shared config
+    │   ├── .env.secrets  # Secrets (gitignored)
+    │   └── .env.<svc>    # Per-service config
+    ├── compose/          # Compose files
+    │   ├── app.yml       # Service baseline
+    │   └── app.dev.yml   # Dev overrides
+    ├── system/           # 1:1 filesystem mounts
+    │   └── <service>/    # Maps to container /
+    └── dockerfiles/      # Dockerfiles
+        └── <service>/
+            └── app       # Production Dockerfile
+\`\`\`
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| \`make dev\` | Start all services in dev mode |
+| \`make dev s=app\` | Start specific service in dev mode |
+| \`make up\` | Start services (production mode) |
+| \`make down\` | Stop all services |
+| \`make logs\` | Tail all logs |
+| \`make logs s=app\` | Tail specific service logs |
+| \`make sh s=app\` | Shell into service |
+| \`make build s=app\` | Build service image |
+| \`make restart s=app\` | Restart service |
+| \`make ps\` | List running services |
+
+---
+🦝 Built with MechCrate
+EOF
+
+    # Add services if requested
+    for svc in "${with_services[@]}"; do
+        add_service_internal "$svc"
+    done
+    
+    success "Project '$project_name' created successfully!"
+    echo ""
+    info "Next steps:"
+    echo "    cd $project_name"
+    echo "    make doctor       # Check dependencies"
+    echo "    make dev          # Start development"
+    echo ""
+    echo -e "${CYAN}🦝 Crate Raccoon says: Your stack is ready!${NC}"
+}
+
+# Add service to existing project
+add_service() {
+    local service_name="$1"
+    
+    if [[ -z "$service_name" ]]; then
+        error "Service name is required. Usage: mx add <service-name>"
+    fi
+    
+    if ! is_mech_crate_project; then
+        error "Not in a MechCrate project. Run 'mx new <name>' first."
+    fi
+    
+    add_service_internal "$service_name"
+}
+
+add_service_internal() {
+    local service_name="$1"
+    local service_upper=$(echo "$service_name" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+    
+    info "Adding service: ${BOLD}$service_name${NC}"
+    
+    # Create service directories
+    mkdir -p "docker/system/$service_name/app"
+    mkdir -p "docker/system/$service_name/etc/$service_name"
+    mkdir -p "docker/system/$service_name/var/log/$service_name"
+    mkdir -p "docker/dockerfiles/$service_name"
+    
+    # Create base compose file
+    cat > "docker/compose/$service_name.yml" << EOF
+services:
+  $service_name:
+    build:
+      context: ../..
+      dockerfile: docker/dockerfiles/$service_name/app
+    container_name: $service_name
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.$service_name
+    ports:
+      - "\${${service_upper}_PORT:-3000}:3000"
+    volumes:
+      - ../system/$service_name/:/
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+networks:
+  default:
+    name: mech-network
+    external: true
+EOF
+
+    # Create dev compose override
+    cat > "docker/compose/$service_name.dev.yml" << EOF
+services:
+  $service_name:
+    build:
+      target: development
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    ports:
+      - "\${${service_upper}_PORT:-3000}:3000"
+      - "9229:9229"  # Debugger
+    volumes:
+      - ../../src:/app/src:cached
+      - ${service_name}_node_modules:/app/node_modules
+    restart: "no"
+    healthcheck:
+      disable: true
+
+volumes:
+  ${service_name}_node_modules:
+EOF
+
+    # Create service env file
+    cat > "docker/.config/.env.$service_name" << EOF
+# $service_name configuration
+${service_upper}_PORT=3000
+${service_upper}_LOG_LEVEL=info
+EOF
+
+    # Create sample Dockerfile
+    cat > "docker/dockerfiles/$service_name/app" << EOF
+# ----- Build Stage -----
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source and build
+COPY . .
+RUN npm run build
+
+# ----- Development Stage -----
+FROM node:20-alpine AS development
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000 9229
+CMD ["npm", "run", "dev"]
+
+# ----- Production Stage -----
+FROM node:20-alpine AS production
+WORKDIR /app
+
+RUN addgroup -g 1001 -S nodejs && \\
+    adduser -S nodejs -u 1001
+
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+
+# Copy 1:1 filesystem structure
+COPY docker/system/$service_name/ /
+
+USER nodejs
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \\
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+
+CMD ["node", "dist/index.js"]
+EOF
+
+    success "Service '$service_name' added!"
+    echo ""
+    info "Created files:"
+    echo "    docker/compose/$service_name.yml"
+    echo "    docker/compose/$service_name.dev.yml"
+    echo "    docker/.config/.env.$service_name"
+    echo "    docker/dockerfiles/$service_name/app"
+    echo "    docker/system/$service_name/"
+}
+
+# Doctor - check project health
+doctor() {
+    if ! is_mech_crate_project; then
+        # Check global dependencies only
+        info "Checking global dependencies..."
+    else
+        info "Checking MechCrate project health..."
+    fi
+    
+    local has_errors=false
+    
+    # Check Docker
+    if command -v docker &> /dev/null; then
+        success "Docker: $(docker --version | cut -d' ' -f3 | tr -d ',')"
+    else
+        error "Docker: not found"
+        has_errors=true
+    fi
+    
+    # Check Docker Compose
+    if docker compose version &> /dev/null; then
+        success "Docker Compose: $(docker compose version --short)"
+    else
+        warn "Docker Compose: not found (using docker-compose?)"
+    fi
+    
+    # Check Make
+    if command -v make &> /dev/null; then
+        success "Make: $(make --version | head -1)"
+    else
+        error "Make: not found"
+        has_errors=true
+    fi
+    
+    # Project-specific checks
+    if is_mech_crate_project; then
+        echo ""
+        info "Checking project structure..."
+        
+        [[ -f "Makefile" ]] && success "Makefile exists" || warn "Makefile missing"
+        [[ -d "make" ]] && success "make/ directory exists" || warn "make/ directory missing"
+        [[ -d "scripts" ]] && success "scripts/ directory exists" || warn "scripts/ directory missing"
+        [[ -d "docker/compose" ]] && success "docker/compose/ exists" || warn "docker/compose/ missing"
+        [[ -d "docker/.config" ]] && success "docker/.config/ exists" || warn "docker/.config/ missing"
+        
+        # Check for secrets file
+        if [[ -f "docker/.config/.env.secrets" ]]; then
+            success "Secrets file exists"
+        else
+            warn "Secrets file missing - copy from .env.secrets.template"
+        fi
+        
+        echo ""
+        info "Services found:"
+        for yml in docker/compose/*.yml; do
+            if [[ -f "$yml" && ! "$(basename "$yml")" =~ \.dev\.yml$ ]]; then
+                echo "    - $(basename "$yml" .yml)"
+            fi
+        done
+    fi
+    
+    echo ""
+    if [[ "$has_errors" == "true" ]]; then
+        error "Some dependencies are missing. Please install them first."
+    else
+        success "All checks passed!"
+        echo -e "${CYAN}🦝 Crate Raccoon says: Looking good!${NC}"
+    fi
+}
+
+# Proxy commands to Make when in project
+proxy_to_make() {
+    if ! is_mech_crate_project; then
+        error "Not in a MechCrate project. Run 'mx new <name>' first."
+    fi
+    
+    make "$@"
+}
+
+# Main command router
+main() {
+    local command="${1:-help}"
+    shift 2>/dev/null || true
+    
+    case "$command" in
+        new)
+            create_project "$@"
+            ;;
+        add)
+            add_service "$@"
+            ;;
+        doctor)
+            doctor
+            ;;
+        version|--version|-v)
+            show_version
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        # Proxy commands to make
+        dev|up|down|logs|build|restart|sh|ps|start|stop)
+            proxy_to_make "$command" "$@"
+            ;;
+        *)
+            error "Unknown command: $command. Run 'mx help' for usage."
+            ;;
+    esac
+}
+
+main "$@"
