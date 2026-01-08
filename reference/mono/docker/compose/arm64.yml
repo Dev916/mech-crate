@@ -1,7 +1,0 @@
-services:
-  redis:
-    image: valkey/valkey:8.1
-  redis-ro:
-    image: valkey/valkey:8.1
-  mysql:
-    image: arm64v8/mysql:oracle
