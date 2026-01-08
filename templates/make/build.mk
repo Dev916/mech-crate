@@ -1,8 +1,7 @@
 # Build commands
 .PHONY: build _build
 
-# Build an image for a given service (s=[service] t=[tag])
-build:
+build: ## Build an image (s=[service] t=[tag])
 	@$(MAKE) _build service=$(call get_service) tag=$(call get_tag)
 
 _build:
