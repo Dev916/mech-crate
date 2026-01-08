@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# MechCrate Help & Version Commands
+#
+
+# Show help
+show_help() {
+    echo -e "${BOLD}mx${NC} - MechCrate Project Scaffolding Tool v${VERSION}"
+    echo ""
+    echo -e "${BOLD}USAGE:${NC}"
+    echo "    mx <command> [options]"
+    echo ""
+    echo -e "${BOLD}COMMANDS:${NC}"
+    echo "    new <name>        Create a new MechCrate project"
+    echo "    upgrade           Update current project with latest scaffolding"
+    echo "    add <service>     Add a new service to existing project"
+    echo "    cf <subcommand>   Cloudflare management commands"
+    echo "    doctor            Check project health and dependencies"
+    echo "    version           Show version information"
+    echo "    help              Show this help message"
+    echo ""
+    echo -e "${BOLD}CLOUDFLARE COMMANDS (mx cf):${NC}"
+    echo "    mx cf setup                    Run Cloudflare setup wizard"
+    echo "    mx cf init <app>               Initialize a new worker (interactive)"
+    echo "    mx cf init <app> --type=TYPE   Initialize with specific type"
+    echo "    mx cf status                   Show all Cloudflare apps"
+    echo "    mx cf deploy <app>             Deploy to production"
+    echo ""
+    echo -e "${BOLD}    Worker Types:${NC}"
+    echo "        worker      Standard edge worker (APIs, proxies)"
+    echo "        cron        Scheduled worker (background jobs)"
+    echo "        container   Docker container backend (SSR apps)"
+    echo ""
+    echo -e "${BOLD}PROJECT COMMANDS (run from project root):${NC}"
+    echo "    dev [service]     Start services in development mode"
+    echo "    up [service]      Start services in production mode"
+    echo "    down [service]    Stop services"
+    echo "    logs [service]    Tail service logs"
+    echo "    build <service>   Build a service image"
+    echo "    restart <service> Restart a service"
+    echo "    sh <service>      Shell into a service"
+    echo "    ps                List running services"
+    echo ""
+    echo -e "${BOLD}OPTIONS:${NC}"
+    echo "    --with <svc>      Include services (db, redis, nginx, etc.)"
+    echo "    --infra <type>    Include infrastructure (cloudflare, aws, digitalocean)"
+    echo "    --no-prompt       Skip interactive prompts, use defaults"
+    echo ""
+    echo -e "${BOLD}EXAMPLES:${NC}"
+    echo "    mx new my-app                          # Interactive setup"
+    echo "    mx new my-app --with db redis          # With specific services"
+    echo "    mx new my-app --infra cloudflare       # With Cloudflare infra"
+    echo "    mx new my-app --no-prompt              # Quick setup, no prompts"
+    echo "    mx upgrade                             # Update project with latest tools"
+    echo "    mx upgrade --diff                      # Show diffs before updating"
+    echo "    mx upgrade --yes                       # Auto-accept all updates"
+    echo "    mx add api                             # Add 'api' service to project"
+    echo "    mx cf init api.example.com             # Initialize CF worker (interactive)"
+    echo "    mx cf init my-job --type=cron          # Initialize cron worker"
+    echo ""
+    echo -e "${CYAN}🦝 Crate Raccoon says: Happy building!${NC}"
+}
+
+# Show version
+show_version() {
+    echo "mx (MechCrate) version $VERSION"
+}
