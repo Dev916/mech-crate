@@ -13,10 +13,10 @@ services:
       - "${APP_PORT:-3000}:3000"
       - "9229:9229"  # Node.js debugger
     volumes:
-      # Mount source code for hot-reload
-      - ../../src:/app/src:cached
-      - ../../package.json:/app/package.json:ro
-      - ../../tsconfig.json:/app/tsconfig.json:ro
+      # Mount app source for hot-reload (from apps/app)
+      - ../../apps/app/src:/app/src:cached
+      - ../../apps/app/package.json:/app/package.json:ro
+      - ../../apps/app/tsconfig.json:/app/tsconfig.json:ro
       # Volume mount over node_modules for performance
       - app_node_modules:/app/node_modules
       # Mount logs for inspection
