@@ -1,0 +1,126 @@
+{
+  "name": "laravel",
+  "title": "Laravel 12 + Octane",
+  "description": "Laravel 12 + Octane (Swoole) with Filament admin & Inertia.js SSR frontend",
+  "version": "12.0",
+  
+  "features": [
+    "Laravel Octane + Swoole (10x faster than FPM)",
+    "Filament PHP admin panel",
+    "Inertia.js + Vue 3 frontend",
+    "Inertia SSR enabled",
+    "Vite asset bundling",
+    "Tailwind CSS",
+    "PHP 8.5",
+    "PostgreSQL database",
+    "Redis cache/queue",
+    "Queue worker",
+    "Task scheduler",
+    "Traefik reverse proxy routing"
+  ],
+  
+  "services": [
+    { "name": "<name>", "description": "Laravel Octane application" },
+    { "name": "<name>-worker", "description": "Queue worker" },
+    { "name": "<name>-scheduler", "description": "Task scheduler" },
+    { "name": "db", "description": "PostgreSQL (shared)" },
+    { "name": "redis", "description": "Redis (shared)" }
+  ],
+  
+  "options": {
+    "domain": {
+      "flag": "--domain",
+      "default": "{{SERVICE_NAME}}.localhost",
+      "description": "Custom domain"
+    },
+    "php": {
+      "flag": "--php",
+      "default": "8.5",
+      "description": "PHP version"
+    }
+  },
+  
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "slug" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "DOMAIN": { "source": "option:domain" },
+    "PHP_VERSION": { "source": "option:php" }
+  },
+  
+  "directories": [
+    "apps/{{SERVICE_NAME}}/app/Http/Controllers",
+    "apps/{{SERVICE_NAME}}/app/Http/Middleware",
+    "apps/{{SERVICE_NAME}}/app/Models",
+    "apps/{{SERVICE_NAME}}/app/Providers/Filament",
+    "apps/{{SERVICE_NAME}}/app/Filament/Resources",
+    "apps/{{SERVICE_NAME}}/app/Filament/Pages",
+    "apps/{{SERVICE_NAME}}/app/Filament/Widgets",
+    "apps/{{SERVICE_NAME}}/bootstrap",
+    "apps/{{SERVICE_NAME}}/config",
+    "apps/{{SERVICE_NAME}}/database/migrations",
+    "apps/{{SERVICE_NAME}}/database/seeders",
+    "apps/{{SERVICE_NAME}}/database/factories",
+    "apps/{{SERVICE_NAME}}/public",
+    "apps/{{SERVICE_NAME}}/resources/views",
+    "apps/{{SERVICE_NAME}}/resources/js/Pages",
+    "apps/{{SERVICE_NAME}}/resources/css",
+    "apps/{{SERVICE_NAME}}/routes",
+    "apps/{{SERVICE_NAME}}/storage/app",
+    "apps/{{SERVICE_NAME}}/storage/framework/cache",
+    "apps/{{SERVICE_NAME}}/storage/framework/sessions",
+    "apps/{{SERVICE_NAME}}/storage/framework/views",
+    "apps/{{SERVICE_NAME}}/storage/logs",
+    "apps/{{SERVICE_NAME}}/tests",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+  
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+  
+  "post_install": {
+    "renames": [
+      { "from": "apps/{{SERVICE_NAME}}/env.template", "to": "apps/{{SERVICE_NAME}}/.env.example" }
+    ],
+    "chmod": [
+      { "path": "apps/{{SERVICE_NAME}}/artisan", "mode": "+x" }
+    ],
+    "gitkeep": [
+      "apps/{{SERVICE_NAME}}/storage/logs",
+      "apps/{{SERVICE_NAME}}/storage/app",
+      "apps/{{SERVICE_NAME}}/storage/framework/cache",
+      "apps/{{SERVICE_NAME}}/storage/framework/sessions",
+      "apps/{{SERVICE_NAME}}/storage/framework/views",
+      "apps/{{SERVICE_NAME}}/app/Filament/Resources",
+      "apps/{{SERVICE_NAME}}/app/Filament/Pages",
+      "apps/{{SERVICE_NAME}}/app/Filament/Widgets"
+    ]
+  },
+  
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}}",
+    "composer install",
+    "npm install",
+    "cp .env.example .env && php artisan key:generate",
+    "php artisan octane:install --server=swoole",
+    "php artisan migrate",
+    "php artisan make:filament-user",
+    "npm run build",
+    "make dev s={{SERVICE_NAME}}"
+  ],
+  
+  "notes": [
+    "Admin panel: http://{{DOMAIN}}/admin",
+    "Inertia SSR: Run 'php artisan inertia:start-ssr' for SSR",
+    "Performance: Swoole serves ~10x more requests/sec than PHP-FPM"
+  ]
+}
