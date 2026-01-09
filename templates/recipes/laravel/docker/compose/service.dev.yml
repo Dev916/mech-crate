@@ -19,7 +19,11 @@ services:
       - "5173:5173"
       - "13714:13714"
     healthcheck:
-      disable: true
+      test: ["CMD", "php", "-v"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   {{SERVICE_NAME}}-worker:
     build:

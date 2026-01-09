@@ -100,6 +100,7 @@ Use `{{PLACEHOLDER}}` in any template file:
 
 | Recipe | Description |
 |--------|-------------|
+| `astro` | Astro 4 + Vue 3 SSR + shadcn-vue + PrimeVue + Pinia + PostgreSQL + Redis |
 | `laravel` | Laravel 12 + Octane (Swoole) + Filament + Inertia |
 | `nuxt` | Nuxt 3 SSR/SSG + Tailwind |
 | `rust-api` | Actix-web + SQLx (API only) |

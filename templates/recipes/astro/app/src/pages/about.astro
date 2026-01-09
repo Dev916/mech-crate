@@ -1,0 +1,77 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import Card from '@/components/ui/Card.vue';
+import BilingualText from '@/components/BilingualText.vue';
+---
+
+<AppLayout title="About - {{SERVICE_NAME}}">
+  <div class="container mx-auto px-4 py-24">
+    <div class="max-w-3xl mx-auto">
+      <!-- Header -->
+      <div class="text-center mb-16">
+        <h1 class="text-headline font-bold text-foreground mb-4">
+          <BilingualText 
+            en="About Us" 
+            ja="私たちについて" 
+            client:load 
+          />
+        </h1>
+        <p class="text-body-large text-muted-foreground">
+          <BilingualText 
+            en="Building the future of web applications" 
+            ja="ウェブアプリケーションの未来を構築する" 
+            client:load 
+          />
+        </p>
+      </div>
+
+      <!-- Content -->
+      <Card class="p-8 mb-8">
+        <h2 class="text-title-2 font-semibold text-foreground mb-4">Our Mission</h2>
+        <p class="text-body text-muted-foreground mb-6">
+          We believe in building web applications that are fast, accessible, and delightful to use.
+          By combining the best of static site generation with dynamic interactivity, we create
+          experiences that feel native while maintaining the openness of the web.
+        </p>
+        <p class="text-body text-muted-foreground">
+          Our stack is carefully chosen to maximize developer experience without compromising
+          on user experience. Every technology decision is made with both audiences in mind.
+        </p>
+      </Card>
+
+      <Card class="p-8">
+        <h2 class="text-title-2 font-semibold text-foreground mb-4">Technology Stack</h2>
+        <ul class="space-y-3">
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 mt-2 rounded-full bg-apple-blue shrink-0" />
+            <div>
+              <span class="font-medium text-foreground">Astro</span>
+              <span class="text-muted-foreground"> - Islands architecture for optimal performance</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 mt-2 rounded-full bg-apple-green shrink-0" />
+            <div>
+              <span class="font-medium text-foreground">Vue 3</span>
+              <span class="text-muted-foreground"> - Reactive components with Composition API</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 mt-2 rounded-full bg-apple-purple shrink-0" />
+            <div>
+              <span class="font-medium text-foreground">Tailwind CSS</span>
+              <span class="text-muted-foreground"> - Utility-first styling with Apple aesthetics</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 mt-2 rounded-full bg-apple-orange shrink-0" />
+            <div>
+              <span class="font-medium text-foreground">PostgreSQL + Redis</span>
+              <span class="text-muted-foreground"> - Reliable data layer with caching</span>
+            </div>
+          </li>
+        </ul>
+      </Card>
+    </div>
+  </div>
+</AppLayout>

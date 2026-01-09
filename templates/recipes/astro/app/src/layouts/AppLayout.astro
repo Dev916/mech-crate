@@ -1,0 +1,23 @@
+---
+import Layout from './Layout.astro';
+import Header from '@/components/layout/Header.vue';
+import Footer from '@/components/layout/Footer.vue';
+
+interface Props {
+  title: string;
+  description?: string;
+  lang?: 'en' | 'ja';
+}
+
+const { title, description, lang } = Astro.props;
+---
+
+<Layout title={title} description={description} lang={lang}>
+  <Header client:load />
+  
+  <main class="flex-1 safe-top safe-bottom">
+    <slot />
+  </main>
+  
+  <Footer />
+</Layout>

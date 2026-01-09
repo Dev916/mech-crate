@@ -1,0 +1,102 @@
+{
+  "name": "astro",
+  "title": "Astro 5 + Vue 3 SSR",
+  "description": "Full-stack Astro 5 with Vue 3 islands, SSR, shadcn-vue, PrimeVue, global state, and Cloudflare deployment",
+  "version": "2.0",
+
+  "features": [
+    "Astro 5.x SSR with Node adapter (standalone mode)",
+    "Vue 3 islands (script setup + Composition API)",
+    "shadcn-vue UI primitives",
+    "PrimeVue 4 advanced components",
+    "Tailwind CSS + Apple-inspired design",
+    "Global state store (Pinia)",
+    "Redis connection (ioredis)",
+    "PostgreSQL connection (Drizzle ORM)",
+    "Type-safe API routes",
+    "Cloudflare Containers ready",
+    "Dev/Prod Docker builds",
+    "BilingualText support",
+    "Environment variables (PUBLIC_ prefix for client)",
+    "FRP-style reactive patterns"
+  ],
+
+  "services": [
+    { "name": "<name>", "description": "Astro 5 SSR app" },
+    { "name": "db", "description": "PostgreSQL (shared)" },
+    { "name": "redis", "description": "Redis cache (shared)" }
+  ],
+
+  "options": {
+    "bilingual": {
+      "flag": "--bilingual",
+      "default": "false",
+      "description": "Enable bilingual text support (EN/JA)"
+    },
+    "primevue": {
+      "flag": "--primevue",
+      "default": "true",
+      "description": "Include PrimeVue components"
+    }
+  },
+
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "kebab" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "DOMAIN": { "source": "domain", "default": "localhost" }
+  },
+
+  "directories": [
+    "apps/{{SERVICE_NAME}}/src/components",
+    "apps/{{SERVICE_NAME}}/src/components/ui",
+    "apps/{{SERVICE_NAME}}/src/components/layout",
+    "apps/{{SERVICE_NAME}}/src/layouts",
+    "apps/{{SERVICE_NAME}}/src/pages",
+    "apps/{{SERVICE_NAME}}/src/pages/api",
+    "apps/{{SERVICE_NAME}}/src/stores",
+    "apps/{{SERVICE_NAME}}/src/lib",
+    "apps/{{SERVICE_NAME}}/src/lib/api",
+    "apps/{{SERVICE_NAME}}/src/lib/db",
+    "apps/{{SERVICE_NAME}}/src/lib/redis",
+    "apps/{{SERVICE_NAME}}/src/lib/utils",
+    "apps/{{SERVICE_NAME}}/src/types",
+    "apps/{{SERVICE_NAME}}/src/styles",
+    "apps/{{SERVICE_NAME}}/public",
+    "apps/{{SERVICE_NAME}}/drizzle",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+
+  "post_install": {
+    "npm_install": true
+  },
+
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}}",
+    "npm install",
+    "npm run dev",
+    "# Or run via Docker",
+    "make dev s={{SERVICE_NAME}}"
+  ],
+
+  "notes": [
+    "Astro 5.x with SSR enabled by default (Node adapter standalone mode)",
+    "Use Vue components with client:load or client:visible for hydration",
+    "Pinia store for global state management",
+    "API routes under src/pages/api/",
+    "Environment variables: PUBLIC_ prefix for client-side access",
+    "Server-only vars (DATABASE_URL, SESSION_SECRET) are not exposed to client"
+  ]
+}

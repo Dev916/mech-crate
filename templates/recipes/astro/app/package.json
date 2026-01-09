@@ -1,0 +1,52 @@
+{
+  "name": "{{SERVICE_SLUG}}",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev --host",
+    "start": "node ./dist/server/entry.mjs",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "lint": "eslint src --ext .ts,.astro,.vue",
+    "format": "prettier --write \"src/**/*.{ts,vue,astro,css}\""
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@astrojs/node": "^9.0.0",
+    "@astrojs/tailwind": "^6.0.0",
+    "@astrojs/vue": "^5.0.3",
+    "@primevue/themes": "^4.2.5",
+    "@vueuse/core": "^12.0.0",
+    "astro": "^5.1.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.38.0",
+    "ioredis": "^5.4.2",
+    "lucide-vue-next": "^0.469.0",
+    "pinia": "^2.3.0",
+    "postgres": "^3.4.5",
+    "primevue": "^4.2.5",
+    "radix-vue": "^1.9.10",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss-animate": "^1.0.7",
+    "vue": "^3.5.13",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.15",
+    "@types/node": "^22.10.0",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.30.0",
+    "eslint": "^9.17.0",
+    "postcss": "^8.4.49",
+    "prettier": "^3.4.2",
+    "prettier-plugin-astro": "^0.14.1",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,102 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import Hero from '@/components/Hero.vue';
+import Features from '@/components/Features.vue';
+import Counter from '@/components/Counter.vue';
+import EnvDemo from '@/components/EnvDemo.vue';
+
+// ============================================
+// SERVER-SIDE Environment Variables
+// ============================================
+// Variables WITHOUT the PUBLIC_ prefix are only accessible here
+// in the Astro frontmatter (server-side code)
+const databaseUrl = import.meta.env.DATABASE_URL;
+const nodeEnv = import.meta.env.NODE_ENV;
+const sessionSecret = import.meta.env.SESSION_SECRET; // Never expose this!
+
+// ============================================
+// PUBLIC Environment Variables (available everywhere)
+// ============================================
+// Variables WITH the PUBLIC_ prefix are accessible both here
+// AND in client-side components (Vue, React, etc.)
+const appName = import.meta.env.PUBLIC_APP_NAME;
+const appUrl = import.meta.env.PUBLIC_APP_URL;
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL;
+const debugMode = import.meta.env.PUBLIC_ENABLE_DEBUG_MODE === 'true';
+
+// Server-side data fetching using secret env vars
+// This code runs on the server, so we can safely use DATABASE_URL
+const serverInfo = {
+  environment: nodeEnv || 'development',
+  hasDatabase: !!databaseUrl,
+  appName: appName || '{{SERVICE_NAME}}',
+  apiUrl: apiBaseUrl || '/api',
+  debugMode,
+};
+---
+
+<AppLayout title={`${appName || '{{SERVICE_NAME}}'} - Welcome`}>
+  <div class="container mx-auto px-4 py-12">
+    <!-- Hero Section -->
+    <Hero client:load />
+
+    <!-- Environment Variables Demo -->
+    <section class="my-24">
+      <div class="text-center mb-12">
+        <h2 class="text-title-1 font-semibold text-foreground mb-4">
+          Environment Variables Demo
+        </h2>
+        <p class="text-body-large text-muted-foreground max-w-2xl mx-auto">
+          Demonstrating Astro's server-side and client-side environment variables.
+        </p>
+      </div>
+
+      <!-- Server-side rendered info (safe to show) -->
+      <div class="max-w-2xl mx-auto mb-8 p-6 bg-card rounded-xl border border-border">
+        <h3 class="font-semibold text-lg mb-4 text-foreground">
+          🖥️ Server-Side Info (rendered at build/request time)
+        </h3>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <dt class="text-muted-foreground">Environment:</dt>
+            <dd class="font-mono text-foreground">{serverInfo.environment}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-muted-foreground">Database Connected:</dt>
+            <dd class="font-mono text-foreground">{serverInfo.hasDatabase ? '✅ Yes' : '❌ No'}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-muted-foreground">Debug Mode:</dt>
+            <dd class="font-mono text-foreground">{serverInfo.debugMode ? '🔧 Enabled' : 'Disabled'}</dd>
+          </div>
+        </dl>
+        <p class="mt-4 text-xs text-muted-foreground italic">
+          Note: Sensitive values like DATABASE_URL and SESSION_SECRET are NOT exposed to the client.
+        </p>
+      </div>
+
+      <!-- Client-side Vue component using PUBLIC_ env vars -->
+      <EnvDemo
+        client:load
+        appName={appName}
+        apiUrl={apiBaseUrl}
+      />
+    </section>
+    
+    <!-- Interactive Counter Demo -->
+    <section class="my-24">
+      <div class="text-center mb-12">
+        <h2 class="text-title-1 font-semibold text-foreground mb-4">
+          Interactive Vue Islands
+        </h2>
+        <p class="text-body-large text-muted-foreground max-w-2xl mx-auto">
+          Astro's island architecture enables interactive Vue components on demand.
+        </p>
+      </div>
+      <Counter client:visible />
+    </section>
+    
+    <!-- Features Section -->
+    <Features client:visible />
+  </div>
+</AppLayout>

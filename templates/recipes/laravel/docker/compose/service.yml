@@ -3,7 +3,7 @@
 
 services:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Laravel Octane Application (Swoole)
+  # Laravel Octane Application (Swoole + Nginx + Supervisor)
   # ─────────────────────────────────────────────────────────────────────────────
   {{SERVICE_NAME}}:
     build:
@@ -13,6 +13,12 @@ services:
     container_name: {{SERVICE_NAME}}
     env_file:
       - ../config/.env.{{SERVICE_NAME}}
+    environment:
+      - APP_MODE=app
+      - APP_ENV=production
+      - OCTANE_WORKERS=auto
+      - OCTANE_TASK_WORKERS=auto
+      - INERTIA_SSR_ENABLED=true
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
     networks:
@@ -27,17 +33,17 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
       - "traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web"
-      - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=8000"
+      - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/up"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
       interval: 10s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Queue Worker (Swoole Task Workers)
+  # Queue Worker (Supervisor-managed)
   # ─────────────────────────────────────────────────────────────────────────────
   {{SERVICE_NAME}}-worker:
     build:
@@ -45,9 +51,16 @@ services:
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
     container_name: {{SERVICE_NAME}}-worker
-    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
     env_file:
       - ../config/.env.{{SERVICE_NAME}}
+    environment:
+      - APP_MODE=queue
+      - APP_ENV=production
+      - QUEUE_WORKERS=2
+      - QUEUE_TRIES=3
+      - QUEUE_MAX_TIME=3600
+      - QUEUE_MEMORY=128
+      - RUN_SCHEDULER=false
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
     networks:
@@ -56,9 +69,15 @@ services:
       {{SERVICE_NAME}}:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "queue:work"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Scheduler (Cron)
+  # Scheduler (Supervisor-managed)
   # ─────────────────────────────────────────────────────────────────────────────
   {{SERVICE_NAME}}-scheduler:
     build:
@@ -66,9 +85,11 @@ services:
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
     container_name: {{SERVICE_NAME}}-scheduler
-    command: ["sh", "-c", "while true; do php artisan schedule:run --verbose --no-interaction & sleep 60; done"]
     env_file:
       - ../config/.env.{{SERVICE_NAME}}
+    environment:
+      - APP_MODE=scheduler
+      - APP_ENV=production
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
     networks:
@@ -77,6 +98,12 @@ services:
       {{SERVICE_NAME}}:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "scheduler-runner"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   {{SERVICE_NAME}}-internal:

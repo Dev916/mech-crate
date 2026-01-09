@@ -1,0 +1,65 @@
+# ========================================
+# {{SERVICE_NAME}} - Development Docker Compose Override
+# ========================================
+
+services:
+  # ------------------------------------------
+  # Astro SSR Application (Development)
+  # ------------------------------------------
+  app:
+    build:
+      target: development
+    container_name: {{SERVICE_SLUG}}-app-dev
+    
+    environment:
+      - NODE_ENV=development
+      - PORT=4321
+      - DATABASE_URL=postgres://${POSTGRES_USER:-{{SERVICE_SLUG}}}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-{{SERVICE_SLUG}}}
+      - REDIS_URL=redis://redis:6379
+      - APP_URL=http://localhost:4321
+    
+    # Mount source code for hot reload
+    volumes:
+      - ../../apps/{{SERVICE_NAME}}:/app
+      - /app/node_modules
+      - /app/.astro
+    
+    ports:
+      - "4321:4321"
+      - "24678:24678"  # Vite HMR
+    
+    # Override labels for development
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{SERVICE_SLUG}}.localhost`)"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web"
+      - "traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=4321"
+
+  # ------------------------------------------
+  # PostgreSQL Database (Development)
+  # ------------------------------------------
+  db:
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-{{SERVICE_SLUG}}}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret}
+      - POSTGRES_DB=${POSTGRES_DB:-{{SERVICE_SLUG}}}
+    
+    # Expose port for local access
+    ports:
+      - "5432:5432"
+
+  # ------------------------------------------
+  # Redis Cache (Development)
+  # ------------------------------------------
+  redis:
+    # Expose port for local access
+    ports:
+      - "6379:6379"
+
+# ========================================
+# Development Networks
+# ========================================
+networks:
+  traefik-public:
+    external: false
+    name: {{SERVICE_SLUG}}-dev-network

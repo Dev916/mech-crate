@@ -38,6 +38,7 @@ source "$LIB_DIR/doctor.sh"
 source "$LIB_DIR/cloudflare.sh"
 source "$LIB_DIR/build.sh"
 source "$LIB_DIR/init-code-rules.sh"
+source "$LIB_DIR/test.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main command router
@@ -67,6 +68,9 @@ main() {
             ;;
         icr|init-code-rules)
             init_code_rules_cmd "$@"
+            ;;
+        test)
+            test_cmd "$@"
             ;;
         doctor)
             doctor

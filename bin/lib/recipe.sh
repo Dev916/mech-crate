@@ -74,6 +74,73 @@ _interpolate() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Bash 3.x Compatible Key-Value Store
+# Uses newline-separated KEY=VALUE strings instead of associative arrays
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Set a key in a kv store (pass store by name)
+_kv_set() {
+    local store_name="$1"
+    local key="$2"
+    local value="$3"
+    
+    # Remove existing key if present, then add new
+    local current
+    eval "current=\"\$$store_name\""
+    local new_store=""
+    
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local existing_key="${line%%=*}"
+        if [[ "$existing_key" != "$key" ]]; then
+            new_store+="${line}"$'\n'
+        fi
+    done <<< "$current"
+    
+    new_store+="${key}=${value}"$'\n'
+    eval "$store_name=\"\$new_store\""
+}
+
+# Get a key from a kv store
+_kv_get() {
+    local store="$1"
+    local key="$2"
+    
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local k="${line%%=*}"
+        if [[ "$k" == "$key" ]]; then
+            echo "${line#*=}"
+            return 0
+        fi
+    done <<< "$store"
+    return 1
+}
+
+# Get all keys from a kv store
+_kv_keys() {
+    local store="$1"
+    
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        echo "${line%%=*}"
+    done <<< "$store"
+}
+
+# Convert kv store to array of KEY=VALUE arguments
+_kv_to_args() {
+    local store="$1"
+    local -a args=()
+    
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        args+=("$line")
+    done <<< "$store"
+    
+    echo "${args[@]}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Recipe Discovery
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -159,14 +226,14 @@ install_recipe() {
     local recipe_json="$recipe_dir/recipe.json"
     
     # ─────────────────────────────────────────────────────────────────────────
-    # Parse Options
+    # Parse Options (bash 3.x compatible using kv store)
     # ─────────────────────────────────────────────────────────────────────────
     
-    declare -A options
+    local OPTIONS_STORE=""
     
     if _has_jq; then
         while IFS='=' read -r key val; do
-            [[ -n "$key" ]] && options["$key"]="$val"
+            [[ -n "$key" ]] && _kv_set OPTIONS_STORE "$key" "$val"
         done < <(jq -r '.options | to_entries[]? | "\(.key)=\(.value.default)"' "$recipe_json" 2>/dev/null)
     fi
     
@@ -175,19 +242,19 @@ install_recipe() {
             --*=*)
                 local opt_name="${arg%%=*}"
                 opt_name="${opt_name#--}"
-                options["$opt_name"]="${arg#*=}"
+                _kv_set OPTIONS_STORE "$opt_name" "${arg#*=}"
                 ;;
         esac
     done
     
     # ─────────────────────────────────────────────────────────────────────────
-    # Build Placeholders
+    # Build Placeholders (bash 3.x compatible using kv store)
     # ─────────────────────────────────────────────────────────────────────────
     
-    declare -A placeholders
-    placeholders["SERVICE_NAME"]="$service_name"
-    placeholders["SERVICE_SLUG"]=$(_transform "$service_name" "slug")
-    placeholders["SERVICE_UPPER"]=$(_transform "$service_name" "upper")
+    local PLACEHOLDERS_STORE=""
+    _kv_set PLACEHOLDERS_STORE "SERVICE_NAME" "$service_name"
+    _kv_set PLACEHOLDERS_STORE "SERVICE_SLUG" "$(_transform "$service_name" "slug")"
+    _kv_set PLACEHOLDERS_STORE "SERVICE_UPPER" "$(_transform "$service_name" "upper")"
     
     if _has_jq; then
         while IFS='|' read -r key source transform; do
@@ -196,26 +263,47 @@ install_recipe() {
             local value=""
             case "$source" in
                 name) value="$service_name" ;;
-                option:*) value="${options[${source#option:}]:-}" ;;
+                option:*) 
+                    local opt_key="${source#option:}"
+                    value=$(_kv_get "$OPTIONS_STORE" "$opt_key" || echo "")
+                    ;;
             esac
             
             [[ -n "$transform" && "$transform" != "null" ]] && value=$(_transform "$value" "$transform")
-            placeholders["$key"]="$value"
+            _kv_set PLACEHOLDERS_STORE "$key" "$value"
         done < <(jq -r '.placeholders | to_entries[]? | "\(.key)|\(.value.source)|\(.value.transform)"' "$recipe_json" 2>/dev/null)
     fi
     
+    # Build initial placeholder args for interpolation
+    local initial_args=()
+    while IFS= read -r key; do
+        [[ -z "$key" ]] && continue
+        local val
+        val=$(_kv_get "$PLACEHOLDERS_STORE" "$key")
+        initial_args+=("$key=$val")
+    done < <(_kv_keys "$PLACEHOLDERS_STORE")
+    
+    # Second pass: interpolate any placeholder references within values
+    # (e.g., DOMAIN default "{{SERVICE_NAME}}.localhost" -> "app.localhost")
     local placeholder_args=()
-    for key in "${!placeholders[@]}"; do
-        placeholder_args+=("$key=${placeholders[$key]}")
-    done
+    while IFS= read -r key; do
+        [[ -z "$key" ]] && continue
+        local val
+        val=$(_kv_get "$PLACEHOLDERS_STORE" "$key")
+        # Interpolate the value itself with all known placeholders
+        val=$(_interpolate "$val" "${initial_args[@]}")
+        placeholder_args+=("$key=$val")
+    done < <(_kv_keys "$PLACEHOLDERS_STORE")
     
     # ─────────────────────────────────────────────────────────────────────────
     # Display Info
     # ─────────────────────────────────────────────────────────────────────────
     
     local title=$(_json_get "$recipe_json" ".title")
+    local domain_val
+    domain_val=$(_kv_get "$PLACEHOLDERS_STORE" "DOMAIN" || echo "$service_name.localhost")
     info "Installing recipe: ${BOLD}$title${NC} as ${BOLD}$service_name${NC}"
-    info "Domain: ${CYAN}${placeholders[DOMAIN]:-$service_name.localhost}${NC}"
+    info "Domain: ${CYAN}${domain_val}${NC}"
     
     # ─────────────────────────────────────────────────────────────────────────
     # Create Directories
@@ -314,7 +402,9 @@ install_recipe() {
         done < <(jq -r '.notes[]?' "$recipe_json" 2>/dev/null)
     fi
     
-    info "Access at: ${CYAN}http://${placeholders[DOMAIN]:-$service_name.localhost}${NC}"
+    local final_domain
+    final_domain=$(_kv_get "$PLACEHOLDERS_STORE" "DOMAIN" || echo "$service_name.localhost")
+    info "Access at: ${CYAN}http://${final_domain}${NC}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

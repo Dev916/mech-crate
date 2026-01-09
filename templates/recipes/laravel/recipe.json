@@ -11,7 +11,7 @@
     "Inertia SSR enabled",
     "Vite asset bundling",
     "Tailwind CSS",
-    "PHP 8.5",
+    "PHP 8.3",
     "PostgreSQL database",
     "Redis cache/queue",
     "Queue worker",
@@ -35,7 +35,7 @@
     },
     "php": {
       "flag": "--php",
-      "default": "8.5",
+      "default": "8.3",
       "description": "PHP version"
     }
   },
@@ -74,7 +74,8 @@
     "apps/{{SERVICE_NAME}}/tests",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
-    "docker/config"
+    "docker/config",
+    "docker/system/{{SERVICE_NAME}}"
   ],
   
   "templates": [
@@ -84,6 +85,7 @@
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "docker/system/app", "to": "docker/system/{{SERVICE_NAME}}" },
     { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
   ],
   

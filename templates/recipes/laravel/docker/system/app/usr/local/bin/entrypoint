@@ -1,0 +1,111 @@
+#!/bin/sh
+set -e
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Laravel Octane + Supervisor Entrypoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+APP_MODE="${APP_MODE:-app}"
+APP_ENV="${APP_ENV:-production}"
+
+# Environment variable defaults
+export OCTANE_WORKERS="${OCTANE_WORKERS:-auto}"
+export OCTANE_TASK_WORKERS="${OCTANE_TASK_WORKERS:-auto}"
+export QUEUE_WORKERS="${QUEUE_WORKERS:-2}"
+export QUEUE_TRIES="${QUEUE_TRIES:-3}"
+export QUEUE_MAX_TIME="${QUEUE_MAX_TIME:-3600}"
+export QUEUE_MEMORY="${QUEUE_MEMORY:-128}"
+export RUN_SCHEDULER="${RUN_SCHEDULER:-false}"
+export INERTIA_SSR_ENABLED="${INERTIA_SSR_ENABLED:-false}"
+
+# Create required directories
+mkdir -p /var/log/supervisor
+mkdir -p /var/log/nginx
+mkdir -p /app/storage/logs
+mkdir -p /app/storage/framework/cache
+mkdir -p /app/storage/framework/sessions
+mkdir -p /app/storage/framework/views
+
+# Set permissions
+chown -R www-data:www-data /app/storage 2>/dev/null || true
+chmod -R 775 /app/storage 2>/dev/null || true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Select supervisor config based on APP_MODE
+# ─────────────────────────────────────────────────────────────────────────────
+
+SUPERVISOR_CONF="/etc/supervisor/conf.d"
+
+case "$APP_MODE" in
+    app)
+        # Application mode - Octane + Nginx (+ dev server in dev)
+        if [ "$APP_ENV" = "local" ] || [ "$APP_ENV" = "development" ]; then
+            echo "Starting in DEVELOPMENT mode..."
+            rm -f "$SUPERVISOR_CONF/stack.prod.conf" "$SUPERVISOR_CONF/queue.conf" 2>/dev/null || true
+        else
+            echo "Starting in PRODUCTION mode..."
+            rm -f "$SUPERVISOR_CONF/stack.dev.conf" "$SUPERVISOR_CONF/queue.conf" 2>/dev/null || true
+        fi
+        ;;
+    queue)
+        # Queue worker mode
+        echo "Starting QUEUE WORKER mode..."
+        rm -f "$SUPERVISOR_CONF/stack.dev.conf" "$SUPERVISOR_CONF/stack.prod.conf" 2>/dev/null || true
+        ;;
+    scheduler)
+        # Scheduler only mode
+        echo "Starting SCHEDULER mode..."
+        export RUN_SCHEDULER="true"
+        export QUEUE_WORKERS="0"
+        rm -f "$SUPERVISOR_CONF/stack.dev.conf" "$SUPERVISOR_CONF/stack.prod.conf" 2>/dev/null || true
+        ;;
+    *)
+        echo "Unknown APP_MODE: $APP_MODE"
+        echo "Valid modes: app, queue, scheduler"
+        exit 1
+        ;;
+esac
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Run Laravel preparations (migrations, cache, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [ "$APP_MODE" = "app" ]; then
+    cd /app
+
+    # Wait for database to be ready
+    if [ -n "$DB_HOST" ]; then
+        echo "Waiting for database..."
+        timeout=30
+        while [ $timeout -gt 0 ]; do
+            if php artisan db:monitor --databases=pgsql 2>/dev/null; then
+                echo "Database is ready"
+                break
+            fi
+            timeout=$((timeout - 1))
+            sleep 1
+        done
+    fi
+
+    # Run migrations in production (optional - can be disabled via env)
+    if [ "$RUN_MIGRATIONS" = "true" ]; then
+        echo "Running migrations..."
+        php artisan migrate --force
+    fi
+
+    # Cache configuration in production
+    if [ "$APP_ENV" = "production" ]; then
+        echo "Caching configuration..."
+        php artisan config:cache
+        php artisan route:cache
+        php artisan view:cache
+        php artisan event:cache
+    fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Start supervisor
+# ─────────────────────────────────────────────────────────────────────────────
+
+echo "Starting supervisord..."
+exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf

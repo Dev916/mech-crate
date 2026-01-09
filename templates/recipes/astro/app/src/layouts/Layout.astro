@@ -1,0 +1,52 @@
+---
+import '@/styles/globals.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  lang?: 'en' | 'ja';
+}
+
+const { title, description = '{{SERVICE_NAME}} - Built with Astro + Vue', lang = 'en' } = Astro.props;
+---
+
+<!doctype html>
+<html lang={lang} class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content={description} />
+    <meta name="generator" content={Astro.generator} />
+    
+    <!-- Apple-specific meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#007AFF" />
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    
+    <!-- Preload SF Pro if available -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <script is:inline>
+      // Theme initialization (prevent flash)
+      const theme = (() => {
+        const stored = localStorage.getItem('theme');
+        if (stored) return stored;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      })();
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    </script>
+  </head>
+  <body class="min-h-full bg-background antialiased">
+    <div id="app" class="relative flex min-h-screen flex-col">
+      <slot />
+    </div>
+  </body>
+</html>

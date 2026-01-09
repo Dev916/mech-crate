@@ -1,0 +1,10 @@
+#!/bin/sh
+# Laravel Scheduler Runner
+# Runs artisan schedule:run every minute
+
+cd /app
+
+while true; do
+    php artisan schedule:run --verbose --no-interaction
+    sleep 60
+done

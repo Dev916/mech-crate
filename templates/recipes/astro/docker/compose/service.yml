@@ -1,0 +1,113 @@
+# ========================================
+# {{SERVICE_NAME}} - Production Docker Compose
+# ========================================
+
+services:
+  # ------------------------------------------
+  # Astro SSR Application
+  # ------------------------------------------
+  app:
+    build:
+      context: ../../apps/{{SERVICE_NAME}}
+      dockerfile: ../../docker/dockerfiles/{{SERVICE_NAME}}/app
+      target: runner
+    container_name: {{SERVICE_SLUG}}-app
+    restart: unless-stopped
+    
+    environment:
+      - NODE_ENV=production
+      - PORT=4321
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379
+      - APP_URL=${APP_URL:-http://localhost:4321}
+    
+    ports:
+      - "4321:4321"
+    
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4321/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=websecure"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=4321"
+    
+    networks:
+      - {{SERVICE_SLUG}}-internal
+      - traefik-public
+
+  # ------------------------------------------
+  # PostgreSQL Database
+  # ------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: {{SERVICE_SLUG}}-db
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-{{SERVICE_SLUG}}}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-{{SERVICE_SLUG}}}
+    
+    volumes:
+      - {{SERVICE_SLUG}}-db-data:/var/lib/postgresql/data
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-{{SERVICE_SLUG}}} -d ${POSTGRES_DB:-{{SERVICE_SLUG}}}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    networks:
+      - {{SERVICE_SLUG}}-internal
+
+  # ------------------------------------------
+  # Redis Cache
+  # ------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: {{SERVICE_SLUG}}-redis
+    restart: unless-stopped
+    
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    
+    volumes:
+      - {{SERVICE_SLUG}}-redis-data:/data
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    networks:
+      - {{SERVICE_SLUG}}-internal
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  {{SERVICE_SLUG}}-db-data:
+  {{SERVICE_SLUG}}-redis-data:
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  {{SERVICE_SLUG}}-internal:
+    driver: bridge
+  traefik-public:
+    external: true
