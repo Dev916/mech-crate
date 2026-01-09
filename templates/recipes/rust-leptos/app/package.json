@@ -1,0 +1,12 @@
+{
+  "name": "{{SERVICE_SLUG}}",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -i style/tailwind.css -o style/main.css",
+    "css:watch": "tailwindcss -i style/tailwind.css -o style/main.css --watch",
+    "css:prod": "tailwindcss -i style/tailwind.css -o style/main.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}
