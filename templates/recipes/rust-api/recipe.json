@@ -1,0 +1,74 @@
+{
+  "name": "rust-api",
+  "title": "Rust API",
+  "description": "Rust API service with Actix-web, SQLx, and hexagonal architecture",
+  "version": "1.0",
+  
+  "features": [
+    "Actix-web framework",
+    "SQLx for PostgreSQL",
+    "Hexagonal architecture",
+    "Actix middleware",
+    "Tokio async runtime",
+    "Traefik reverse proxy routing"
+  ],
+  
+  "services": [
+    { "name": "<name>", "description": "Rust API service" },
+    { "name": "db", "description": "PostgreSQL (shared)" }
+  ],
+  
+  "options": {
+    "domain": {
+      "flag": "--domain",
+      "default": "{{SERVICE_NAME}}.localhost",
+      "description": "Custom domain"
+    },
+    "port": {
+      "flag": "--port",
+      "default": "3000",
+      "description": "Service port"
+    },
+    "rust": {
+      "flag": "--rust",
+      "default": "1.83",
+      "description": "Rust version"
+    }
+  },
+  
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "rust_crate" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "DOMAIN": { "source": "option:domain" },
+    "RUST_VERSION": { "source": "option:rust" }
+  },
+  
+  "directories": [
+    "apps/{{SERVICE_NAME}}/src/api/handlers",
+    "apps/{{SERVICE_NAME}}/src/api/middleware",
+    "apps/{{SERVICE_NAME}}/src/domain/models",
+    "apps/{{SERVICE_NAME}}/src/domain/services",
+    "apps/{{SERVICE_NAME}}/src/domain/ports",
+    "apps/{{SERVICE_NAME}}/src/infra/db",
+    "apps/{{SERVICE_NAME}}/src/infra/config",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+  
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+  
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}} && cargo build",
+    "make dev s={{SERVICE_NAME}}"
+  ]
+}
