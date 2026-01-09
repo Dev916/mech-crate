@@ -1,0 +1,21 @@
+{
+  "name": "{{PROJECT_NAME}}-containers-worker",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "cd ../.. && npx wrangler dev --config infra/cloudflare/containers-worker/wrangler.toml",
+    "deploy": "cd ../.. && npx wrangler deploy --config infra/cloudflare/containers-worker/wrangler.toml",
+    "deploy:preview": "cd ../.. && npx wrangler deploy --config infra/cloudflare/containers-worker/wrangler.toml --env preview",
+    "deploy:production": "cd ../.. && npx wrangler deploy --config infra/cloudflare/containers-worker/wrangler.toml --env production",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.0.30"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241112.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.88.0"
+  }
+}
