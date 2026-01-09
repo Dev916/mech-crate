@@ -1,0 +1,98 @@
+{
+  "name": "rust-worker",
+  "title": "Rust Job Worker",
+  "description": "High-performance job worker with Redis pub/sub, PostgreSQL, and local LLM evaluation",
+  "version": "1.0",
+  
+  "features": [
+    "Redis pub/sub job queue",
+    "PostgreSQL for job state",
+    "Actor model for job processing",
+    "Local LLM integration (llama.cpp)",
+    "Batch processing with backpressure",
+    "Graceful shutdown",
+    "Health checks and metrics",
+    "CLI interface with subcommands",
+    "Hexagonal architecture",
+    "Supervision and fault tolerance"
+  ],
+  
+  "services": [
+    { "name": "<name>", "description": "Job worker (scalable)" },
+    { "name": "db", "description": "PostgreSQL (shared)" },
+    { "name": "redis", "description": "Redis pub/sub (shared)" }
+  ],
+  
+  "options": {
+    "workers": {
+      "flag": "--workers",
+      "default": "4",
+      "description": "Number of worker threads"
+    },
+    "batch_size": {
+      "flag": "--batch-size",
+      "default": "100",
+      "description": "Batch processing size"
+    },
+    "llm": {
+      "flag": "--llm",
+      "default": "false",
+      "description": "Enable local LLM support"
+    }
+  },
+  
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "rust_crate" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "WORKERS": { "source": "option:workers" },
+    "BATCH_SIZE": { "source": "option:batch_size" }
+  },
+  
+  "directories": [
+    "apps/{{SERVICE_NAME}}/src/cli",
+    "apps/{{SERVICE_NAME}}/src/worker",
+    "apps/{{SERVICE_NAME}}/src/worker/actors",
+    "apps/{{SERVICE_NAME}}/src/worker/jobs",
+    "apps/{{SERVICE_NAME}}/src/domain",
+    "apps/{{SERVICE_NAME}}/src/domain/models",
+    "apps/{{SERVICE_NAME}}/src/domain/services",
+    "apps/{{SERVICE_NAME}}/src/domain/ports",
+    "apps/{{SERVICE_NAME}}/src/infra",
+    "apps/{{SERVICE_NAME}}/src/infra/db",
+    "apps/{{SERVICE_NAME}}/src/infra/queue",
+    "apps/{{SERVICE_NAME}}/src/infra/llm",
+    "apps/{{SERVICE_NAME}}/migrations",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+  
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+  
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}}",
+    "cargo build --release",
+    "# Run migrations",
+    "sqlx migrate run",
+    "# Start worker",
+    "./target/release/{{SERVICE_SLUG}} worker --workers={{WORKERS}}",
+    "# Or run via Docker",
+    "make dev s={{SERVICE_NAME}}"
+  ],
+  
+  "notes": [
+    "Scale workers horizontally by running multiple instances",
+    "Jobs are idempotent - safe to retry on failure",
+    "Use SIGTERM for graceful shutdown",
+    "LLM support requires models in /models directory"
+  ]
+}
