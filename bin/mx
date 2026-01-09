@@ -30,11 +30,14 @@ LIB_DIR="$SCRIPT_DIR/lib"
 # ─────────────────────────────────────────────────────────────────────────────
 source "$LIB_DIR/common.sh"
 source "$LIB_DIR/help.sh"
+source "$LIB_DIR/recipe.sh"
 source "$LIB_DIR/new.sh"
 source "$LIB_DIR/add.sh"
 source "$LIB_DIR/upgrade.sh"
 source "$LIB_DIR/doctor.sh"
 source "$LIB_DIR/cloudflare.sh"
+source "$LIB_DIR/build.sh"
+source "$LIB_DIR/init-code-rules.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main command router
@@ -53,8 +56,17 @@ main() {
         add)
             add_service "$@"
             ;;
+        recipes)
+            recipes_cmd "$@"
+            ;;
         cf|cloudflare)
             cloudflare_cmd "$@"
+            ;;
+        build)
+            build_cmd "$@"
+            ;;
+        icr|init-code-rules)
+            init_code_rules_cmd "$@"
             ;;
         doctor)
             doctor
@@ -66,7 +78,7 @@ main() {
             show_help
             ;;
         # Proxy commands to make
-        dev|up|down|logs|build|restart|sh|ps|start|stop)
+        dev|up|down|logs|restart|sh|ps|start|stop)
             proxy_to_make "$command" "$@"
             ;;
         *)
