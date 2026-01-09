@@ -1,0 +1,86 @@
+{
+  "name": "nuxt",
+  "title": "Nuxt 3",
+  "description": "Nuxt 3 SSR/SSG application with Nitro server, Tailwind CSS",
+  "version": "3.15",
+  
+  "features": [
+    "Nuxt 3 with SSR/SSG",
+    "Nitro server",
+    "Tailwind CSS + DaisyUI",
+    "TypeScript",
+    "Traefik reverse proxy routing"
+  ],
+  
+  "services": [
+    { "name": "<name>", "description": "Nuxt application" }
+  ],
+  
+  "options": {
+    "domain": {
+      "flag": "--domain",
+      "default": "{{SERVICE_NAME}}.localhost",
+      "description": "Custom domain"
+    },
+    "mode": {
+      "flag": "--mode",
+      "default": "ssr",
+      "description": "Rendering mode: ssr, spa, or static"
+    },
+    "node": {
+      "flag": "--node",
+      "default": "22",
+      "description": "Node.js version"
+    }
+  },
+  
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "slug" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "DOMAIN": { "source": "option:domain" },
+    "NODE_VERSION": { "source": "option:node" },
+    "SSR_ENABLED": { "source": "option:mode", "transform": "ssr_bool" }
+  },
+  
+  "directories": [
+    "apps/{{SERVICE_NAME}}/components",
+    "apps/{{SERVICE_NAME}}/composables",
+    "apps/{{SERVICE_NAME}}/layouts",
+    "apps/{{SERVICE_NAME}}/pages",
+    "apps/{{SERVICE_NAME}}/public",
+    "apps/{{SERVICE_NAME}}/server/api",
+    "apps/{{SERVICE_NAME}}/server/middleware",
+    "apps/{{SERVICE_NAME}}/assets/css",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+  
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+  
+  "post_install": {
+    "renames": [
+      { "from": "apps/{{SERVICE_NAME}}/gitignore.template", "to": "apps/{{SERVICE_NAME}}/.gitignore" }
+    ],
+    "create_files": [
+      {
+        "path": "apps/{{SERVICE_NAME}}/.env.example",
+        "content": "# Application\nNUXT_PUBLIC_API_BASE=/api\n\n# Server-only secrets\nAPI_SECRET=change-me-in-production\n"
+      }
+    ]
+  },
+  
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}} && npm install",
+    "make dev s={{SERVICE_NAME}}"
+  ]
+}
