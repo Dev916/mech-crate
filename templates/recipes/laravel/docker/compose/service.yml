@@ -43,7 +43,7 @@ services:
       start_period: 15s
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Queue Worker (Supervisor-managed)
+  # Laravel Horizon Queue Manager
   # ─────────────────────────────────────────────────────────────────────────────
   {{SERVICE_NAME}}-worker:
     build:
@@ -54,12 +54,8 @@ services:
     env_file:
       - ../config/.env.{{SERVICE_NAME}}
     environment:
-      - APP_MODE=queue
+      - APP_MODE=horizon
       - APP_ENV=production
-      - QUEUE_WORKERS=2
-      - QUEUE_TRIES=3
-      - QUEUE_MAX_TIME=3600
-      - QUEUE_MEMORY=128
       - RUN_SCHEDULER=false
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
@@ -70,14 +66,14 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "queue:work"]
+      test: ["CMD", "php", "artisan", "horizon:status"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Scheduler (Supervisor-managed)
+  # Task Scheduler
   # ─────────────────────────────────────────────────────────────────────────────
   {{SERVICE_NAME}}-scheduler:
     build:
