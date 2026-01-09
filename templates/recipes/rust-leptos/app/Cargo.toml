@@ -1,0 +1,111 @@
+[package]
+name = "{{SERVICE_SLUG}}"
+version = "0.1.0"
+edition = "2021"
+description = "{{SERVICE_NAME}} - Leptos SSR Application"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Leptos core
+leptos = { version = "0.7", features = ["nightly"] }
+leptos_meta = { version = "0.7" }
+leptos_router = { version = "0.7" }
+leptos_actix = { version = "0.7", optional = true }
+
+# UI Components
+leptos-shadcn-ui = { git = "https://github.com/cloud-shuttle/leptos-shadcn-ui", features = ["full"] }
+
+# Server-side
+actix-web = { version = "4", optional = true, features = ["macros"] }
+actix-files = { version = "0.6", optional = true }
+actix-rt = { version = "2", optional = true }
+actix = { version = "0.13", optional = true }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"], optional = true }
+deadpool-postgres = { version = "0.14", optional = true }
+
+# Redis
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"], optional = true }
+deadpool-redis = { version = "0.18", optional = true }
+
+# Async runtime
+tokio = { version = "1", features = ["full"], optional = true }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utils
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+dotenvy = { version = "0.15", optional = true }
+cfg-if = "1"
+
+# WASM
+wasm-bindgen = { version = "0.2", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[features]
+default = []
+csr = ["leptos/csr", "leptos_meta/csr", "leptos_router/csr"]
+hydrate = [
+    "leptos/hydrate",
+    "leptos_meta/hydrate",
+    "leptos_router/hydrate",
+    "wasm-bindgen",
+    "console_error_panic_hook",
+]
+ssr = [
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+    "leptos_actix",
+    "actix-web",
+    "actix-files",
+    "actix-rt",
+    "actix",
+    "sqlx",
+    "deadpool-postgres",
+    "redis",
+    "deadpool-redis",
+    "tokio",
+    "tracing-subscriber",
+    "dotenvy",
+]
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+[profile.server-release]
+inherits = "release"
+opt-level = 3
+lto = "thin"
+
+[package.metadata.leptos]
+output-name = "{{SERVICE_SLUG}}"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "style/main.css"
+tailwind-input-file = "style/tailwind.css"
+tailwind-config-file = "tailwind.config.js"
+assets-dir = "public"
+site-addr = "0.0.0.0:3000"
+reload-port = 3001
+browserquery = "defaults"
+watch = false
+env = "DEV"
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
