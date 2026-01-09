@@ -1,0 +1,95 @@
+{
+  "name": "rust-leptos",
+  "title": "Rust Leptos Full-Stack",
+  "description": "Leptos SSR + Actix-web with shadcn-ui, actor model, PostgreSQL, and Redis",
+  "version": "1.0",
+  
+  "features": [
+    "Leptos SSR with hydration",
+    "leptos-shadcn-ui components",
+    "Actix-web server with actors",
+    "Actor model for stateful entities",
+    "SQLx + PostgreSQL",
+    "Redis for cache/sessions",
+    "Hexagonal architecture",
+    "Tailwind CSS",
+    "Traefik reverse proxy routing"
+  ],
+  
+  "services": [
+    { "name": "<name>", "description": "Leptos SSR application" },
+    { "name": "db", "description": "PostgreSQL (shared)" },
+    { "name": "redis", "description": "Redis (shared)" }
+  ],
+  
+  "options": {
+    "domain": {
+      "flag": "--domain",
+      "default": "{{SERVICE_NAME}}.localhost",
+      "description": "Custom domain"
+    },
+    "port": {
+      "flag": "--port",
+      "default": "3000",
+      "description": "Service port"
+    },
+    "rust": {
+      "flag": "--rust",
+      "default": "1.83",
+      "description": "Rust version"
+    }
+  },
+  
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "rust_crate" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "DOMAIN": { "source": "option:domain" },
+    "RUST_VERSION": { "source": "option:rust" }
+  },
+  
+  "directories": [
+    "apps/{{SERVICE_NAME}}/src/app",
+    "apps/{{SERVICE_NAME}}/src/app/components",
+    "apps/{{SERVICE_NAME}}/src/app/pages",
+    "apps/{{SERVICE_NAME}}/src/server",
+    "apps/{{SERVICE_NAME}}/src/server/actors",
+    "apps/{{SERVICE_NAME}}/src/server/handlers",
+    "apps/{{SERVICE_NAME}}/src/domain",
+    "apps/{{SERVICE_NAME}}/src/domain/models",
+    "apps/{{SERVICE_NAME}}/src/domain/services",
+    "apps/{{SERVICE_NAME}}/src/domain/ports",
+    "apps/{{SERVICE_NAME}}/src/infra",
+    "apps/{{SERVICE_NAME}}/src/infra/db",
+    "apps/{{SERVICE_NAME}}/src/infra/cache",
+    "apps/{{SERVICE_NAME}}/style",
+    "apps/{{SERVICE_NAME}}/public",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+  
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+  
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}}",
+    "cargo build",
+    "npm install (for Tailwind)",
+    "cargo leptos watch",
+    "make dev s={{SERVICE_NAME}}"
+  ],
+  
+  "notes": [
+    "Leptos SSR with hydration for fast initial loads",
+    "Actor model for stateful entities (users, sessions)",
+    "Uses hexagonal architecture: domain/ports/adapters"
+  ]
+}
