@@ -2,7 +2,7 @@
 set -e
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Laravel Octane + Supervisor Entrypoint
+# Laravel Octane + Horizon + Supervisor Entrypoint
 # ─────────────────────────────────────────────────────────────────────────────
 
 APP_MODE="${APP_MODE:-app}"
@@ -11,10 +11,6 @@ APP_ENV="${APP_ENV:-production}"
 # Environment variable defaults
 export OCTANE_WORKERS="${OCTANE_WORKERS:-auto}"
 export OCTANE_TASK_WORKERS="${OCTANE_TASK_WORKERS:-auto}"
-export QUEUE_WORKERS="${QUEUE_WORKERS:-2}"
-export QUEUE_TRIES="${QUEUE_TRIES:-3}"
-export QUEUE_MAX_TIME="${QUEUE_MAX_TIME:-3600}"
-export QUEUE_MEMORY="${QUEUE_MEMORY:-128}"
 export RUN_SCHEDULER="${RUN_SCHEDULER:-false}"
 export INERTIA_SSR_ENABLED="${INERTIA_SSR_ENABLED:-false}"
 
@@ -47,21 +43,22 @@ case "$APP_MODE" in
             rm -f "$SUPERVISOR_CONF/stack.dev.conf" "$SUPERVISOR_CONF/queue.conf" 2>/dev/null || true
         fi
         ;;
-    queue)
-        # Queue worker mode
-        echo "Starting QUEUE WORKER mode..."
+    queue|horizon)
+        # Horizon queue manager mode
+        echo "Starting HORIZON mode..."
         rm -f "$SUPERVISOR_CONF/stack.dev.conf" "$SUPERVISOR_CONF/stack.prod.conf" 2>/dev/null || true
         ;;
     scheduler)
         # Scheduler only mode
         echo "Starting SCHEDULER mode..."
         export RUN_SCHEDULER="true"
-        export QUEUE_WORKERS="0"
         rm -f "$SUPERVISOR_CONF/stack.dev.conf" "$SUPERVISOR_CONF/stack.prod.conf" 2>/dev/null || true
+        # Disable horizon in scheduler-only mode
+        sed -i 's/autostart=true/autostart=false/' "$SUPERVISOR_CONF/queue.conf" 2>/dev/null || true
         ;;
     *)
         echo "Unknown APP_MODE: $APP_MODE"
-        echo "Valid modes: app, queue, scheduler"
+        echo "Valid modes: app, queue, horizon, scheduler"
         exit 1
         ;;
 esac
