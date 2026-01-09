@@ -1,0 +1,26 @@
+# {{SERVICE_NAME}} - Nuxt Application (Development)
+# Overrides for local development
+
+services:
+  {{SERVICE_NAME}}:
+    build:
+      target: development
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "${{{SERVICE_UPPER}}_PORT:-3000}:3000"
+      - "24678:24678"  # HMR websocket
+    volumes:
+      # Mount source for hot-reload
+      - ../../apps/{{SERVICE_NAME}}:/app:cached
+      # Preserve node_modules for performance
+      - {{SERVICE_NAME}}_node_modules:/app/node_modules
+      # Nuxt build cache
+      - {{SERVICE_NAME}}_nuxt:/app/.nuxt
+    restart: "no"
+    healthcheck:
+      disable: true
+
+volumes:
+  {{SERVICE_NAME}}_node_modules:
+  {{SERVICE_NAME}}_nuxt:
