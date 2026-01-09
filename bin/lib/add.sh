@@ -6,22 +6,57 @@
 
 # Add service to existing project
 add_service() {
-    local service_name="$1"
+    local service_name=""
+    local recipe=""
+    local extra_args=()
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --recipe=*)
+                recipe="${1#*=}"
+                shift
+                ;;
+            -r)
+                recipe="$2"
+                shift 2
+                ;;
+            --*)
+                # Pass through other flags to recipe
+                extra_args+=("$1")
+                shift
+                ;;
+            *)
+                if [[ -z "$service_name" ]]; then
+                    service_name="$1"
+                else
+                    extra_args+=("$1")
+                fi
+                shift
+                ;;
+        esac
+    done
     
     if [[ -z "$service_name" ]]; then
-        error "Service name is required. Usage: mx add <service-name>"
+        error "Service name is required. Usage: mx add <service-name> [--recipe=<recipe>]"
     fi
     
     if ! is_mech_crate_project; then
         error "Not in a MechCrate project. Run 'mx new <name>' first."
     fi
     
-    add_service_internal "$service_name"
+    # Use recipe if specified, otherwise default service
+    if [[ -n "$recipe" ]]; then
+        install_recipe "$recipe" "$service_name" "${extra_args[@]}"
+    else
+        add_service_internal "$service_name"
+    fi
 }
 
 add_service_internal() {
     local service_name="$1"
-    local service_upper=$(echo "$service_name" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+    # Sanitize for use in env var names: uppercase, replace invalid chars with underscores
+    local service_upper=$(echo "$service_name" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_]/_/g')
     
     info "Adding service: ${BOLD}$service_name${NC}"
     
