@@ -6,6 +6,7 @@
   
   "features": [
     "Laravel Octane + Swoole (10x faster than FPM)",
+    "Laravel Horizon queue dashboard",
     "Filament PHP admin panel",
     "Inertia.js + Vue 3 frontend",
     "Inertia SSR enabled",
@@ -14,14 +15,13 @@
     "PHP 8.3",
     "PostgreSQL database",
     "Redis cache/queue",
-    "Queue worker",
     "Task scheduler",
     "Traefik reverse proxy routing"
   ],
   
   "services": [
     { "name": "<name>", "description": "Laravel Octane application" },
-    { "name": "<name>-worker", "description": "Queue worker" },
+    { "name": "<name>-worker", "description": "Laravel Horizon queue manager" },
     { "name": "<name>-scheduler", "description": "Task scheduler" },
     { "name": "db", "description": "PostgreSQL (shared)" },
     { "name": "redis", "description": "Redis (shared)" }
@@ -114,6 +114,7 @@
     "npm install",
     "cp .env.example .env && php artisan key:generate",
     "php artisan octane:install --server=swoole",
+    "php artisan horizon:install",
     "php artisan migrate",
     "php artisan make:filament-user",
     "npm run build",
@@ -122,6 +123,7 @@
   
   "notes": [
     "Admin panel: http://{{DOMAIN}}/admin",
+    "Horizon dashboard: http://{{DOMAIN}}/horizon",
     "Inertia SSR: Run 'php artisan inertia:start-ssr' for SSR",
     "Performance: Swoole serves ~10x more requests/sec than PHP-FPM"
   ]
