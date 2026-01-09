@@ -600,6 +600,94 @@ if ready.load(Ordering::Acquire) {
 
 ---
 
+#### 11. **Real World Asset (RWA) Tokenization Guide**
+**File**: `rwa-blockchain-guide.md`
+**Size**: ~6,300 lines
+**Languages**: Solidity, JavaScript/TypeScript, Python
+**Complexity**: ⭐⭐⭐⭐ (Advanced)
+
+**Purpose**: Comprehensive guide to tokenizing real world assets on blockchain with industry standards, best practices, regulatory compliance, and production implementations.
+
+**Contents**:
+1. **Introduction to RWA** - Market overview, asset types, benefits/challenges, tokenization fundamentals
+2. **Tokenization Fundamentals** - Process, fractional ownership, custody models, SPV structures
+3. **Token Standards for RWA** - ERC-3643 (T-REX), ERC-1400, ERC-4626, comparison matrix
+4. **Technical Architecture** - System design, oracle integration, identity/KYC, governance
+5. **Asset Categories** - Real estate, treasury bonds, private credit, commodities, carbon credits
+6. **Compliance & Regulation** - Securities law (Howey, Reg D, Reg A+), KYC/AML, transfer restrictions, tax reporting
+7. **Industry Platforms** - Centrifuge, Maple Finance, Ondo Finance, Securitize, tZERO
+8. **Integration Patterns** - Off-chain bridges, secondary markets (AMM, order books), cross-chain (CCIP), DeFi integration
+9. **Security Best Practices** - Smart contract security, key management, incident response, insurance
+10. **Future Innovations** - Account abstraction (ERC-4337), zero-knowledge proofs, AI integration, institutional adoption
+
+**Best Use Cases**:
+- Tokenizing real estate, bonds, or other physical assets
+- Building compliant security token platforms
+- Implementing KYC/AML for blockchain applications
+- Creating fractional ownership products
+- Integrating traditional assets with DeFi
+- Understanding regulatory requirements for digital securities
+- Building secondary markets for tokenized assets
+
+**When to Reference**:
+- Launching a security token offering (STO)
+- Implementing compliance for digital securities
+- Designing fractional ownership systems
+- Building bridges between TradFi and DeFi
+- Understanding token standards for regulated assets
+- Implementing oracle systems for asset pricing
+- Setting up identity and KYC infrastructure
+- Creating liquidity for illiquid assets
+
+**Scenarios**:
+- "How do I tokenize real estate?" → Asset Categories (Real Estate) + Tokenization Fundamentals
+- "Which token standard should I use?" → Token Standards (comparison matrix)
+- "How to ensure regulatory compliance?" → Compliance & Regulation (full section)
+- "Implement KYC for my token?" → Technical Architecture (Identity/KYC) + Compliance
+- "Create fractional ownership?" → Tokenization Fundamentals (Fractional Ownership)
+- "Build a security token?" → Token Standards (ERC-3643 implementation)
+- "Price my RWA token?" → Technical Architecture (Oracle Integration)
+- "Add secondary market liquidity?" → Integration Patterns (AMM, order books)
+- "Cross-chain RWA transfers?" → Integration Patterns (Cross-Chain CCIP)
+- "Secure my RWA platform?" → Security Best Practices (full section)
+
+**Decision Matrix**:
+| Asset Type | Token Standard | Key Considerations |
+|------------|---------------|-------------------|
+| Real Estate | ERC-3643 or ERC-1400 | Valuation oracles, rental income distribution |
+| US Treasury Bonds | ERC-4626 (vault) | Yield distribution, redemption mechanics |
+| Private Credit/Loans | ERC-4626 (pool) | Credit scoring, default handling |
+| Commodities (Gold) | ERC-20 with custody | Audit requirements, redemption process |
+| Carbon Credits | ERC-20 with burn | Retirement tracking, verification |
+| Private Equity | ERC-1400 (tranches) | Transfer restrictions, voting rights |
+
+**Regulatory Frameworks**:
+| Jurisdiction | Primary Regulation | Key Requirements |
+|--------------|-------------------|------------------|
+| United States | SEC (Reg D, Reg A+) | Accredited investor verification, 12-month lockup |
+| European Union | MiCA | Licensing, prospectus, AML compliance |
+| Singapore | MAS Securities Act | Prospectus exemptions, licensed intermediaries |
+| Switzerland | FINMA DLT Act | Segregation requirements, bankruptcy protection |
+
+**Industry Examples**:
+- **Centrifuge**: Real-world asset financing pools (Tinlake)
+- **Maple Finance**: Institutional credit markets
+- **Ondo Finance**: Tokenized US Treasuries (OUSG, USDY)
+- **RealT**: Fractional real estate ownership
+- **Paxos Gold (PAXG)**: Gold-backed tokens (1:1 troy ounce)
+- **Franklin Templeton**: BENJI token (on-chain money market fund)
+
+**Prerequisites**:
+- Strong Solidity/EVM development skills
+- Understanding of securities regulations
+- Blockchain and smart contract security knowledge
+- Experience with oracles (Chainlink)
+- Knowledge of traditional finance concepts
+
+**Related Documents**: `database-design-guide.md` (for off-chain data management), `docker-assembly-guide.md` (for deployment)
+
+---
+
 ## 🎯 Use Case Matrix
 
 ### By Problem Domain
@@ -623,6 +711,11 @@ if ready.load(Ordering::Acquire) {
 | **Caching Strategies** | Database Design Guide | - |
 | **Event-Driven Architecture** | Database Design Guide | Groundbreaking Patterns |
 | **Real-Time Data Pipelines** | Database Design Guide | - |
+| **Blockchain & Tokenization** | RWA Blockchain Guide | - |
+| **Security Token Offerings (STO)** | RWA Blockchain Guide | - |
+| **DeFi Integration** | RWA Blockchain Guide | - |
+| **Regulatory Compliance (Crypto)** | RWA Blockchain Guide | - |
+| **Smart Contract Development** | RWA Blockchain Guide | - |
 
 ### By Complexity Level
 
@@ -639,6 +732,7 @@ if ready.load(Ordering::Acquire) {
 - Rust Concurrency (practical sections)
 - Docker Assembly Guide (optimization sections)
 - Database Design Guide (advanced indexing, streaming, polyglot persistence)
+- RWA Blockchain Guide (tokenization, compliance, security)
 
 **Expert** (⭐⭐⭐⭐⭐):
 - Category Theory: Foundations
@@ -684,6 +778,9 @@ if ready.load(Ordering::Acquire) {
 
 **JavaScript / MongoDB**:
 - `database-design-guide.md` (complete coverage)
+
+**Solidity / Blockchain**:
+- `rwa-blockchain-guide.md` (complete coverage - token standards, smart contracts, DeFi)
 
 **Dockerfile / Docker Compose**:
 - `docker-assembly-guide.md`
@@ -741,6 +838,16 @@ User Query About:
 │  ├─ Streaming/CDC? → database-design-guide.md (Logical Replication, Change Streams)
 │  └─ Polyglot Persistence? → database-design-guide.md (Selection Matrix, Integration)
 │
+├─ Blockchain/RWA Tokenization?
+│  ├─ Token Standards? → rwa-blockchain-guide.md (ERC-3643, ERC-1400, ERC-4626)
+│  ├─ Real Estate Tokenization? → rwa-blockchain-guide.md (Real Estate, Fractional)
+│  ├─ Security Token Compliance? → rwa-blockchain-guide.md (Reg D, KYC/AML)
+│  ├─ DeFi Integration? → rwa-blockchain-guide.md (Lending, AMM, Cross-Chain)
+│  ├─ Oracle Integration? → rwa-blockchain-guide.md (Chainlink, API3, Off-Chain Bridge)
+│  ├─ Smart Contract Security? → rwa-blockchain-guide.md (Security Best Practices)
+│  ├─ Institutional Platforms? → rwa-blockchain-guide.md (Centrifuge, Maple, Ondo)
+│  └─ Future Tech (AA, ZK)? → rwa-blockchain-guide.md (ERC-4337, Zero-Knowledge)
+│
 └─ Research/novel approaches?
    └─ appendix-novel-theories.md
 ```
@@ -774,6 +881,19 @@ User Query About:
 **Pattern**: "How do I [Docker task]?"
 - **Match**: `docker-assembly-guide.md`
 - **Example**: "How do I reduce my Docker image size?" → `docker-assembly-guide.md` (Multi-Stage Builds)
+
+**Pattern**: "How do I [database task]?"
+- **Match**: `database-design-guide.md`
+- **Example**: "How do I normalize my schema?" → `database-design-guide.md` (Normalization Theory)
+
+**Pattern**: "How do I tokenize [asset]?" or "How to [blockchain/RWA task]?"
+- **Match**: `rwa-blockchain-guide.md`
+- **Examples**:
+  - "How do I tokenize real estate?" → `rwa-blockchain-guide.md` (Asset Categories - Real Estate)
+  - "Which security token standard should I use?" → `rwa-blockchain-guide.md` (Token Standards)
+  - "How to implement KYC for tokens?" → `rwa-blockchain-guide.md` (Compliance & Identity)
+  - "Build a DeFi lending protocol for RWAs?" → `rwa-blockchain-guide.md` (DeFi Integration)
+  - "Secure my smart contracts?" → `rwa-blockchain-guide.md` (Security Best Practices)
 
 ### Context Selection Strategy
 
