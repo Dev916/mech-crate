@@ -10,16 +10,17 @@ services:
       - /app/vendor
       - /app/node_modules
     environment:
+      - APP_MODE=app
       - APP_ENV=local
       - APP_DEBUG=true
       - OCTANE_SERVER=swoole
       - INERTIA_SSR_ENABLED=false
     ports:
-      - "${{{SERVICE_UPPER}}_PORT:-8000}:8000"
+      - "${{{SERVICE_UPPER}}_PORT:-80}:80"
       - "5173:5173"
       - "13714:13714"
     healthcheck:
-      test: ["CMD", "php", "-v"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -31,10 +32,20 @@ services:
     volumes:
       - ../../apps/{{SERVICE_NAME}}:/app
       - /app/vendor
+    environment:
+      - APP_MODE=queue
+      - APP_ENV=local
+      - QUEUE_WORKERS=1
+      - RUN_SCHEDULER=true
 
   {{SERVICE_NAME}}-scheduler:
+    profiles:
+      - scheduler
     build:
       target: development
     volumes:
       - ../../apps/{{SERVICE_NAME}}:/app
       - /app/vendor
+    environment:
+      - APP_MODE=scheduler
+      - APP_ENV=local
