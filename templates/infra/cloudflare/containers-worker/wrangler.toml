@@ -1,0 +1,68 @@
+# Cloudflare Workers Configuration
+# See: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "{{PROJECT_NAME}}-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-16"
+
+# TODO: Replace with your Cloudflare account ID
+account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+workers_dev = true
+
+[vars]
+# Used to keep a stable container instance name between restarts.
+CONTAINER_INSTANCE_ID = "{{PROJECT_NAME}}-dev"
+
+[[containers]]
+name = "{{PROJECT_NAME}}"
+class_name = "ContainerDO"
+# TODO: Update with your registry image after first build
+image = "registry.cloudflare.com/YOUR_ACCOUNT_ID/{{PROJECT_NAME}}:v0.0.1"
+max_instances = 5
+
+[[durable_objects.bindings]]
+name = "APP_CONTAINER"
+class_name = "ContainerDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ContainerDO"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Preview Environment
+# ─────────────────────────────────────────────────────────────────────────────
+[env.preview]
+workers_dev = true
+
+[[env.preview.containers]]
+name = "{{PROJECT_NAME}}"
+class_name = "ContainerDO"
+image = "registry.cloudflare.com/YOUR_ACCOUNT_ID/{{PROJECT_NAME}}:v0.0.1"
+max_instances = 5
+
+[[env.preview.durable_objects.bindings]]
+name = "APP_CONTAINER"
+class_name = "ContainerDO"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Production Environment
+# ─────────────────────────────────────────────────────────────────────────────
+[env.production]
+workers_dev = false
+# TODO: Update with your domain
+routes = [
+  { pattern = "your-domain.com/*", zone_name = "your-domain.com" }
+]
+
+[[env.production.containers]]
+name = "{{PROJECT_NAME}}"
+class_name = "ContainerDO"
+image = "registry.cloudflare.com/YOUR_ACCOUNT_ID/{{PROJECT_NAME}}:v0.0.1"
+max_instances = 5
+
+[[env.production.durable_objects.bindings]]
+name = "APP_CONTAINER"
+class_name = "ContainerDO"
+
+[env.production.vars]
+CONTAINER_INSTANCE_ID = "{{PROJECT_NAME}}-prod"
