@@ -1,0 +1,112 @@
+{
+  "name": "zola",
+  "title": "Zola Static Site",
+  "description": "Zola static site generator - single binary, blazing fast, no dependencies",
+  "version": "1.0",
+
+  "features": [
+    "Single binary - no dependencies",
+    "Blazing fast builds (sub-second)",
+    "Built-in Sass/SCSS compilation",
+    "Syntax highlighting with Sublime themes",
+    "Shortcodes and internal links",
+    "Table of contents generation",
+    "Live reload development server",
+    "Tera templating engine",
+    "Taxonomies (tags, categories)",
+    "Multilingual support",
+    "RSS/Atom feed generation",
+    "Nginx production serving"
+  ],
+
+  "services": [
+    { "name": "<name>", "description": "Zola static site" }
+  ],
+
+  "options": {
+    "domain": {
+      "flag": "--domain",
+      "default": "{{SERVICE_NAME}}.localhost",
+      "description": "Custom domain for routing"
+    },
+    "port": {
+      "flag": "--port",
+      "default": "1111",
+      "description": "Development server port"
+    },
+    "zola_version": {
+      "flag": "--zola-version",
+      "default": "0.19.2",
+      "description": "Zola version"
+    },
+    "theme": {
+      "flag": "--theme",
+      "default": "none",
+      "description": "Zola theme to use (or 'none' for custom)"
+    }
+  },
+
+  "placeholders": {
+    "SERVICE_NAME": { "source": "name" },
+    "SERVICE_SLUG": { "source": "name", "transform": "kebab" },
+    "SERVICE_UPPER": { "source": "name", "transform": "upper" },
+    "DOMAIN": { "source": "option:domain" },
+    "PORT": { "source": "option:port" },
+    "ZOLA_VERSION": { "source": "option:zola_version" }
+  },
+
+  "directories": [
+    "apps/{{SERVICE_NAME}}/content",
+    "apps/{{SERVICE_NAME}}/content/blog",
+    "apps/{{SERVICE_NAME}}/sass",
+    "apps/{{SERVICE_NAME}}/static",
+    "apps/{{SERVICE_NAME}}/static/images",
+    "apps/{{SERVICE_NAME}}/templates",
+    "apps/{{SERVICE_NAME}}/templates/partials",
+    "apps/{{SERVICE_NAME}}/themes",
+    "docker/compose",
+    "docker/dockerfiles/{{SERVICE_NAME}}",
+    "docker/system/{{SERVICE_NAME}}",
+    "docker/config"
+  ],
+
+  "templates": [
+    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
+    { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+    { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
+    { "from": "docker/system/app", "to": "docker/system/{{SERVICE_NAME}}" },
+    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+  ],
+
+  "post_install": {
+    "renames": [
+      { "from": "apps/{{SERVICE_NAME}}/gitignore.template", "to": "apps/{{SERVICE_NAME}}/.gitignore" }
+    ],
+    "chmod": [
+      { "path": "docker/system/{{SERVICE_NAME}}/usr/local/bin/entrypoint", "mode": "+x" }
+    ],
+    "gitkeep": [
+      "apps/{{SERVICE_NAME}}/static/images",
+      "apps/{{SERVICE_NAME}}/themes"
+    ]
+  },
+
+  "next_steps": [
+    "cd apps/{{SERVICE_NAME}}",
+    "# Install Zola locally: https://www.getzola.org/documentation/getting-started/installation/",
+    "zola serve",
+    "# Or run via Docker",
+    "make dev s={{SERVICE_NAME}}"
+  ],
+
+  "notes": [
+    "Site: http://{{DOMAIN}}",
+    "Dev server: http://localhost:{{PORT}}",
+    "Content in: apps/{{SERVICE_NAME}}/content/",
+    "Templates in: apps/{{SERVICE_NAME}}/templates/",
+    "Styles in: apps/{{SERVICE_NAME}}/sass/",
+    "Run 'zola build' to generate static files"
+  ]
+}

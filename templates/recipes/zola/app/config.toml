@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# {{SERVICE_NAME}} - Zola Configuration
+# https://www.getzola.org/documentation/getting-started/configuration/
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Base URL of the site; required for production builds
+base_url = "https://{{DOMAIN}}"
+
+# Site title used in templates and feeds
+title = "{{SERVICE_NAME}}"
+
+# Site description for SEO and feeds
+description = "A blazing fast static site powered by Zola"
+
+# Default language for the site
+default_language = "en"
+
+# Theme to use (directory name under themes/)
+# theme = "your-theme-name"
+
+# Generate Atom feed
+generate_feeds = true
+feed_filenames = ["atom.xml"]
+
+# Compile Sass/SCSS files in the `sass` directory
+compile_sass = true
+
+# Build search index for static search functionality
+build_search_index = true
+
+# Enable syntax highlighting
+[markdown]
+highlight_code = true
+highlight_theme = "base16-ocean-dark"
+# Render emojis using GitHub shortcodes
+render_emoji = true
+# Enable external links to open in new tab
+external_links_target_blank = true
+# Enable smart punctuation (e.g., quotes, dashes)
+smart_punctuation = true
+
+# Search configuration
+[search]
+include_title = true
+include_description = true
+include_path = true
+include_content = true
+# Truncate content to speed up search
+truncate_content_length = 100
+
+# Link checker (for `zola check`)
+[link_checker]
+skip_prefixes = ["http://localhost", "http://127.0.0.1"]
+skip_anchor_prefixes = ["#"]
+
+# Slugification settings
+[slugify]
+paths = "on"
+taxonomies = "on"
+anchors = "on"
+
+# Taxonomies (tags, categories, etc.)
+taxonomies = [
+    { name = "tags", feed = true },
+    { name = "categories", feed = true },
+]
+
+# Extra variables accessible in templates via `config.extra`
+[extra]
+# Site author
+author = "Your Name"
+# Social links
+github = ""
+twitter = ""
+# Enable dark mode toggle
+dark_mode = true
+# Footer text
+copyright = "© 2024 {{SERVICE_NAME}}. All rights reserved."

@@ -1,0 +1,38 @@
+#!/bin/sh
+set -e
+
+# ─────────────────────────────────────────────────────────────────────────────
+# {{SERVICE_NAME}} - Zola Site Entrypoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+APP_ENV="${APP_ENV:-production}"
+ZOLA_PORT="${ZOLA_PORT:-1111}"
+ZOLA_BASE_URL="${ZOLA_BASE_URL:-localhost}"
+
+echo "Starting {{SERVICE_NAME}} in ${APP_ENV} mode..."
+
+case "$APP_ENV" in
+    development|local)
+        echo "Starting Zola development server..."
+        echo "  - Site: http://localhost:${ZOLA_PORT}"
+        echo "  - Live reload: enabled"
+        
+        cd /site
+        exec zola serve \
+            --interface 0.0.0.0 \
+            --port "${ZOLA_PORT}" \
+            --base-url "${ZOLA_BASE_URL}"
+        ;;
+    
+    build)
+        echo "Building static site..."
+        cd /site
+        zola build
+        echo "Build complete! Output in /site/public/"
+        ;;
+    
+    production|*)
+        echo "Starting Nginx for production..."
+        exec nginx -g "daemon off;"
+        ;;
+esac

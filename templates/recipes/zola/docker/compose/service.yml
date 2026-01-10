@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# {{SERVICE_NAME}} - Production Docker Compose
+# Static site served by Nginx
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Zola Static Site (Production)
+  # ───────────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: ../../apps/{{SERVICE_NAME}}
+      dockerfile: ../../docker/dockerfiles/{{SERVICE_NAME}}/app
+      target: production
+      args:
+        - ZOLA_VERSION=${ZOLA_VERSION:-{{ZOLA_VERSION}}}
+    container_name: {{SERVICE_SLUG}}-app
+    restart: unless-stopped
+    
+    environment:
+      - APP_ENV=production
+    
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=websecure"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=80"
+      # Compression middleware
+      - "traefik.http.middlewares.{{SERVICE_SLUG}}-compress.compress=true"
+      - "traefik.http.routers.{{SERVICE_SLUG}}.middlewares={{SERVICE_SLUG}}-compress"
+    
+    networks:
+      - {{SERVICE_SLUG}}-internal
+      - traefik-public
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  {{SERVICE_SLUG}}-internal:
+    driver: bridge
+  traefik-public:
+    external: true

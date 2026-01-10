@@ -1,0 +1,23 @@
+{# List of all terms in a taxonomy (e.g., all tags) #}
+{% extends "base.html" %}
+
+{% block title %}{{ taxonomy.name | title }} - {{ config.title }}{% endblock %}
+
+{% block content %}
+<section class="taxonomy-list">
+    <div class="container">
+        <h1>{{ taxonomy.name | title }}</h1>
+        
+        <ul class="terms-list">
+            {% for term in terms %}
+            <li>
+                <a href="{{ term.permalink | safe }}">
+                    {{ term.name }}
+                    <span class="term-count">({{ term.pages | length }})</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</section>
+{% endblock %}

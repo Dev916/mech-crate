@@ -1,0 +1,95 @@
+{# Section template - used for listing pages in a section (e.g., blog) #}
+{% extends "base.html" %}
+
+{% block title %}{{ section.title }} - {{ config.title }}{% endblock %}
+
+{% block description %}{{ section.description | default(value=config.description) }}{% endblock %}
+
+{% block content %}
+<section class="section-header">
+    <div class="container">
+        <h1>{{ section.title }}</h1>
+        {% if section.description %}
+        <p class="section-description">{{ section.description }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="section-content">
+    <div class="container">
+        {# Section content (if any markdown in _index.md) #}
+        {% if section.content %}
+        <div class="section-intro prose">
+            {{ section.content | safe }}
+        </div>
+        {% endif %}
+        
+        {# List of pages in this section #}
+        {% if paginator %}
+        <div class="posts-list">
+            {% for page in paginator.pages %}
+            <article class="post-item">
+                <div class="post-meta">
+                    <time datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                    {% if page.taxonomies and page.taxonomies.tags %}
+                    <span class="post-tags">
+                        {% for tag in page.taxonomies.tags %}
+                        <a href="{{ get_taxonomy_url(kind="tags", name=tag) | safe }}" class="tag">{{ tag }}</a>
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                </div>
+                
+                <h2><a href="{{ page.permalink | safe }}">{{ page.title }}</a></h2>
+                
+                {% if page.description %}
+                <p class="post-excerpt">{{ page.description }}</p>
+                {% elif page.summary %}
+                <p class="post-excerpt">{{ page.summary | striptags | truncate(length=200) }}</p>
+                {% endif %}
+                
+                <a href="{{ page.permalink | safe }}" class="read-more">Read more →</a>
+            </article>
+            {% endfor %}
+        </div>
+        
+        {# Pagination #}
+        {% if paginator.number_pagers > 1 %}
+        <nav class="pagination" aria-label="Pagination">
+            {% if paginator.previous %}
+            <a href="{{ paginator.previous | safe }}" class="pagination-prev">← Newer</a>
+            {% else %}
+            <span class="pagination-prev disabled">← Newer</span>
+            {% endif %}
+            
+            <span class="pagination-info">
+                Page {{ paginator.current_index }} of {{ paginator.number_pagers }}
+            </span>
+            
+            {% if paginator.next %}
+            <a href="{{ paginator.next | safe }}" class="pagination-next">Older →</a>
+            {% else %}
+            <span class="pagination-next disabled">Older →</span>
+            {% endif %}
+        </nav>
+        {% endif %}
+        
+        {% else %}
+        {# Non-paginated section #}
+        <div class="posts-list">
+            {% for page in section.pages %}
+            <article class="post-item">
+                <div class="post-meta">
+                    <time datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                </div>
+                <h2><a href="{{ page.permalink | safe }}">{{ page.title }}</a></h2>
+                {% if page.description %}
+                <p class="post-excerpt">{{ page.description }}</p>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

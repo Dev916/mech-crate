@@ -1,0 +1,151 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility Classes
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Prose - Rich text content styling
+// ─────────────────────────────────────────────────────────────────────────────
+
+.prose {
+  h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+  
+  p, ul, ol, blockquote, pre, table {
+    margin-bottom: 1.25em;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+  
+  ul, ol {
+    padding-left: 1.5em;
+    
+    li {
+      margin-bottom: 0.5em;
+    }
+  }
+  
+  a {
+    text-decoration: underline;
+    text-decoration-color: var(--color-primary-muted);
+    text-underline-offset: 2px;
+    
+    &:hover {
+      text-decoration-color: var(--color-primary);
+    }
+  }
+  
+  img {
+    margin: 1.5em 0;
+    border-radius: var(--radius-md);
+  }
+  
+  // Code blocks with syntax highlighting
+  pre {
+    position: relative;
+    
+    // Language badge
+    &[data-lang]::before {
+      content: attr(data-lang);
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: var(--space-1) var(--space-3);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      background-color: var(--color-surface-hover);
+      border-bottom-left-radius: var(--radius-sm);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen Reader Only
+// ─────────────────────────────────────────────────────────────────────────────
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Antialiased Text
+// ─────────────────────────────────────────────────────────────────────────────
+
+.antialiased {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Text Truncation
+// ─────────────────────────────────────────────────────────────────────────────
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Focus States
+// ─────────────────────────────────────────────────────────────────────────────
+
+.focus-ring {
+  &:focus {
+    outline: none;
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Responsive Visibility
+// ─────────────────────────────────────────────────────────────────────────────
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .hidden-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .hidden-desktop {
+    display: none !important;
+  }
+}

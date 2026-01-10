@@ -1,0 +1,109 @@
+{# Page template - used for individual content pages #}
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} - {{ config.title }}{% endblock %}
+
+{% block description %}{{ page.description | default(value=page.summary | striptags | truncate(length=160)) | default(value=config.description) }}{% endblock %}
+
+{% block head %}
+{# Open Graph #}
+<meta property="og:title" content="{{ page.title }}">
+<meta property="og:description" content="{{ page.description | default(value=config.description) }}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="{{ page.permalink | safe }}">
+{% if page.date %}
+<meta property="article:published_time" content="{{ page.date }}">
+{% endif %}
+{% if page.updated %}
+<meta property="article:modified_time" content="{{ page.updated }}">
+{% endif %}
+
+{# Twitter Card #}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page.title }}">
+<meta name="twitter:description" content="{{ page.description | default(value=config.description) }}">
+{% endblock %}
+
+{% block content %}
+<article class="page-article">
+    <header class="page-header">
+        <div class="container">
+            <h1>{{ page.title }}</h1>
+            
+            <div class="page-meta">
+                {% if page.date %}
+                <time datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                {% endif %}
+                
+                {% if page.reading_time %}
+                <span class="reading-time">{{ page.reading_time }} min read</span>
+                {% endif %}
+                
+                {% if page.taxonomies and page.taxonomies.tags %}
+                <span class="page-tags">
+                    {% for tag in page.taxonomies.tags %}
+                    <a href="{{ get_taxonomy_url(kind="tags", name=tag) | safe }}" class="tag">{{ tag }}</a>
+                    {% endfor %}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+    
+    {# Table of Contents #}
+    {% if page.toc %}
+    <aside class="toc-wrapper">
+        <div class="container">
+            <details class="toc" open>
+                <summary>Table of Contents</summary>
+                <nav>
+                    <ul>
+                        {% for h1 in page.toc %}
+                        <li>
+                            <a href="{{ h1.permalink | safe }}">{{ h1.title }}</a>
+                            {% if h1.children %}
+                            <ul>
+                                {% for h2 in h1.children %}
+                                <li><a href="{{ h2.permalink | safe }}">{{ h2.title }}</a></li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </nav>
+            </details>
+        </div>
+    </aside>
+    {% endif %}
+    
+    <section class="page-content">
+        <div class="container prose">
+            {{ page.content | safe }}
+        </div>
+    </section>
+    
+    {# Page navigation (previous/next) #}
+    {% if page.lower or page.higher %}
+    <nav class="page-navigation">
+        <div class="container">
+            {% if page.lower %}
+            <a href="{{ page.lower.permalink | safe }}" class="nav-prev">
+                <span class="nav-label">← Previous</span>
+                <span class="nav-title">{{ page.lower.title }}</span>
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+            
+            {% if page.higher %}
+            <a href="{{ page.higher.permalink | safe }}" class="nav-next">
+                <span class="nav-label">Next →</span>
+                <span class="nav-title">{{ page.higher.title }}</span>
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+</article>
+{% endblock %}

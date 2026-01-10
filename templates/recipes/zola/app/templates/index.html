@@ -1,0 +1,76 @@
+{# Home page template #}
+{% extends "base.html" %}
+
+{% block title %}{{ config.title }} - Home{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="container">
+        <h1 class="hero-title">{{ config.title }}</h1>
+        <p class="hero-subtitle">{{ config.description }}</p>
+        
+        <div class="hero-cta">
+            <a href="{{ get_url(path="@/blog/_index.md") }}" class="btn btn-primary">Read the Blog</a>
+            <a href="{{ config.extra.github | default(value="#") }}" class="btn btn-secondary">View on GitHub</a>
+        </div>
+    </div>
+</section>
+
+<section class="features">
+    <div class="container">
+        <h2 class="section-title">Why Zola?</h2>
+        
+        <div class="feature-grid">
+            <article class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Blazing Fast</h3>
+                <p>Built in Rust, Zola generates your entire site in milliseconds. Average sites build in under a second.</p>
+            </article>
+            
+            <article class="feature-card">
+                <div class="feature-icon">📦</div>
+                <h3>No Dependencies</h3>
+                <p>A single binary with everything included. No npm, no Ruby gems, no Python packages to manage.</p>
+            </article>
+            
+            <article class="feature-card">
+                <div class="feature-icon">🎨</div>
+                <h3>Sass Built-in</h3>
+                <p>Write Sass/SCSS directly. Zola compiles it automatically with no configuration needed.</p>
+            </article>
+            
+            <article class="feature-card">
+                <div class="feature-icon">🔍</div>
+                <h3>Full-Text Search</h3>
+                <p>Generate a search index at build time. Implement static search with zero external services.</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+{# Latest blog posts #}
+{% set blog_section = get_section(path="blog/_index.md") %}
+{% if blog_section.pages | length > 0 %}
+<section class="latest-posts">
+    <div class="container">
+        <h2 class="section-title">Latest Posts</h2>
+        
+        <div class="posts-grid">
+            {% for page in blog_section.pages | slice(end=3) %}
+            <article class="post-card">
+                <h3><a href="{{ page.permalink | safe }}">{{ page.title }}</a></h3>
+                <time datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                {% if page.description %}
+                <p>{{ page.description }}</p>
+                {% elif page.summary %}
+                <p>{{ page.summary | striptags | truncate(length=150) }}</p>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        
+        <a href="{{ get_url(path="@/blog/_index.md") }}" class="view-all">View all posts →</a>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

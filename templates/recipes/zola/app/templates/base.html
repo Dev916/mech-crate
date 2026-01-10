@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="{{ lang | default(value="en") }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block description %}{{ config.description }}{% endblock %}">
+    
+    <title>{% block title %}{{ config.title }}{% endblock %}</title>
+    
+    {# Canonical URL #}
+    <link rel="canonical" href="{{ current_url | default(value=config.base_url) }}">
+    
+    {# Feeds #}
+    {% if config.generate_feeds %}
+    <link rel="alternate" type="application/atom+xml" title="{{ config.title }} - Atom Feed" href="{{ get_url(path="atom.xml") | safe }}">
+    {% endif %}
+    
+    {# Styles - Zola compiles sass/ directory automatically #}
+    <link rel="stylesheet" href="{{ get_url(path="styles.css") | safe }}">
+    
+    {# Favicon #}
+    <link rel="icon" type="image/svg+xml" href="{{ get_url(path="favicon.svg") | safe }}">
+    
+    {% block head %}{% endblock %}
+</head>
+<body class="antialiased">
+    <div class="site-wrapper">
+        {# Header #}
+        {% include "partials/header.html" %}
+        
+        {# Main Content #}
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+        
+        {# Footer #}
+        {% include "partials/footer.html" %}
+    </div>
+    
+    {# Search functionality #}
+    {% if config.build_search_index %}
+    <script src="{{ get_url(path="search.js") | safe }}" defer></script>
+    {% endif %}
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

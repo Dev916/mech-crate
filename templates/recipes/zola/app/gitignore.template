@@ -1,0 +1,19 @@
+# Zola build output
+public/
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Sass cache
+.sass-cache/
+
+# Draft content (optional - remove if you want to track drafts)
+# drafts/

@@ -1,0 +1,19 @@
+{# 404 Error page #}
+{% extends "base.html" %}
+
+{% block title %}Page Not Found - {{ config.title }}{% endblock %}
+
+{% block content %}
+<section class="error-page">
+    <div class="container">
+        <h1 class="error-code">404</h1>
+        <h2 class="error-title">Page Not Found</h2>
+        <p class="error-message">The page you're looking for doesn't exist or has been moved.</p>
+        
+        <div class="error-actions">
+            <a href="{{ config.base_url | safe }}" class="btn btn-primary">Back to Home</a>
+            <a href="{{ get_url(path="@/blog/_index.md") }}" class="btn btn-secondary">Browse Blog</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

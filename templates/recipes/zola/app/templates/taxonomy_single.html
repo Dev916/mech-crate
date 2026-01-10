@@ -1,0 +1,32 @@
+{# List of pages for a single taxonomy term (e.g., all posts with a specific tag) #}
+{% extends "base.html" %}
+
+{% block title %}{{ term.name | title }} - {{ taxonomy.name | title }} - {{ config.title }}{% endblock %}
+
+{% block content %}
+<section class="taxonomy-single">
+    <div class="container">
+        <header class="taxonomy-header">
+            <span class="taxonomy-type">{{ taxonomy.name | title }}</span>
+            <h1>{{ term.name }}</h1>
+            <p class="taxonomy-count">{{ term.pages | length }} post{% if term.pages | length != 1 %}s{% endif %}</p>
+        </header>
+        
+        <div class="posts-list">
+            {% for page in term.pages %}
+            <article class="post-item">
+                <div class="post-meta">
+                    <time datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                </div>
+                
+                <h2><a href="{{ page.permalink | safe }}">{{ page.title }}</a></h2>
+                
+                {% if page.description %}
+                <p class="post-excerpt">{{ page.description }}</p>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}
