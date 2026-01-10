@@ -4,7 +4,6 @@
 include:
   - ./db.yml
   - ./redis.yml
-  - ./traefik.yml
 
 services:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -29,19 +28,19 @@ services:
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
     networks:
-      - traefik
+      - default
+      - devmesh-traefik
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-      traefik:
-        condition: service_healthy
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
-      - "traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web"
-      - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80"
+      - traefik.enable=true
+      - traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)
+      - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web
+      - traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80
+      - traefik.docker.network=devmesh-traefik
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
@@ -50,8 +49,6 @@ services:
       retries: 3
       start_period: 15s
 
-
 networks:
-  traefik:
+  devmesh-traefik:
     external: true
-    name: traefik
