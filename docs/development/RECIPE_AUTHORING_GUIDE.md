@@ -13,7 +13,8 @@ A comprehensive guide for creating MechCrate recipes—reusable application temp
 7. [Internal Reverse Proxy](#internal-reverse-proxy)
 8. [Environment Variables](#environment-variables)
 9. [Compose Files](#compose-files)
-10. [Best Practices](#best-practices)
+10. [Devmesh-Traefik Integration](#devmesh-traefik-integration)
+11. [Best Practices](#best-practices)
 
 ---
 
@@ -840,10 +841,50 @@ autostart=%(ENV_RUN_SCHEDULER)s
 
 ## Compose Files
 
+### Network Architecture
+
+MechCrate uses a two-network pattern for services:
+
+1. **Default network** - Docker Compose's implicit network for inter-service communication. All services in a compose file (app, db, redis, workers) can talk to each other on this network without explicit configuration.
+
+2. **`devmesh-traefik` network** - External shared network for Traefik routing. Only edge-facing services (the main app) join this network. Traefik runs globally on the workstation and routes traffic based on hostname labels.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    devmesh-traefik network                      │
+│  (global, external - shared by all projects)                    │
+│                                                                 │
+│    ┌─────────┐                                                  │
+│    │ Traefik │ ←── Host(`myapp.localhost`)                      │
+│    └────┬────┘                                                  │
+│         │                                                       │
+│    ┌────▼────┐                                                  │
+│    │  myapp  │ ←── Only this container needs devmesh-traefik    │
+│    └────┬────┘                                                  │
+└─────────┼───────────────────────────────────────────────────────┘
+          │
+┌─────────┼───────────────────────────────────────────────────────┐
+│         │           default network                             │
+│  (implicit, per-project - created by compose)                   │
+│         │                                                       │
+│    ┌────▼────┐    ┌─────────┐    ┌─────────┐                   │
+│    │  myapp  │────│   db    │────│  redis  │                   │
+│    └─────────┘    └─────────┘    └─────────┘                   │
+│         │                                                       │
+│    ┌────▼────────┐    ┌────────────────┐                       │
+│    │ myapp-worker│────│ myapp-scheduler│                       │
+│    └─────────────┘    └────────────────┘                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ### Production (`service.yml`)
 
 ```yaml
 # {{SERVICE_NAME}} - Production Stack
+
+include:
+  - ./db.yml
+  - ./redis.yml
 
 services:
   {{SERVICE_NAME}}:
@@ -853,26 +894,35 @@ services:
       target: production
     container_name: {{SERVICE_NAME}}
     env_file:
-      - ../config/.env.{{SERVICE_NAME}}
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_MODE=app
       - APP_ENV=production
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
     networks:
-      - {{SERVICE_NAME}}-internal
-      - traefik
+      - default
+      - devmesh-traefik
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
-      - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80"
+      - traefik.enable=true
+      - traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)
+      - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web
+      - traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80
+      - traefik.docker.network=devmesh-traefik
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
-      interval: 30s
-      timeout: 5s
+      interval: 10s
+      timeout: 3s
       retries: 3
-      start_period: 30s
+      start_period: 15s
 
   {{SERVICE_NAME}}-worker:
     build:
@@ -881,24 +931,22 @@ services:
       target: production
     container_name: {{SERVICE_NAME}}-worker
     env_file:
-      - ../config/.env.{{SERVICE_NAME}}
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_MODE=worker
       - APP_ENV=production
       - WORKER_COUNT=2
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
-    networks:
-      - {{SERVICE_NAME}}-internal
     depends_on:
       {{SERVICE_NAME}}:
         condition: service_healthy
     restart: unless-stopped
 
 networks:
-  {{SERVICE_NAME}}-internal:
-    driver: bridge
-  traefik:
+  devmesh-traefik:
     external: true
 ```
 
@@ -906,6 +954,7 @@ networks:
 
 ```yaml
 # {{SERVICE_NAME}} - Development Overrides
+# Traefik routes to this service via devmesh-traefik network (no direct port exposure needed)
 
 services:
   {{SERVICE_NAME}}:
@@ -919,8 +968,8 @@ services:
       - APP_ENV=local
       - APP_DEBUG=true
     ports:
-      - "${{{SERVICE_UPPER}}_PORT:-80}:80"
-      - "5173:5173"
+      - "5173:5173"   # Vite HMR
+      - "13714:13714" # Laravel Herd
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
       interval: 30s
@@ -939,15 +988,142 @@ services:
       - APP_ENV=local
 ```
 
+### Shared Services (`db.yml`, `redis.yml`)
+
+Shared services use the implicit default network—no explicit network configuration needed:
+
+```yaml
+# db.yml - Database service
+# Uses implicit default network for inter-service communication
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: db
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  db_data:
+```
+
 ### Usage
 
 ```bash
-# Development
+# Start devmesh-traefik globally first
+dmt up
+
+# Development (access via http://myapp.localhost)
 docker compose -f docker/compose/myapp.yml -f docker/compose/myapp.dev.yml up
 
 # Production
 docker compose -f docker/compose/myapp.yml up -d
 ```
+
+---
+
+## Devmesh-Traefik Integration
+
+MechCrate services integrate with [Devmesh-Traefik](../../stack/README.md), a workstation-wide Traefik router that enables running multiple projects simultaneously with hostname-based routing.
+
+### Prerequisites
+
+Before running any MechCrate service, ensure the global traefik is running:
+
+```bash
+# Install and start devmesh-traefik
+dmt install
+dmt up
+```
+
+### How It Works
+
+1. **Global Traefik** runs on the workstation, binding ports 80 and 443
+2. **External Network** `devmesh-traefik` is created once and shared by all projects
+3. **Labels** on containers tell Traefik how to route traffic based on hostname
+4. **No Port Conflicts** - all services accessed via hostname, not port numbers
+
+### Required Labels
+
+Every edge-facing service needs these Traefik labels:
+
+```yaml
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)
+  - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web
+  - traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80
+  - traefik.docker.network=devmesh-traefik
+```
+
+| Label | Purpose |
+|-------|---------|
+| `traefik.enable=true` | Enable Traefik routing for this container |
+| `traefik.http.routers.<name>.rule` | Hostname routing rule |
+| `traefik.http.routers.<name>.entrypoints` | Which ports to listen on (`web`=80, `websecure`=443) |
+| `traefik.http.services.<name>.loadbalancer.server.port` | Container's internal port |
+| `traefik.docker.network` | **Required** - tells Traefik which network to use |
+
+### Network Configuration
+
+Only the main application service needs the `devmesh-traefik` network:
+
+```yaml
+services:
+  myapp:
+    networks:
+      - default           # For talking to db, redis, workers
+      - devmesh-traefik   # For Traefik routing
+
+  myapp-worker:
+    # No devmesh-traefik needed - workers don't receive external traffic
+    # Uses implicit default network
+
+networks:
+  devmesh-traefik:
+    external: true
+```
+
+### Accessing Services
+
+With devmesh-traefik running, access services by hostname:
+
+| Service | URL |
+|---------|-----|
+| Main app | `http://myapp.localhost` |
+| API service | `http://api.localhost` |
+| Admin panel | `http://admin.localhost` |
+| Traefik dashboard | `http://localhost:<dashboard-port>` (run `dmt inspect`) |
+
+### HTTPS Support
+
+For HTTPS, add certificates to `~/.devmesh-traefik/letsencrypt/` and update the entrypoint:
+
+```yaml
+labels:
+  - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=websecure
+  - traefik.http.routers.{{SERVICE_NAME}}.tls=true
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Service not reachable | Check `dmt status` - is Traefik running? |
+| 404 errors | Verify `traefik.docker.network=devmesh-traefik` label is set |
+| Container not visible to Traefik | Ensure container is on `devmesh-traefik` network |
+| Port conflicts | Remove direct port mappings - let Traefik handle routing |
 
 ---
 
@@ -1004,6 +1180,15 @@ docker compose -f docker/compose/myapp.yml up -d
 - Include healthchecks for orchestration
 - Use service dependencies appropriately
 
+### 8. Networking
+
+- Use implicit default network for inter-service communication (db, redis, workers)
+- Only edge-facing services join `devmesh-traefik` network
+- Never define per-service internal networks (Docker handles this automatically)
+- Always include `traefik.docker.network=devmesh-traefik` label
+- Don't expose port 80 directly in dev—let Traefik handle routing
+- Keep HMR/debug ports (5173, 13714) exposed for development tooling
+
 ---
 
 ## Checklist for New Recipes
@@ -1017,12 +1202,19 @@ docker compose -f docker/compose/myapp.yml up -d
   - [ ] `etc/supervisor/conf.d/stack.prod.conf`
   - [ ] `etc/nginx/` or `etc/haproxy/` configs
   - [ ] `usr/local/bin/entrypoint`
-- [ ] `docker/compose/service.yml` for production
-- [ ] `docker/compose/service.dev.yml` for development
+- [ ] `docker/compose/service.yml` for production:
+  - [ ] Uses `include:` for db.yml, redis.yml
+  - [ ] Edge service has `networks: [default, devmesh-traefik]`
+  - [ ] Traefik labels with `traefik.docker.network=devmesh-traefik`
+  - [ ] Workers/schedulers use implicit default network only
+  - [ ] No per-service internal networks defined
+- [ ] `docker/compose/service.dev.yml` for development:
+  - [ ] No direct port 80 mapping (Traefik handles routing)
+  - [ ] HMR ports exposed (5173, 13714 etc.)
 - [ ] `config/env.service` environment template
 - [ ] `README.md` with setup instructions
 - [ ] Health check endpoint in application
-- [ ] Test with `mx add <name> --recipe=<recipe>`
+- [ ] Test with `dmt up && mx add <name> --recipe=<recipe>`
 
 ---
 
