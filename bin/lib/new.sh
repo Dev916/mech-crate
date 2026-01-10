@@ -108,10 +108,13 @@ create_project() {
     shopt -u dotglob
     chmod +x scripts/*.sh 2>/dev/null || true
     
-    # Docker config templates (rename env.* to .env.*)
+    # Docker config templates (rename env.* to .env.* and strip .template suffix)
     for config in "$TEMPLATES_DIR/docker/config/"*; do
         if [[ -f "$config" ]]; then
             local filename=$(basename "$config")
+            # Strip .template suffix if present
+            filename="${filename%.template}"
+            # Rename env.* to .env.*
             local target_name="${filename/env./.env.}"
             cp "$config" "docker/.config/$target_name"
         fi
