@@ -1,4 +1,5 @@
 # Traefik reverse proxy service
+# Global entry point for all HTTP traffic
 
 services:
   traefik:
@@ -9,6 +10,7 @@ services:
       - --api.insecure=true
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=traefik
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
     ports:
@@ -17,12 +19,16 @@ services:
       - "8080:8080"  # Dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ../system/traefik/etc/traefik:/etc/traefik:ro
     networks:
-      - default
+      - traefik
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 networks:
-  default:
-    name: mech-network
-    external: true
+  traefik:
+    name: traefik
+    driver: bridge
