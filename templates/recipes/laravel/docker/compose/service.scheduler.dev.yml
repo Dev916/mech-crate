@@ -1,0 +1,10 @@
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Task Scheduler (Development)
+  # ─────────────────────────────────────────────────────────────────────────────
+  {{SERVICE_NAME}}-scheduler:
+    environment:
+      - APP_ENV=development
+    volumes:
+      - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
