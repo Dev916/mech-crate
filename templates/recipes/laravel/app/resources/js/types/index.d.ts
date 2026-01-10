@@ -1,37 +1,39 @@
+import { InertiaLinkProps } from '@inertiajs/vue3';
+import type { LucideIcon } from 'lucide-vue-next';
+
+export interface Auth {
+    user: User;
+}
+
+export interface BreadcrumbItem {
+    title: string;
+    href: string;
+}
+
+export interface NavItem {
+    title: string;
+    href: NonNullable<InertiaLinkProps['href']>;
+    icon?: LucideIcon;
+    isActive?: boolean;
+}
+
+export type AppPageProps<
+    T extends Record<string, unknown> = Record<string, unknown>,
+> = T & {
+    name: string;
+    quote: { message: string; author: string };
+    auth: Auth;
+    sidebarOpen: boolean;
+};
+
 export interface User {
     id: number;
     name: string;
     email: string;
-    email_verified_at?: string;
+    avatar?: string;
+    email_verified_at: string | null;
+    created_at: string;
+    updated_at: string;
 }
 
-export type PageProps<
-    T extends Record<string, unknown> = Record<string, unknown>
-> = T & {
-    auth: {
-        user: User | null;
-    };
-    flash: {
-        success?: string;
-        error?: string;
-    };
-    ziggy: {
-        location: string;
-        [key: string]: unknown;
-    };
-};
-
-declare module 'vue' {
-    interface ComponentCustomProperties {
-        route: typeof import('ziggy-js').route;
-    }
-}
-
-declare module '@inertiajs/vue3' {
-    export function usePage<T = PageProps>(): {
-        props: T;
-        url: string;
-        component: string;
-        version: string | null;
-    };
-}
+export type BreadcrumbItemType = BreadcrumbItem;
