@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
 
 class HealthController extends Controller
 {
@@ -21,6 +22,8 @@ class HealthController extends Controller
                 'app' => true,
                 'database' => $this->checkDatabase(),
                 'cache' => $this->checkCache(),
+                'redis' => $this->checkRedis(),
+                'version' => env('APP_VERSION'),
             ],
         ];
 
@@ -50,6 +53,19 @@ class HealthController extends Controller
         try {
             Cache::put('health_check', true, 10);
             return Cache::get('health_check') === true;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check Redis connectivity.
+     */
+    private function checkRedis(): bool
+    {
+        try {
+            Redis::ping();
+            return true;
         } catch (\Exception $e) {
             return false;
         }
