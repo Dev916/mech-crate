@@ -1022,7 +1022,7 @@ docker compose -f docker/compose/myapp.yml up -d
 - [ ] `config/env.service` environment template
 - [ ] `README.md` with setup instructions
 - [ ] Health check endpoint in application
-- [ ] Test with `mx add [recipe] [name]`
+- [ ] Test with `mx add <name> --recipe=<recipe>`
 
 ---
 
