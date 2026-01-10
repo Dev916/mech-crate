@@ -183,6 +183,17 @@ _process_template_file() {
     
     mkdir -p "$(dirname "$dest")"
     
+    # Check if file is binary (skip sed processing for binary files)
+    local file_type
+    file_type=$(file -b "$src" 2>/dev/null || echo "text")
+    
+    if [[ "$file_type" =~ (image|binary|data|SQLite|executable) ]] || \
+       [[ "$src" =~ \.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|sqlite|db)$ ]]; then
+        # Binary file: copy directly without processing
+        cp "$src" "$dest"
+        return 0
+    fi
+    
     local sed_expr=""
     while [[ $# -gt 0 ]]; do
         local key="${1%%=*}"
@@ -192,7 +203,9 @@ _process_template_file() {
         shift
     done
     
-    sed "$sed_expr" "$src" > "$dest"
+    # Process text file with sed (ensure UTF-8 locale for macOS compatibility)
+    LC_ALL=en_US.UTF-8 sed "$sed_expr" "$src" > "$dest" 2>/dev/null || \
+        LC_ALL=C sed "$sed_expr" "$src" > "$dest"
 }
 
 _process_template_dir() {
@@ -302,6 +315,8 @@ install_recipe() {
     local title=$(_json_get "$recipe_json" ".title")
     local domain_val
     domain_val=$(_kv_get "$PLACEHOLDERS_STORE" "DOMAIN" || echo "$service_name.localhost")
+    # Interpolate any placeholders in domain value
+    domain_val=$(_interpolate "$domain_val" "${initial_args[@]}")
     info "Installing recipe: ${BOLD}$title${NC} as ${BOLD}$service_name${NC}"
     info "Domain: ${CYAN}${domain_val}${NC}"
     
@@ -398,12 +413,16 @@ install_recipe() {
     if _has_jq; then
         while read -r note; do
             [[ -z "$note" ]] && continue
+            # Interpolate placeholders in notes
+            note=$(_interpolate "$note" "${placeholder_args[@]}")
             info "$note"
         done < <(jq -r '.notes[]?' "$recipe_json" 2>/dev/null)
     fi
     
     local final_domain
     final_domain=$(_kv_get "$PLACEHOLDERS_STORE" "DOMAIN" || echo "$service_name.localhost")
+    # Interpolate any placeholders in domain value
+    final_domain=$(_interpolate "$final_domain" "${placeholder_args[@]}")
     info "Access at: ${CYAN}http://${final_domain}${NC}"
 }
 
