@@ -6,8 +6,7 @@ set -e
 
 # Check if we have previous run context
 if ! ls tmp/up/*.txt 1>/dev/null 2>&1; then
-    echo "No previous runs found. Doing normal down..."
-    docker compose down -t0
+    echo "No previous runs found. Nothing to stop."
     exit 0
 fi
 
