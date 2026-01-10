@@ -1,4 +1,5 @@
 # Redis service - Baseline (Production)
+# Uses implicit default network for inter-service communication
 
 services:
   redis:
@@ -16,14 +17,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - default
     restart: unless-stopped
 
 volumes:
   redis_data:
-
-networks:
-  default:
-    name: mech-network
-    external: true
