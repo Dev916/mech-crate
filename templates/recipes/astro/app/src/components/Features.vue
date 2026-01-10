@@ -10,7 +10,14 @@ import {
   Shield 
 } from 'lucide-vue-next';
 
-const features = ref([
+type Feature = {
+  icon: typeof Zap;
+  title: string;
+  description: string;
+  color: string;
+};
+
+const features = ref<Feature[]>([
   {
     icon: Zap,
     title: 'Lightning Fast',
