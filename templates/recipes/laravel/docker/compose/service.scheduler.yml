@@ -1,0 +1,32 @@
+include:
+  - ./{{SERVICE_NAME}}.yml
+  
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Task Scheduler
+  # ─────────────────────────────────────────────────────────────────────────────
+  {{SERVICE_NAME}}-scheduler:
+    build:
+      context: ../..
+      dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
+      target: production
+    container_name: {{SERVICE_NAME}}-scheduler
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.{{SERVICE_NAME}}
+    environment:
+      - APP_MODE=scheduler
+      - APP_ENV=production
+    volumes:
+      - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
+    depends_on:
+      {{SERVICE_NAME}}:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "scheduler-runner"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
