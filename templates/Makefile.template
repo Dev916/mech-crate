@@ -7,7 +7,8 @@ SHELL := /bin/bash
 ROOT_DIR := $(abspath $(CURDIR))
 PROJECT_NAME ?= $(notdir $(ROOT_DIR))
 APP_DIR := $(ROOT_DIR)/apps/app
-MAKEFILES := $(wildcard make/*.mk)
+# MK_MODULES (not MAKEFILES - that's reserved in GNU Make)
+MK_MODULES := $(wildcard make/*.mk)
 
 # Key generation utilities
 BYTES ?= 32
@@ -23,8 +24,8 @@ make-key: ## Generate a secret key (BYTES=32, FORMAT=hex|base64|uuid)
 	esac
 
 # Include all make modules
-ifneq ($(strip $(MAKEFILES)),)
-include $(MAKEFILES)
+ifneq ($(strip $(MK_MODULES)),)
+include $(MK_MODULES)
 endif
 
 # ─────────────────────────────────────────────────────────────────────────────
