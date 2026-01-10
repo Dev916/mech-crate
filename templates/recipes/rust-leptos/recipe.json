@@ -35,7 +35,7 @@
     },
     "rust": {
       "flag": "--rust",
-      "default": "1.83",
+      "default": "1.91",
       "description": "Rust version"
     }
   },
