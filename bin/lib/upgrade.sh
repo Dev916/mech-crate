@@ -3,69 +3,141 @@
 # MechCrate Upgrade Command
 # Update project with latest scaffolding
 #
+# Architecture: Discovery-based upgrade with declarative rules
+# - Automatically discovers template files (no hardcoded lists)
+# - Categorizes files by upgrade behavior
+# - Follows FSM pattern for state tracking
+#
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Upgrade - Update project with latest scaffolding
+# Upgrade Categories (declarative rules)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# TOOLING: Prompt for updates when file differs from template
+#   - make/*.mk
+#   - scripts/*.sh, scripts/*.mjs
+#   - Makefile
+#
+# CONFIG: Add if missing, never update (user-customized)
+#   - docker/.config/*
+#   - docker/compose/*
+#   - docker/system/*
+#   - docker/dockerfiles/*
+#
+# CONDITIONAL: Only process if feature is enabled
+#   - make/cloudflare.mk → requires infra/cloudflare/
+#   - scripts/cf-*.sh → requires infra/cloudflare/
+#   - infra/cloudflare/* → requires infra/cloudflare/
+#
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pure Functions: File categorization (no side effects)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Known tooling files that should be prompted for updates
-TOOLING_FILES=(
-    "Makefile:Makefile.template"
-    "scripts/.bashrc:scripts/.bashrc"
-    "scripts/build.sh:scripts/build.sh"
-    "scripts/dev.sh:scripts/dev.sh"
-    "scripts/doctor.sh:scripts/doctor.sh"
-    "scripts/down.sh:scripts/down.sh"
-    "scripts/exec.sh:scripts/exec.sh"
-    "scripts/help.sh:scripts/help.sh"
-    "scripts/init.sh:scripts/init.sh"
-    "scripts/logs.sh:scripts/logs.sh"
-    "scripts/ps.sh:scripts/ps.sh"
-    "scripts/restart.sh:scripts/restart.sh"
-    "scripts/run.sh:scripts/run.sh"
-    "scripts/sh.sh:scripts/sh.sh"
-    "scripts/start.sh:scripts/start.sh"
-    "scripts/stop.sh:scripts/stop.sh"
-    "scripts/test.sh:scripts/test.sh"
-    "scripts/up.sh:scripts/up.sh"
-    "scripts/cf-setup.sh:scripts/cf-setup.sh"
-    "scripts/cf-init-app.sh:scripts/cf-init-app.sh"
-    "scripts/simple-release.sh:scripts/simple-release.sh"
-    "scripts/release-sync-versions.mjs:scripts/release-sync-versions.mjs"
-    "scripts/app-version.mjs:scripts/app-version.mjs"
-)
+# Categorize a file path into upgrade behavior
+# Returns: tooling | config | conditional | skip
+categorize_file() {
+    local rel_path="$1"
+    
+    case "$rel_path" in
+        # Tooling files - prompt for updates
+        make/*.mk)
+            # Cloudflare module is conditional
+            if [[ "$rel_path" == "make/cloudflare.mk" ]]; then
+                echo "conditional:cloudflare"
+            else
+                echo "tooling"
+            fi
+            ;;
+        scripts/*.sh|scripts/*.mjs)
+            # Cloudflare scripts are conditional
+            if [[ "$rel_path" == scripts/cf-*.sh ]]; then
+                echo "conditional:cloudflare"
+            else
+                echo "tooling"
+            fi
+            ;;
+        Makefile.template)
+            echo "tooling:makefile"
+            ;;
+        
+        # Config files - add only, never update
+        docker/compose/*)
+            echo "config"
+            ;;
+        docker/config/*)
+            echo "config:env"
+            ;;
+        docker/system/*)
+            echo "config"
+            ;;
+        docker/dockerfiles/*)
+            echo "config"
+            ;;
+        
+        # Infrastructure templates - conditional
+        infra/cloudflare/*)
+            echo "conditional:cloudflare"
+            ;;
+        
+        # Skip recipes and other non-scaffold files
+        recipes/*)
+            echo "skip"
+            ;;
+        *)
+            echo "skip"
+            ;;
+    esac
+}
 
-# Make modules - always check for updates
-MAKE_MODULES=(
-    "make/build.mk"
-    "make/cloudflare.mk"
-    "make/common.mk"
-    "make/dev.mk"
-    "make/down.mk"
-    "make/logs.mk"
-    "make/release.mk"
-    "make/restart.mk"
-    "make/run.mk"
-    "make/sh.mk"
-    "make/start.mk"
-    "make/stop.mk"
-    "make/up.mk"
-)
+# Check if a conditional feature is enabled
+# Pure: only checks filesystem state
+is_feature_enabled() {
+    local feature="$1"
+    
+    case "$feature" in
+        cloudflare)
+            [[ -d "infra/cloudflare" ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Map template path to project path
+# Handles special cases like Makefile.template → Makefile
+template_to_project_path() {
+    local template_rel="$1"
+    
+    case "$template_rel" in
+        Makefile.template)
+            echo "Makefile"
+            ;;
+        docker/config/*)
+            # env.app → .env.app
+            local filename
+            filename=$(basename "$template_rel")
+            local target_name="${filename/env./.env.}"
+            echo "docker/.config/$target_name"
+            ;;
+        *)
+            echo "$template_rel"
+            ;;
+    esac
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Effect Functions: File operations (side effects isolated here)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Check if file differs from template
 file_differs() {
     local project_file="$1"
     local template_file="$2"
     
-    if [[ ! -f "$project_file" ]]; then
-        return 1  # File doesn't exist, so doesn't "differ"
-    fi
-    
-    if [[ ! -f "$template_file" ]]; then
-        return 1  # Template doesn't exist
-    fi
-    
-    ! diff -q "$project_file" "$template_file" &>/dev/null
+    [[ -f "$project_file" ]] && [[ -f "$template_file" ]] && \
+        ! diff -q "$project_file" "$template_file" &>/dev/null
 }
 
 # Show diff between files
@@ -77,7 +149,6 @@ show_diff() {
     echo -e "${BOLD}Changes in $project_file:${NC}"
     echo -e "${CYAN}─────────────────────────────────────────────────────${NC}"
     
-    # Use colordiff if available, otherwise regular diff
     if command -v colordiff &>/dev/null; then
         diff -u "$project_file" "$template_file" | colordiff | head -50
     else
@@ -87,11 +158,146 @@ show_diff() {
     echo ""
 }
 
-# Upgrade project
+# Copy file with appropriate permissions
+copy_file() {
+    local src="$1"
+    local dst="$2"
+    local dry_run="${3:-false}"
+    
+    if [[ "$dry_run" == "true" ]]; then
+        info "[DRY RUN] Would copy: $src → $dst"
+        return 0
+    fi
+    
+    # Ensure parent directory exists
+    local parent_dir
+    parent_dir=$(dirname "$dst")
+    [[ -d "$parent_dir" ]] || mkdir -p "$parent_dir"
+    
+    cp "$src" "$dst"
+    
+    # Make shell scripts executable
+    if [[ "$dst" == *.sh ]]; then
+        chmod +x "$dst"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Discovery: Walk templates and build upgrade plan
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Discover all template files and their upgrade actions
+# Output format: action|project_path|template_path
+discover_upgrades() {
+    local templates_dir="$1"
+    
+    # Walk template directories (excluding recipes)
+    while IFS= read -r -d '' template_file; do
+        # Get path relative to templates dir
+        local rel_path="${template_file#"$templates_dir"/}"
+        
+        # Skip directories
+        [[ -d "$template_file" ]] && continue
+        
+        # Categorize the file
+        local category
+        category=$(categorize_file "$rel_path")
+        
+        # Skip files marked for skipping
+        [[ "$category" == "skip" ]] && continue
+        
+        # Check conditional features
+        if [[ "$category" == conditional:* ]]; then
+            local feature="${category#conditional:}"
+            if ! is_feature_enabled "$feature"; then
+                continue
+            fi
+            # Treat enabled conditional as tooling
+            category="tooling"
+        fi
+        
+        # Map to project path
+        local project_path
+        project_path=$(template_to_project_path "$rel_path")
+        
+        # Determine action based on category and file state
+        local action
+        if [[ ! -f "$project_path" ]]; then
+            action="add"
+        elif [[ "$category" == "tooling" || "$category" == "tooling:makefile" ]]; then
+            if file_differs "$project_path" "$template_file"; then
+                action="update"
+            else
+                action="current"
+            fi
+        else
+            # Config files: never update
+            action="skip"
+        fi
+        
+        # Output the upgrade entry
+        echo "${action}|${project_path}|${template_file}"
+        
+    done < <(find "$templates_dir" \
+        -type f \
+        ! -path "*/recipes/*" \
+        -print0 2>/dev/null)
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FSM: Upgrade state machine
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# States: Init → Discovering → Processing → Prompting → Complete
+# Events: START, DISCOVERED, PROCESSED, PROMPTED, DONE
+#
+
+UPGRADE_STATE="Init"
+
+transition() {
+    local event="$1"
+    local to="$2"
+    local from="$UPGRADE_STATE"
+    
+    # Structured log for observability (debug level)
+    [[ "${DEBUG:-}" == "true" ]] && \
+        echo -e "${MAGENTA}[FSM]${NC} $from --($event)--> $to" >&2
+    
+    UPGRADE_STATE="$to"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolve templates directory
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Get templates directory, resolving from script location if not injected
+get_templates_dir() {
+    # If TEMPLATES_DIR is set (by parent mx script), use it
+    if [[ -n "${TEMPLATES_DIR:-}" ]]; then
+        echo "$TEMPLATES_DIR"
+        return 0
+    fi
+    
+    # Otherwise, resolve from this script's location
+    local source="${BASH_SOURCE[0]}"
+    local script_dir
+    script_dir="$(cd -P "$(dirname "$source")" && pwd)"
+    local mech_crate_root
+    mech_crate_root="$(dirname "$(dirname "$script_dir")")"
+    
+    echo "$mech_crate_root/templates"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main Upgrade Workflow
+# ─────────────────────────────────────────────────────────────────────────────
+
 upgrade_project() {
     local show_diff_flag=false
     local auto_yes=false
     local dry_run=false
+    local templates_dir
+    templates_dir=$(get_templates_dir)
     
     # Parse options
     while [[ $# -gt 0 ]]; do
@@ -108,23 +314,44 @@ upgrade_project() {
                 dry_run=true
                 shift
                 ;;
+            --debug)
+                DEBUG=true
+                shift
+                ;;
             --help|-h)
-                echo -e "${BOLD}mx upgrade${NC} - Update project with latest MechCrate scaffolding"
-                echo ""
-                echo -e "${BOLD}USAGE:${NC}"
-                echo "    mx upgrade [options]"
-                echo ""
-                echo -e "${BOLD}OPTIONS:${NC}"
-                echo "    --diff, -d      Show diff for each changed file"
-                echo "    --yes, -y       Auto-accept all updates (non-interactive)"
-                echo "    --dry-run, -n   Show what would be done without making changes"
-                echo "    --help, -h      Show this help"
-                echo ""
-                echo -e "${BOLD}BEHAVIOR:${NC}"
-                echo "    • Missing files are added automatically"
-                echo "    • Tooling files (make/*.mk, scripts/*.sh) prompt for update"
-                echo "    • User config files are never touched"
-                echo ""
+                cat << 'EOF'
+mx upgrade - Update project with latest MechCrate scaffolding
+
+USAGE:
+    mx upgrade [options]
+
+OPTIONS:
+    --diff, -d      Show diff for each changed file
+    --yes, -y       Auto-accept all updates (non-interactive)
+    --dry-run, -n   Show what would be done without making changes
+    --debug         Show FSM state transitions
+    --help, -h      Show this help
+
+BEHAVIOR:
+    Discovery-based upgrade that automatically finds all template files:
+    
+    • TOOLING (make/*.mk, scripts/*.sh, Makefile)
+      → Missing files are added automatically
+      → Changed files prompt for update
+    
+    • CONFIG (docker/compose/*, docker/.config/*)
+      → Missing files are added automatically
+      → Existing files are never modified (user-customized)
+    
+    • CONDITIONAL (cloudflare files)
+      → Only processed if feature is enabled (infra/cloudflare/ exists)
+
+EXAMPLES:
+    mx upgrade              # Interactive upgrade
+    mx upgrade --diff       # Show diffs before prompting
+    mx upgrade --yes        # Auto-accept all updates
+    mx upgrade --dry-run    # Preview changes only
+EOF
                 return 0
                 ;;
             *)
@@ -132,6 +359,12 @@ upgrade_project() {
                 ;;
         esac
     done
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # FSM: Init → Discovering
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    transition "START" "Discovering"
     
     if ! is_mech_crate_project; then
         error "Not in a MechCrate project. Run 'mx new <name>' first."
@@ -141,17 +374,14 @@ upgrade_project() {
     info "Upgrading MechCrate project..."
     echo ""
     
-    local added_count=0
-    local updated_count=0
-    local skipped_count=0
-    local pending_updates=()
-    
     # ─────────────────────────────────────────────────────────────────────────
-    # Phase 1: Check for missing directories
+    # FSM: Discovering → Processing
     # ─────────────────────────────────────────────────────────────────────────
     
+    transition "DISCOVERED" "Processing"
+    
+    # Ensure required directories exist
     local required_dirs=("make" "scripts" "docker/.config" "docker/compose" "docker/system" "docker/dockerfiles" "tmp/up")
-    
     for dir in "${required_dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
             if [[ "$dry_run" == "true" ]]; then
@@ -163,188 +393,49 @@ upgrade_project() {
         fi
     done
     
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 2: Add missing make modules
-    # ─────────────────────────────────────────────────────────────────────────
+    # Discover all upgrades
+    local -a update_files=()
+    local added_count=0
+    local updated_count=0
+    local skipped_count=0
     
     echo ""
-    echo -e "${BOLD}Checking make modules...${NC}"
+    echo -e "${BOLD}Scanning templates...${NC}"
     
-    for mk_file in "${MAKE_MODULES[@]}"; do
-        local template_path="$TEMPLATES_DIR/$mk_file"
-        local project_path="$mk_file"
+    while IFS='|' read -r action project_path template_path; do
+        [[ -z "$action" ]] && continue
         
-        if [[ ! -f "$template_path" ]]; then
-            continue
-        fi
+        case "$action" in
+            add)
+                # Add missing file
+                if [[ "$dry_run" == "true" ]]; then
+                    info "[DRY RUN] Would add: $project_path"
+                else
+                    copy_file "$template_path" "$project_path" "$dry_run"
+                    success "Added: $project_path"
+                fi
+                ((added_count++))
+                ;;
+            update)
+                # Queue for update prompt
+                update_files+=("${project_path}|${template_path}")
+                ;;
+            current)
+                # Already up to date
+                ;;
+            skip)
+                # Explicitly skipped (config file exists)
+                ;;
+        esac
+    done < <(discover_upgrades "$templates_dir")
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # FSM: Processing → Prompting (if updates pending)
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    if [[ ${#update_files[@]} -gt 0 ]]; then
+        transition "PROCESSED" "Prompting"
         
-        # Special handling for cloudflare.mk - only add if infra/cloudflare exists
-        if [[ "$mk_file" == "make/cloudflare.mk" && ! -d "infra/cloudflare" ]]; then
-            continue
-        fi
-        
-        if [[ ! -f "$project_path" ]]; then
-            # File is missing - add it
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would add: $project_path"
-            else
-                cp "$template_path" "$project_path"
-                success "Added: $project_path"
-            fi
-            ((added_count++))
-        elif file_differs "$project_path" "$template_path"; then
-            # File exists but differs - queue for update prompt
-            pending_updates+=("$project_path:$template_path")
-        fi
-    done
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 3: Add missing scripts
-    # ─────────────────────────────────────────────────────────────────────────
-    
-    echo ""
-    echo -e "${BOLD}Checking scripts...${NC}"
-    
-    # Enable dotglob to include hidden files like .bashrc
-    shopt -s dotglob
-    for template_script in "$TEMPLATES_DIR/scripts/"*; do
-        if [[ ! -f "$template_script" ]]; then
-            continue
-        fi
-        
-        local script_name=$(basename "$template_script")
-        local project_path="scripts/$script_name"
-        local template_path="$template_script"
-        
-        if [[ ! -f "$project_path" ]]; then
-            # File is missing - add it
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would add: $project_path"
-            else
-                cp "$template_path" "$project_path"
-                [[ "$script_name" == *.sh ]] && chmod +x "$project_path"
-                success "Added: $project_path"
-            fi
-            ((added_count++))
-        elif file_differs "$project_path" "$template_path"; then
-            # File exists but differs - queue for update prompt
-            pending_updates+=("$project_path:$template_path")
-        fi
-    done
-    shopt -u dotglob
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 4: Check Makefile
-    # ─────────────────────────────────────────────────────────────────────────
-    
-    echo ""
-    echo -e "${BOLD}Checking Makefile...${NC}"
-    
-    local makefile_template="$TEMPLATES_DIR/Makefile.template"
-    if [[ -f "$makefile_template" ]]; then
-        if [[ ! -f "Makefile" ]]; then
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would add: Makefile"
-            else
-                cp "$makefile_template" "Makefile"
-                success "Added: Makefile"
-            fi
-            ((added_count++))
-        elif file_differs "Makefile" "$makefile_template"; then
-            pending_updates+=("Makefile:$makefile_template")
-        fi
-    fi
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 5: Add missing Docker compose templates (only if not present)
-    # ─────────────────────────────────────────────────────────────────────────
-    
-    echo ""
-    echo -e "${BOLD}Checking Docker compose templates...${NC}"
-    
-    for template_compose in "$TEMPLATES_DIR/docker/compose/"*; do
-        if [[ ! -f "$template_compose" ]]; then
-            continue
-        fi
-        
-        local compose_name=$(basename "$template_compose")
-        local project_path="docker/compose/$compose_name"
-        
-        if [[ ! -f "$project_path" ]]; then
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would add: $project_path"
-            else
-                cp "$template_compose" "$project_path"
-                success "Added: $project_path"
-            fi
-            ((added_count++))
-        fi
-        # Note: We don't prompt to update compose files - those are user-customized
-    done
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 6: Add missing Docker config templates
-    # ─────────────────────────────────────────────────────────────────────────
-    
-    echo ""
-    echo -e "${BOLD}Checking Docker config templates...${NC}"
-    
-    for config in "$TEMPLATES_DIR/docker/config/"*; do
-        if [[ ! -f "$config" ]]; then
-            continue
-        fi
-        
-        local filename=$(basename "$config")
-        local target_name="${filename/env./.env.}"
-        local project_path="docker/.config/$target_name"
-        
-        # Only add template files, never overwrite user config
-        if [[ ! -f "$project_path" ]]; then
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would add: $project_path"
-            else
-                cp "$config" "$project_path"
-                success "Added: $project_path"
-            fi
-            ((added_count++))
-        fi
-    done
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 7: Add missing Cloudflare infra templates (if cloudflare is enabled)
-    # ─────────────────────────────────────────────────────────────────────────
-    
-    if [[ -d "infra/cloudflare" ]]; then
-        echo ""
-        echo -e "${BOLD}Checking Cloudflare templates...${NC}"
-        
-        # Check for README
-        if [[ ! -f "infra/cloudflare/README.md" && -f "$TEMPLATES_DIR/infra/cloudflare/README.md" ]]; then
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would add: infra/cloudflare/README.md"
-            else
-                cp "$TEMPLATES_DIR/infra/cloudflare/README.md" "infra/cloudflare/README.md"
-                success "Added: infra/cloudflare/README.md"
-            fi
-            ((added_count++))
-        fi
-        
-        # Ensure apps directory exists
-        if [[ ! -d "infra/cloudflare/apps" ]]; then
-            if [[ "$dry_run" == "true" ]]; then
-                info "[DRY RUN] Would create: infra/cloudflare/apps/"
-            else
-                mkdir -p "infra/cloudflare/apps"
-                success "Created: infra/cloudflare/apps/"
-            fi
-        fi
-    fi
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 8: Prompt for tooling file updates
-    # ─────────────────────────────────────────────────────────────────────────
-    
-    if [[ ${#pending_updates[@]} -gt 0 ]]; then
         echo ""
         echo -e "${CYAN}╭────────────────────────────────────────────────────────────╮${NC}"
         echo -e "${CYAN}│${NC}  ${BOLD}📝 Tooling Updates Available${NC}                              ${CYAN}│${NC}"
@@ -353,19 +444,19 @@ upgrade_project() {
         echo -e "The following tooling files have updates available:"
         echo ""
         
-        for entry in "${pending_updates[@]}"; do
-            local project_file="${entry%%:*}"
+        for entry in "${update_files[@]}"; do
+            local project_file="${entry%%|*}"
             echo "    • $project_file"
         done
         
         echo ""
         
         if [[ "$dry_run" == "true" ]]; then
-            info "[DRY RUN] Would prompt to update ${#pending_updates[@]} file(s)"
+            info "[DRY RUN] Would prompt to update ${#update_files[@]} file(s)"
         else
-            for entry in "${pending_updates[@]}"; do
-                local project_file="${entry%%:*}"
-                local template_file="${entry##*:}"
+            for entry in "${update_files[@]}"; do
+                local project_file="${entry%%|*}"
+                local template_file="${entry##*|}"
                 
                 echo ""
                 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -410,7 +501,7 @@ upgrade_project() {
                                 ;;
                             q|Q)
                                 info "Skipping remaining updates."
-                                pending_updates=()
+                                update_files=()
                                 break 2
                                 ;;
                             *)
@@ -441,8 +532,10 @@ upgrade_project() {
     fi
     
     # ─────────────────────────────────────────────────────────────────────────
-    # Summary
+    # FSM: → Complete
     # ─────────────────────────────────────────────────────────────────────────
+    
+    transition "DONE" "Complete"
     
     echo ""
     echo -e "${CYAN}╭────────────────────────────────────────────────────────────╮${NC}"
@@ -467,7 +560,7 @@ upgrade_project() {
         echo -e "  ${YELLOW}○${NC} Skipped: $skipped_count file(s)"
     fi
     
-    if [[ $added_count -eq 0 && $updated_count -eq 0 && $skipped_count -eq 0 && ${#pending_updates[@]} -eq 0 ]]; then
+    if [[ $added_count -eq 0 && $updated_count -eq 0 && $skipped_count -eq 0 && ${#update_files[@]} -eq 0 ]]; then
         echo -e "  ${GREEN}✓${NC} Project is up to date!"
     fi
     
