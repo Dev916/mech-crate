@@ -2,50 +2,44 @@
 # {{SERVICE_NAME}} - Production Docker Compose
 # Static site served by Nginx
 # ─────────────────────────────────────────────────────────────────────────────
+# Traefik routes to this service via devmesh-traefik network
 
 services:
   # ───────────────────────────────────────────────────────────────────────────
   # Zola Static Site (Production)
   # ───────────────────────────────────────────────────────────────────────────
-  app:
+  {{SERVICE_NAME}}:
     build:
-      context: ../../apps/{{SERVICE_NAME}}
-      dockerfile: ../../docker/dockerfiles/{{SERVICE_NAME}}/app
+      context: ../..
+      dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
       args:
         - ZOLA_VERSION=${ZOLA_VERSION:-{{ZOLA_VERSION}}}
-    container_name: {{SERVICE_SLUG}}-app
+    container_name: {{SERVICE_SLUG}}
     restart: unless-stopped
-    
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_ENV=production
-    
+    networks:
+      - devmesh-traefik
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)"
-      - "traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=websecure"
-      - "traefik.http.routers.{{SERVICE_SLUG}}.tls.certresolver=letsencrypt"
-      - "traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=80"
+      - traefik.enable=true
+      - traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)
+      - traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web
+      - traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=80
+      - traefik.docker.network=devmesh-traefik
       # Compression middleware
-      - "traefik.http.middlewares.{{SERVICE_SLUG}}-compress.compress=true"
-      - "traefik.http.routers.{{SERVICE_SLUG}}.middlewares={{SERVICE_SLUG}}-compress"
-    
-    networks:
-      - {{SERVICE_SLUG}}-internal
-      - traefik-public
+      - traefik.http.middlewares.{{SERVICE_SLUG}}-compress.compress=true
+      - traefik.http.routers.{{SERVICE_SLUG}}.middlewares={{SERVICE_SLUG}}-compress
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Networks
-# ─────────────────────────────────────────────────────────────────────────────
 networks:
-  {{SERVICE_SLUG}}-internal:
-    driver: bridge
-  traefik-public:
+  devmesh-traefik:
     external: true
