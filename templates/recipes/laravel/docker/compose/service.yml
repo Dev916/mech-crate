@@ -4,6 +4,8 @@
 include:
   - ./db.yml
   - ./redis.yml
+  - ./{{SERVICE_NAME}}.worker.yml
+  - ./{{SERVICE_NAME}}.scheduler.yml
 
 services:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -34,6 +36,10 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      {{SERVICE_NAME}}-worker:
+        condition: service_healthy
+      {{SERVICE_NAME}}-scheduler:
         condition: service_healthy
     labels:
       - traefik.enable=true
