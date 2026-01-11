@@ -1,5 +1,4 @@
-include:
-  - ./{{SERVICE_NAME}}.yml
+
 
 services:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -21,9 +20,6 @@ services:
       - RUN_SCHEDULER=false
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
-    depends_on:
-      {{SERVICE_NAME}}:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "php", "artisan", "horizon:status"]
