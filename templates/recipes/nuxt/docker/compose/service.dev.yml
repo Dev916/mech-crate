@@ -1,5 +1,6 @@
 # {{SERVICE_NAME}} - Nuxt Application (Development)
 # Overrides for local development
+# Traefik routes to this service via devmesh-traefik network (no direct port exposure needed)
 
 services:
   {{SERVICE_NAME}}:
@@ -8,7 +9,6 @@ services:
     environment:
       - NODE_ENV=development
     ports:
-      - "${{{SERVICE_UPPER}}_PORT:-3000}:3000"
       - "24678:24678"  # HMR websocket
     volumes:
       # Mount source for hot-reload
