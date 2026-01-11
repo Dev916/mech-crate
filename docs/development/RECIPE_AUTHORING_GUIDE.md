@@ -1021,11 +1021,14 @@ volumes:
 ### Usage
 
 ```bash
-# Start devmesh-traefik globally first
-dmt up
+# Start the MechCrate router globally first
+mx router up
 
 # Development (access via http://myapp.localhost)
 docker compose -f docker/compose/myapp.yml -f docker/compose/myapp.dev.yml up
+
+# Or use the mx command from within a MechCrate project
+mx dev s=myapp
 
 # Production
 docker compose -f docker/compose/myapp.yml up -d
@@ -1033,18 +1036,18 @@ docker compose -f docker/compose/myapp.yml up -d
 
 ---
 
-## Devmesh-Traefik Integration
+## MechCrate Router Integration
 
-MechCrate services integrate with [Devmesh-Traefik](../../stack/README.md), a workstation-wide Traefik router that enables running multiple projects simultaneously with hostname-based routing.
+MechCrate includes a built-in global Traefik router that enables running multiple projects simultaneously with hostname-based routing.
 
 ### Prerequisites
 
-Before running any MechCrate service, ensure the global traefik is running:
+Before running any MechCrate service, ensure the global router is running:
 
 ```bash
-# Install and start devmesh-traefik
-dmt install
-dmt up
+# Install and start the MechCrate router
+mx router install
+mx router up
 ```
 
 ### How It Works
@@ -1104,7 +1107,7 @@ With devmesh-traefik running, access services by hostname:
 | Main app | `http://myapp.localhost` |
 | API service | `http://api.localhost` |
 | Admin panel | `http://admin.localhost` |
-| Traefik dashboard | `http://localhost:<dashboard-port>` (run `dmt inspect`) |
+| Traefik dashboard | `http://localhost:<dashboard-port>` (run `mx router inspect`) |
 
 ### HTTPS Support
 
@@ -1116,14 +1119,28 @@ labels:
   - traefik.http.routers.{{SERVICE_NAME}}.tls=true
 ```
 
+### Router Commands
+
+| Command | Description |
+|---------|-------------|
+| `mx router install` | First-time setup - install router to ~/.mech-crate/router |
+| `mx router up` | Start or update the router |
+| `mx router down` | Stop the router |
+| `mx router status` | Show router container status |
+| `mx router logs` | Tail router logs |
+| `mx router inspect` | Show dashboard URL and connected services |
+| `mx router reload` | Hot-reload config without restart |
+| `mx router uninstall` | Remove router installation |
+
 ### Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Service not reachable | Check `dmt status` - is Traefik running? |
+| Service not reachable | Check `mx router status` - is Traefik running? |
 | 404 errors | Verify `traefik.docker.network=devmesh-traefik` label is set |
 | Container not visible to Traefik | Ensure container is on `devmesh-traefik` network |
 | Port conflicts | Remove direct port mappings - let Traefik handle routing |
+| Dashboard URL | Run `mx router inspect` to see the dashboard port |
 
 ---
 
@@ -1214,7 +1231,7 @@ labels:
 - [ ] `config/env.service` environment template
 - [ ] `README.md` with setup instructions
 - [ ] Health check endpoint in application
-- [ ] Test with `dmt up && mx add <name> --recipe=<recipe>`
+- [ ] Test with `mx router up && mx add <name> --recipe=<recipe>`
 
 ---
 
