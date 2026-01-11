@@ -1,0 +1,23 @@
+# MechCrate Router - Default Middlewares
+# Add custom middlewares here for use across all projects
+
+http:
+  middlewares:
+    # Security headers
+    default-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: false
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+    
+    # Response compression
+    compress-responses:
+      compress: {}
+    
+    # Rate limiting (example - adjust as needed)
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
