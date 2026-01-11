@@ -2,53 +2,40 @@
 # {{SERVICE_NAME}} - Development Docker Compose Override
 # Live reload with zola serve
 # ─────────────────────────────────────────────────────────────────────────────
+# Traefik routes to this service via devmesh-traefik network (no direct port exposure needed)
 
 services:
   # ───────────────────────────────────────────────────────────────────────────
   # Zola Static Site (Development)
   # ───────────────────────────────────────────────────────────────────────────
-  app:
+  {{SERVICE_NAME}}:
     build:
       target: development
       args:
         - ZOLA_VERSION=${ZOLA_VERSION:-{{ZOLA_VERSION}}}
-    container_name: {{SERVICE_SLUG}}-app-dev
-    
+    container_name: {{SERVICE_SLUG}}-dev
     environment:
       - APP_ENV=development
       - ZOLA_PORT={{PORT}}
       - ZOLA_BASE_URL=localhost
-    
     # Mount source code for live reload
     volumes:
       - ../../apps/{{SERVICE_NAME}}:/site:cached
       # Exclude public directory (generated output)
       - /site/public
-    
     ports:
-      # Zola dev server
-      - "${{{SERVICE_UPPER}}_PORT:-{{PORT}}}:{{PORT}}"
       # Live reload WebSocket
       - "1024:1024"
-    
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:{{PORT}}"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    
-    # Override labels for development
+    # Override labels for development (Zola serves on different port)
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{SERVICE_SLUG}}.localhost`)"
-      - "traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web"
-      - "traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port={{PORT}}"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Development Networks
-# ─────────────────────────────────────────────────────────────────────────────
-networks:
-  traefik-public:
-    external: false
-    name: {{SERVICE_SLUG}}-dev-network
+      - traefik.enable=true
+      - traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)
+      - traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web
+      - traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port={{PORT}}
+      - traefik.docker.network=devmesh-traefik
