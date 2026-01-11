@@ -1,0 +1,33 @@
+# MechCrate Global Router (Traefik)
+# Workstation-wide reverse proxy for all MechCrate projects
+#
+# Start with: mx router up
+# Dashboard:  http://localhost:${MX_ROUTER_DASHBOARD_PORT:-7680}
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: mx-router
+    command:
+      - --configfile=/etc/traefik/traefik.yml
+    ports:
+      - "80:80"
+      - "443:443"
+      - "${MX_ROUTER_DASHBOARD_PORT:-7680}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./config/dynamic:/etc/traefik/dynamic:ro
+      - ./letsencrypt:/etc/traefik/acme
+    networks:
+      - devmesh-traefik
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  devmesh-traefik:
+    external: true
