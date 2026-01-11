@@ -12,6 +12,10 @@
 # Install mx (add to your PATH)
 export PATH="$PATH:/path/to/mech-crate/bin"
 
+# Start the global router (first-time only)
+mx router install
+mx router up
+
 # Create a new project
 mx new my-app
 
@@ -19,7 +23,7 @@ mx new my-app
 cd my-app
 make doctor    # Check dependencies
 make init      # Initialize environment
-make dev       # Start development
+make dev       # Start development (access via hostname!)
 ```
 
 ## What MechCrate Is
@@ -37,8 +41,16 @@ It standardizes:
 ```bash
 mx new <name>        # Create a new MechCrate project
 mx add <service>     # Add a new service to existing project
+mx router <cmd>      # Manage global Traefik router
 mx doctor            # Check project health and dependencies
 mx help              # Show all commands
+
+# Router commands (global)
+mx router install    # First-time setup
+mx router up         # Start the global router
+mx router down       # Stop the router
+mx router status     # Check router status
+mx router inspect    # Show dashboard URL and connected services
 
 # Project commands (run from project root)
 mx dev [s=service]     # Start services in development mode
@@ -192,6 +204,8 @@ See `reference/mono/` for a complete working example with multiple services.
 
 | Guide | Description |
 |-------|-------------|
+| [Router Guide](docs/router.md) | Global Traefik reverse proxy setup and usage |
+| [Recipe Authoring](docs/development/RECIPE_AUTHORING_GUIDE.md) | Create custom service recipes |
 | [Cloudflare Infrastructure](docs/cloudflare.md) | Deploy apps to Cloudflare Workers + Containers |
 
 ## Development
