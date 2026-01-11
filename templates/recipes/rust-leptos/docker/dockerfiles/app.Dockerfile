@@ -12,6 +12,8 @@ RUN apk add --no-cache \
     openssl-dev \
     openssl-libs-static \
     pkgconfig \
+    perl \
+    make \
     nodejs \
     npm
 
