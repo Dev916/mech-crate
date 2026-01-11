@@ -39,6 +39,7 @@ source "$LIB_DIR/cloudflare.sh"
 source "$LIB_DIR/build.sh"
 source "$LIB_DIR/init-code-rules.sh"
 source "$LIB_DIR/test.sh"
+source "$LIB_DIR/router.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main command router
@@ -62,6 +63,9 @@ main() {
             ;;
         cf|cloudflare)
             cloudflare_cmd "$@"
+            ;;
+        router)
+            router_cmd "$@"
             ;;
         build)
             build_cmd "$@"
