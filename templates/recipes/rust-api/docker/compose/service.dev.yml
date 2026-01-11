@@ -1,5 +1,6 @@
 # {{SERVICE_NAME}} - Rust API (Development)
 # Overrides for local development
+# Traefik routes to this service via devmesh-traefik network (no direct port exposure needed)
 
 services:
   {{SERVICE_NAME}}:
@@ -9,8 +10,6 @@ services:
       - RUST_ENV=development
       - RUST_LOG=debug,{{SERVICE_SLUG}}=trace
       - RUST_BACKTRACE=1
-    ports:
-      - "${{{SERVICE_UPPER}}_PORT:-3000}:3000"
     volumes:
       # Mount source for development (cargo-watch will handle rebuilds)
       - ../../apps/{{SERVICE_NAME}}:/app:cached
@@ -20,6 +19,10 @@ services:
     restart: "no"
     healthcheck:
       disable: true
+
+  db:
+    ports:
+      - "5432:5432"
 
 volumes:
   {{SERVICE_NAME}}_cargo_registry:
