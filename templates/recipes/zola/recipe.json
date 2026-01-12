@@ -29,6 +29,16 @@
       "default": "{{SERVICE_NAME}}.localhost",
       "description": "Custom domain for routing"
     },
+    "init_cmd": {
+      "flag": "--init-cmd",
+      "default": "cd {{SERVICE_NAME}} && yes \"\" | zola init",
+      "description": "Command to scaffold the Zola site (runs from ./apps; should create apps/{{SERVICE_NAME}})"
+    },
+    "force_init": {
+      "flag": "--force-init",
+      "default": "false",
+      "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS)"
+    },
     "port": {
       "flag": "--port",
       "default": "1111",
@@ -51,8 +61,16 @@
     "SERVICE_SLUG": { "source": "name", "transform": "kebab" },
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
     "DOMAIN": { "source": "option:domain" },
+    "INIT_CMD": { "source": "option:init_cmd" },
     "PORT": { "source": "option:port" },
     "ZOLA_VERSION": { "source": "option:zola_version" }
+  },
+
+  "init_app": {
+    "cwd": "apps",
+    "target_dir": "apps/{{SERVICE_NAME}}",
+    "skip_if_exists": true,
+    "command": "{{INIT_CMD}}"
   },
 
   "directories": [
@@ -71,7 +89,11 @@
   ],
 
   "templates": [
-    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "app/config.toml", "to": "apps/{{SERVICE_NAME}}/config.toml" },
+    { "from": "app/content", "to": "apps/{{SERVICE_NAME}}/content" },
+    { "from": "app/sass", "to": "apps/{{SERVICE_NAME}}/sass" },
+    { "from": "app/static", "to": "apps/{{SERVICE_NAME}}/static" },
+    { "from": "app/templates", "to": "apps/{{SERVICE_NAME}}/templates" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
