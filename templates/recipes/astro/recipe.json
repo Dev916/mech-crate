@@ -28,6 +28,21 @@
   ],
 
   "options": {
+    "domain": {
+      "flag": "--domain",
+      "default": "{{SERVICE_NAME}}.localhost",
+      "description": "Custom domain for routing"
+    },
+    "init_cmd": {
+      "flag": "--init-cmd",
+      "default": "CI=true npm create astro@latest {{SERVICE_NAME}} -- --template minimal --no-install",
+      "description": "Command to scaffold the Astro app (runs from ./apps)"
+    },
+    "force_init": {
+      "flag": "--force-init",
+      "default": "false",
+      "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS)"
+    },
     "bilingual": {
       "flag": "--bilingual",
       "default": "false",
@@ -44,7 +59,15 @@
     "SERVICE_NAME": { "source": "name" },
     "SERVICE_SLUG": { "source": "name", "transform": "kebab" },
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
-    "DOMAIN": { "source": "domain", "default": "localhost" }
+    "DOMAIN": { "source": "option:domain" },
+    "INIT_CMD": { "source": "option:init_cmd" }
+  },
+
+  "init_app": {
+    "cwd": "apps",
+    "target_dir": "apps/{{SERVICE_NAME}}",
+    "skip_if_exists": true,
+    "command": "{{INIT_CMD}}"
   },
 
   "directories": [
@@ -70,7 +93,7 @@
   ],
 
   "templates": [
-    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "app/src/pages/api/health.ts", "to": "apps/{{SERVICE_NAME}}/src/pages/api/health.ts" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
