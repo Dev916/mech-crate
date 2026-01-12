@@ -44,5 +44,5 @@ done
 
 echo ""
 echo -e "\033[0;33mTip:\033[0m Use s=<service> to target a specific service"
-echo "     Example: make dev s=app"
+echo "     Example: make dev s=api"
 echo ""
