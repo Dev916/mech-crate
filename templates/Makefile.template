@@ -6,7 +6,6 @@ SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 ROOT_DIR := $(abspath $(CURDIR))
 PROJECT_NAME ?= $(notdir $(ROOT_DIR))
-APP_DIR := $(ROOT_DIR)/apps/app
 # MK_MODULES (not MAKEFILES - that's reserved in GNU Make)
 MK_MODULES := $(wildcard make/*.mk)
 
