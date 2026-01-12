@@ -688,6 +688,98 @@ if ready.load(Ordering::Acquire) {
 
 ---
 
+#### 12. **GhostNet: Efficient CNN Architecture Guide**
+**File**: `ghostnet-efficient-cnn-guide.md`
+**Size**: ~3,900 lines
+**Languages**: Python (PyTorch, TensorFlow), C++ (deployment)
+**Complexity**: ⭐⭐⭐⭐ (Advanced)
+
+**Purpose**: Comprehensive guide to efficient convolutional neural network architectures using ghost operations for mobile and edge deployment.
+
+**Contents**:
+1. **Introduction to CNN Efficiency** - Computational challenges, redundancy problem, efficiency strategies, GhostNet philosophy
+2. **The Ghost Module** - Core innovation, standard convolution analysis, ghost hypothesis, module architecture, bottleneck design
+3. **Mathematical Foundations** - Low-rank approximation, SVD connection, information theory, optimization perspective, decomposition comparisons
+4. **GhostNet Architecture** - Network structure, PyTorch/TensorFlow implementations, configuration details, model scaling
+5. **Implementation Examples** - Training scripts, transfer learning, object detection, semantic segmentation
+6. **Comparison with Other Architectures** - MobileNet, EfficientNet, ShuffleNet, hardware efficiency analysis
+7. **Training Strategies** - From-scratch training, knowledge distillation, progressive training, regularization techniques
+8. **Applications** - Mobile computer vision, edge computing, cloud inference, real-world deployments
+9. **Advanced Techniques** - GhostNetV2, NAS, pruning, quantization, operator fusion
+10. **Performance Optimization** - TensorRT, ONNX conversion, mobile deployment, benchmarking
+11. **Future Directions** - Transformer-Ghost hybrids, dynamic networks, hardware co-design
+
+**Best Use Cases**:
+- Building efficient CNNs for mobile/edge devices
+- Reducing inference latency and energy consumption
+- Deploying real-time computer vision on resource-constrained hardware
+- Optimizing cloud inference costs
+- Understanding feature redundancy in neural networks
+- Implementing custom efficient architectures
+- Mobile app development with on-device AI
+
+**When to Reference**:
+- Designing CNNs for mobile deployment
+- Need to reduce FLOPs without sacrificing accuracy
+- Implementing real-time object detection on edge devices
+- Optimizing existing CNN architectures
+- Understanding efficient neural network design principles
+- Building custom mobile vision applications
+- Reducing cloud inference costs at scale
+- Implementing on-device ML for privacy-sensitive applications
+
+**Scenarios**:
+- "How to reduce CNN inference time?" → Ghost Module (core concept) + Performance Optimization
+- "Deploy object detection on mobile?" → Implementation Examples (detection) + Applications (mobile)
+- "Which efficient architecture to use?" → Comparison with Other Architectures (full analysis)
+- "Train GhostNet from scratch?" → Training Strategies (complete recipe)
+- "Convert model to mobile format?" → Implementation Examples (TorchScript, ONNX)
+- "Reduce energy consumption?" → Hardware Efficiency Analysis + Performance Optimization
+- "Improve existing MobileNet?" → Advanced Techniques (Ghost modules as drop-in replacement)
+- "Real-time segmentation on edge?" → Implementation Examples (segmentation) + Applications (edge)
+- "Understand feature redundancy?" → Mathematical Foundations (SVD analysis)
+- "Optimize for specific hardware?" → Performance Optimization (TensorRT, quantization)
+
+**Architecture Comparison Matrix**:
+| Model | Params | FLOPs | Top-1 Acc | Latency* | Use Case |
+|-------|--------|-------|-----------|----------|----------|
+| GhostNet-0.5× | 2.6M | 42M | 66.2% | 3.8ms | Ultra-low power IoT |
+| GhostNet-1.0× | 5.2M | 142M | 73.9% | 6.9ms | Mobile applications |
+| GhostNet-1.3× | 7.3M | 226M | 75.7% | 8.4ms | High-accuracy mobile |
+| MobileNetV2 | 3.5M | 300M | 72.0% | 8.5ms | General mobile |
+| EfficientNet-B0 | 5.3M | 390M | 77.1% | 11.3ms | Cloud/edge |
+
+*Latency: ARM Cortex-A76 CPU, single-thread
+
+**Efficiency Techniques Matrix**:
+| Technique | FLOPs Reduction | Accuracy Impact | Training Required | Hardware Support |
+|-----------|----------------|-----------------|-------------------|------------------|
+| Ghost Operations | 2-4× | -0.5-1% | End-to-end | Universal |
+| Depthwise Separable | 8-9× | -2-3% | End-to-end | Variable |
+| Pruning | Variable | -0.5-2% | Fine-tuning | Sparse ops |
+| Quantization (INT8) | Memory 4× | -0.3-0.8% | Calibration | INT8 support |
+| Knowledge Distillation | N/A (smaller model) | +0.5-1.5% | Full training | Universal |
+| NAS | Optimal | Variable | Search + training | Universal |
+
+**Real-World Performance Examples**:
+- **Mobile Object Detection**: 19ms latency (vs 28ms MobileNetV2), 23.4% mAP (COCO)
+- **Edge Segmentation**: 45ms latency (512×512), 76.3% mIoU (Pascal VOC)
+- **Cloud Inference**: 1850 images/sec (T4 GPU, batch=32), $0.000005 per inference
+- **IoT Deployment**: 95ms latency (Raspberry Pi 4, INT8), 2.8MB model size
+- **Energy Consumption**: 96.5 mJ per inference (33% reduction vs MobileNetV2)
+
+**Prerequisites**:
+- Strong deep learning fundamentals (CNNs, backpropagation, optimization)
+- PyTorch or TensorFlow experience
+- Understanding of computer vision tasks
+- Basic knowledge of mobile/edge deployment
+- Familiarity with efficient architecture concepts (optional but helpful)
+
+**Related Documents**: `database-design-guide.md` (for managing training data), `docker-assembly-guide.md` (for containerized training/deployment)
+
+---
+
+
 ## 🎯 Use Case Matrix
 
 ### By Problem Domain
@@ -716,6 +808,11 @@ if ready.load(Ordering::Acquire) {
 | **DeFi Integration** | RWA Blockchain Guide | - |
 | **Regulatory Compliance (Crypto)** | RWA Blockchain Guide | - |
 | **Smart Contract Development** | RWA Blockchain Guide | - |
+| **Efficient Neural Networks** | GhostNet Guide | - |
+| **Mobile Computer Vision** | GhostNet Guide | - |
+| **Edge AI Deployment** | GhostNet Guide | Docker Assembly Guide |
+| **Model Optimization** | GhostNet Guide | - |
+| **CNN Architecture Design** | GhostNet Guide | - |
 
 ### By Complexity Level
 
@@ -733,7 +830,7 @@ if ready.load(Ordering::Acquire) {
 - Docker Assembly Guide (optimization sections)
 - Database Design Guide (advanced indexing, streaming, polyglot persistence)
 - RWA Blockchain Guide (tokenization, compliance, security)
-
+- GhostNet Guide (efficient CNNs, ghost operations, mobile deployment)
 **Expert** (⭐⭐⭐⭐⭐):
 - Category Theory: Foundations
 - Groundbreaking Patterns
@@ -763,7 +860,7 @@ if ready.load(Ordering::Acquire) {
 - `docker-assembly-guide.md` (examples)
 - `database-design-guide.md` (streaming patterns, examples)
 
-**Go**:
+- `ghostnet-efficient-cnn-guide.md` (complete PyTorch/TensorFlow coverage)**Go**:
 - `docker-assembly-guide.md` (examples)
 
 **PHP**:
@@ -847,6 +944,15 @@ User Query About:
 │  ├─ Smart Contract Security? → rwa-blockchain-guide.md (Security Best Practices)
 │  ├─ Institutional Platforms? → rwa-blockchain-guide.md (Centrifuge, Maple, Ondo)
 │  └─ Future Tech (AA, ZK)? → rwa-blockchain-guide.md (ERC-4337, Zero-Knowledge)
+│
+├─ Efficient Neural Networks/Mobile AI?
+│  ├─ CNN Architecture Design? → ghostnet-efficient-cnn-guide.md (Ghost Module, Architecture)
+│  ├─ Mobile Deployment? → ghostnet-efficient-cnn-guide.md (Implementation, Optimization)
+│  ├─ Model Compression? → ghostnet-efficient-cnn-guide.md (Pruning, Quantization)
+│  ├─ Training Strategies? → ghostnet-efficient-cnn-guide.md (From-scratch, Distillation)
+│  ├─ Object Detection/Segmentation? → ghostnet-efficient-cnn-guide.md (Applications)
+│  ├─ Hardware Optimization? → ghostnet-efficient-cnn-guide.md (TensorRT, ONNX)
+│  └─ Architecture Comparison? → ghostnet-efficient-cnn-guide.md (MobileNet, EfficientNet)
 │
 └─ Research/novel approaches?
    └─ appendix-novel-theories.md
