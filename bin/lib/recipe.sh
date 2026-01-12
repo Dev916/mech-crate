@@ -41,7 +41,7 @@ _transform() {
     local transform="$2"
     
     case "$transform" in
-        slug)
+        slug|kebab)
             echo "$value" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]-'
             ;;
         upper)
@@ -138,6 +138,22 @@ _kv_to_args() {
     done <<< "$store"
     
     echo "${args[@]}"
+}
+
+# Returns success if directory exists and contains at least one entry
+_dir_nonempty() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 1
+    [[ -n "$(ls -A "$dir" 2>/dev/null)" ]]
+}
+
+# Normalize common truthy values to "true"/"false"
+_is_true() {
+    local v="${1:-}"
+    case "$v" in
+        true|TRUE|1|yes|YES|y|Y|on|ON) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -243,19 +259,48 @@ install_recipe() {
     # ─────────────────────────────────────────────────────────────────────────
     
     local OPTIONS_STORE=""
+    local FLAGMAP_STORE=""
     
     if _has_jq; then
         while IFS='=' read -r key val; do
             [[ -n "$key" ]] && _kv_set OPTIONS_STORE "$key" "$val"
         done < <(jq -r '.options | to_entries[]? | "\(.key)=\(.value.default)"' "$recipe_json" 2>/dev/null)
+
+        # Map declared flags (e.g. "--zola-version") to option keys (e.g. "zola_version")
+        while IFS='|' read -r key flag; do
+            [[ -z "$key" ]] && continue
+            [[ -z "$flag" || "$flag" == "null" ]] && continue
+            flag="${flag#--}"
+            [[ -n "$flag" ]] && _kv_set FLAGMAP_STORE "$flag" "$key"
+        done < <(jq -r '.options | to_entries[]? | "\(.key)|\(.value.flag // empty)"' "$recipe_json" 2>/dev/null)
     fi
     
     for arg in "${extra_args[@]}"; do
         case "$arg" in
             --*=*)
-                local opt_name="${arg%%=*}"
-                opt_name="${opt_name#--}"
-                _kv_set OPTIONS_STORE "$opt_name" "${arg#*=}"
+                local raw_name="${arg%%=*}"
+                raw_name="${raw_name#--}"
+                local opt_value="${arg#*=}"
+
+                local opt_key="$raw_name"
+                if ! _kv_get "$OPTIONS_STORE" "$raw_name" >/dev/null 2>&1; then
+                    local mapped_key=""
+                    mapped_key=$(_kv_get "$FLAGMAP_STORE" "$raw_name" 2>/dev/null || echo "")
+                    [[ -n "$mapped_key" ]] && opt_key="$mapped_key"
+                fi
+
+                _kv_set OPTIONS_STORE "$opt_key" "$opt_value"
+                ;;
+            --*)
+                # Support boolean flags (e.g. --force-init) as true
+                local raw_name="${arg#--}"
+                local opt_key="$raw_name"
+                if ! _kv_get "$OPTIONS_STORE" "$raw_name" >/dev/null 2>&1; then
+                    local mapped_key=""
+                    mapped_key=$(_kv_get "$FLAGMAP_STORE" "$raw_name" 2>/dev/null || echo "")
+                    [[ -n "$mapped_key" ]] && opt_key="$mapped_key"
+                fi
+                _kv_set OPTIONS_STORE "$opt_key" "true"
                 ;;
         esac
     done
@@ -320,6 +365,54 @@ install_recipe() {
     info "Installing recipe: ${BOLD}$title${NC} as ${BOLD}$service_name${NC}"
     info "Domain: ${CYAN}${domain_val}${NC}"
     
+    # ─────────────────────────────────────────────────────────────────────────
+    # init_app (CLI scaffolding step)
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    if _has_jq; then
+        local init_cmd
+        init_cmd=$(jq -r '.init_app.command // empty' "$recipe_json" 2>/dev/null)
+
+        if [[ -n "$init_cmd" ]]; then
+            local init_cwd init_target init_skip
+            init_cwd=$(jq -r '.init_app.cwd // "."' "$recipe_json" 2>/dev/null)
+            init_target=$(jq -r '.init_app.target_dir // empty' "$recipe_json" 2>/dev/null)
+            init_skip=$(jq -r '.init_app.skip_if_exists // "true"' "$recipe_json" 2>/dev/null)
+
+            init_cmd=$(_interpolate "$init_cmd" "${placeholder_args[@]}")
+            init_cwd=$(_interpolate "$init_cwd" "${placeholder_args[@]}")
+            init_target=$(_interpolate "$init_target" "${placeholder_args[@]}")
+
+            # Optional force init (recipe should expose this as an option)
+            local force_init_val
+            force_init_val=$(_kv_get "$OPTIONS_STORE" "force_init" 2>/dev/null || echo "false")
+
+            if _dir_nonempty "$init_target"; then
+                if _is_true "$force_init_val"; then
+                    # Safety: only allow deleting the standard target path for this recipe run
+                    if [[ "$init_target" != "apps/$service_name" ]]; then
+                        error "Refusing to delete non-standard init_app.target_dir: $init_target (expected apps/$service_name)"
+                    fi
+                    warn "force_init=true: removing existing $init_target before scaffolding"
+                    rm -rf "$init_target"
+                elif _is_true "$init_skip"; then
+                    info "Skipping init_app (target_dir exists and is non-empty): $init_target"
+                    init_cmd=""
+                else
+                    error "init_app target_dir already exists and is non-empty: $init_target (set --force-init or enable skip_if_exists)"
+                fi
+            fi
+
+            if [[ -n "$init_cmd" ]]; then
+                info "Scaffolding application via init_app..."
+                mkdir -p "$init_cwd"
+                (
+                    cd "$init_cwd" && bash -lc "$init_cmd"
+                ) || error "init_app failed: $init_cmd"
+            fi
+        fi
+    fi
+
     # ─────────────────────────────────────────────────────────────────────────
     # Create Directories
     # ─────────────────────────────────────────────────────────────────────────
@@ -461,7 +554,7 @@ show_recipe_info() {
     echo -e "  ${BOLD}Options:${NC}"
     
     if _has_jq; then
-        jq -r '.options | to_entries[]? | "    --\(.key)=<value>  \(.value.description) (default: \(.value.default))"' "$recipe_json" 2>/dev/null
+        jq -r '.options | to_entries[]? | "    \(.value.flag // ("--" + .key))=<value>  \(.value.description) (default: \(.value.default))"' "$recipe_json" 2>/dev/null
     fi
     
     echo ""
