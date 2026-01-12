@@ -18,7 +18,7 @@ FROM base AS development
 COPY apps/{{SERVICE_NAME}}/package*.json ./
 
 # Install all dependencies (including dev)
-RUN npm ci
+RUN npm install
 
 # Copy app source (will be overridden by volume in dev)
 COPY apps/{{SERVICE_NAME}}/ .
