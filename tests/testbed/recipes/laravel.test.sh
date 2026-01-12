@@ -134,7 +134,7 @@ test_build_directory_structure() {
     # Docker directories
     assert_dir_exists "docker compose dir" "$DOCKER_DIR/compose"
     assert_dir_exists "docker dockerfiles dir" "$DOCKER_DIR/dockerfiles/$SERVICE_NAME"
-    assert_dir_exists "docker config dir" "$DOCKER_DIR/config"
+    assert_dir_exists "docker config dir" "$DOCKER_DIR/.config"
 }
 
 test_build_core_files() {
@@ -156,7 +156,9 @@ test_build_core_files() {
         _record_fail "vite.config.* exists" "No vite config file found"
     fi
     
-    assert_file_exists "tailwind.config.js" "$APP_DIR/tailwind.config.js"
+    # Tailwind v4 is CSS-first (no tailwind.config.js required)
+    assert_file_exists "Tailwind CSS entry file" "$APP_DIR/resources/css/app.css"
+    assert_file_contains "app.css imports tailwindcss" "$APP_DIR/resources/css/app.css" "@import 'tailwindcss';"
     assert_file_exists "postcss.config.js" "$APP_DIR/postcss.config.js"
     
     # Route files
@@ -185,9 +187,11 @@ test_build_docker_files() {
     assert_file_exists "app prod Dockerfile" "$DOCKER_DIR/dockerfiles/${SERVICE_NAME}/app.prod"
     
     # Config
-    assert_file_exists "service env config" "$DOCKER_DIR/config/.env.${SERVICE_NAME}"
+    assert_file_exists "service env config" "$DOCKER_DIR/.config/.env.${SERVICE_NAME}"
+    assert_file_exists "db env config" "$DOCKER_DIR/.config/.env.db"
+    assert_file_exists "redis env config" "$DOCKER_DIR/.config/.env.redis"
     
-    # Shared infrastructure (should exist from mx new)
+    # Shared infrastructure (installed by recipe)
     assert_file_exists "db compose file" "$DOCKER_DIR/compose/db.yml"
     assert_file_exists "redis compose file" "$DOCKER_DIR/compose/redis.yml"
 }
@@ -200,8 +204,8 @@ test_build_template_processing() {
     assert_file_not_contains "compose no raw placeholder" "$DOCKER_DIR/compose/${SERVICE_NAME}.yml" "{{SERVICE_NAME}}"
     
     # Check env config
-    assert_file_contains "env has database config" "$DOCKER_DIR/config/.env.${SERVICE_NAME}" "DB_CONNECTION"
-    assert_file_contains "env has redis config" "$DOCKER_DIR/config/.env.${SERVICE_NAME}" "REDIS_HOST"
+    assert_file_contains "env has database config" "$DOCKER_DIR/.config/.env.${SERVICE_NAME}" "DB_CONNECTION"
+    assert_file_contains "env has redis config" "$DOCKER_DIR/.config/.env.${SERVICE_NAME}" "REDIS_HOST"
     
     # Check README was processed
     assert_file_contains "README mentions service" "$APP_DIR/README.md" "$SERVICE_NAME" || \
