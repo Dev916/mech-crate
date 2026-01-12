@@ -162,7 +162,8 @@ discover_recipes() {
         fi
     done
     
-    echo "${discovered[@]}"
+    # Print one recipe per line (friendly for read loops; bash 3.x compatible)
+    printf "%s\n" "${discovered[@]}"
 }
 
 validate_recipe_exists() {
@@ -170,7 +171,9 @@ validate_recipe_exists() {
     
     if [[ ! -d "$RECIPES_DIR/$recipe" ]]; then
         error "Recipe not found: $recipe"
-        echo "Available recipes: $(discover_recipes | tr ' ' ', ')"
+        local available
+        available=$(discover_recipes | tr '\n' ' ' | xargs)
+        echo "Available recipes: ${available// /, }"
         return 1
     fi
     
@@ -312,7 +315,11 @@ main() {
     # Determine which recipes to test
     if [[ ${#RECIPES_TO_TEST[@]} -eq 0 ]]; then
         # Test all available recipes
-        mapfile -t RECIPES_TO_TEST < <(discover_recipes)
+        # Bash 3.x compatible (macOS default) replacement for mapfile/readarray
+        while IFS= read -r recipe; do
+            [[ -z "$recipe" ]] && continue
+            RECIPES_TO_TEST+=("$recipe")
+        done < <(discover_recipes)
         info "Discovered ${#RECIPES_TO_TEST[@]} recipes to test"
     else
         # Validate specified recipes exist
