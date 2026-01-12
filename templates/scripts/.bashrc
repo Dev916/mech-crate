@@ -38,9 +38,53 @@ compose_context_files() {
     local files=""
     local service=$1
     local add_dev=$2
-    local base_file=docker/compose/${service}.yml
+    local base_file=""
 
-    # Check if base file exists
+    # If no service provided, build a context across all base compose files.
+    if [[ -z "${service:-}" ]]; then
+        shopt -s nullglob
+        local base_files=(docker/compose/*.yml)
+        shopt -u nullglob
+
+        # Filter out dev overrides + arch-specific file (added later)
+        local arch_file="docker/compose/$(uname -m).yml"
+        local found_any="false"
+        for f in "${base_files[@]}"; do
+            [[ "$f" == *".dev.yml" ]] && continue
+            [[ "$f" == "$arch_file" ]] && continue
+            [[ "$f" == "docker/compose/.env" ]] && continue
+            if [[ -f "$f" ]]; then
+                files+=" -f $f "
+                found_any="true"
+            fi
+        done
+
+        if [[ "$found_any" != "true" ]]; then
+            echo ""
+            return 0
+        fi
+
+        if [[ "$add_dev" == "true" ]]; then
+            shopt -s nullglob
+            local dev_files=(docker/compose/*.dev.yml)
+            shopt -u nullglob
+            for f in "${dev_files[@]}"; do
+                [[ -f "$f" ]] && files+=" -f $f "
+            done
+        fi
+
+        # Add arch-specific override if present
+        if [ -f "$arch_file" ]; then
+            files+=" -f $arch_file "
+        fi
+
+        echo "$files"
+        return 0
+    fi
+
+    base_file="docker/compose/${service}.yml"
+
+    # Check if base file exists for the requested service
     if [ -f "$base_file" ]; then
         files+=" -f $base_file "
     else
@@ -125,9 +169,14 @@ run_service_in_context() {
     rm -f tmp/up/up-*.txt
     echo $deduplicated_files > tmp/up/up-$dt.txt
 
-    # Start the service
-    echo "docker compose $deduplicated_files up -d $service"
-    docker compose $deduplicated_files up -d $service
+    # Start the service(s)
+    if [[ -n "${service:-}" ]]; then
+        echo "docker compose $deduplicated_files up -d $service"
+        docker compose $deduplicated_files up -d $service
+    else
+        echo "docker compose $deduplicated_files up -d"
+        docker compose $deduplicated_files up -d
+    fi
 }
 
 # Check if running on macOS
