@@ -3,3 +3,7 @@ CODING_RULES.md
 reference/
 test-*
 workbench/
+target/
+node_modules/
+vendor/
+.cursor/

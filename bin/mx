@@ -35,11 +35,13 @@ source "$LIB_DIR/new.sh"
 source "$LIB_DIR/add.sh"
 source "$LIB_DIR/upgrade.sh"
 source "$LIB_DIR/doctor.sh"
+source "$LIB_DIR/infra.sh"
 source "$LIB_DIR/cloudflare.sh"
 source "$LIB_DIR/build.sh"
 source "$LIB_DIR/init-code-rules.sh"
 source "$LIB_DIR/test.sh"
 source "$LIB_DIR/router.sh"
+source "$LIB_DIR/mcp.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main command router
@@ -61,11 +63,17 @@ main() {
         recipes)
             recipes_cmd "$@"
             ;;
+        infra)
+            infra_cmd "$@"
+            ;;
         cf|cloudflare)
             cloudflare_cmd "$@"
             ;;
         router)
             router_cmd "$@"
+            ;;
+        mcp)
+            mcp_cmd "$@"
             ;;
         build)
             build_cmd "$@"
