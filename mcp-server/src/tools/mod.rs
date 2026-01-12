@@ -63,6 +63,10 @@ enum ToolHandler {
     // RAG queries
     RagSearch,
     RagSearchCategory,
+    RagFindImplementation,
+    RagGetGuidance,
+    RagCompareApproaches,
+    RagFindRelated,
     RagHealth,
 }
 
@@ -896,6 +900,129 @@ Categories:
 
             ToolDefinition {
                 tool: Tool {
+                    name: "rag_find_implementation".to_string(),
+                    description: r#"Find code implementation examples in MechCrate documentation.
+
+Use this to find:
+- Code snippets for specific patterns
+- Implementation examples for Dockerfiles, compose files, etc.
+- Configuration examples (nginx, supervisor, traefik)
+- Script examples (bash, make)
+
+Returns results prioritizing content with code blocks."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "pattern": {
+                                "type": "string",
+                                "description": "The pattern or feature to find implementations for (e.g., 'multi-stage Dockerfile', 'supervisor config')"
+                            },
+                            "language": {
+                                "type": "string",
+                                "description": "Optional language filter: dockerfile, yaml, bash, rust, php, etc."
+                            }
+                        })),
+                        required: Some(vec!["pattern".to_string()]),
+                    },
+                },
+                handler: ToolHandler::RagFindImplementation,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "rag_get_guidance".to_string(),
+                    description: r#"Get architecture and design guidance from MechCrate documentation.
+
+Use this when you need help with:
+- Choosing between different approaches
+- Understanding MechCrate conventions
+- Design decisions for project structure
+- Best practices for Docker, compose, routing
+
+The search contextualizes results around the given problem and constraints."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "problem": {
+                                "type": "string",
+                                "description": "The design problem or decision to get guidance on"
+                            },
+                            "constraints": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Optional constraints to consider (e.g., 'must use Rust', 'needs hot-reload')"
+                            }
+                        })),
+                        required: Some(vec!["problem".to_string()]),
+                    },
+                },
+                handler: ToolHandler::RagGetGuidance,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "rag_compare_approaches".to_string(),
+                    description: r#"Compare different approaches or technologies in MechCrate context.
+
+Use this to compare:
+- Different recipes (laravel vs nuxt vs rust-api)
+- Different infrastructure providers (cloudflare vs aws)
+- Different configuration approaches
+- Alternative implementation strategies
+
+Returns relevant documentation for each approach for comparison."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "approaches": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "List of approaches/technologies to compare (e.g., ['laravel', 'nuxt'] or ['cloudflare', 'hetzner'])"
+                            },
+                            "criteria": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Optional criteria to focus comparison on (e.g., ['performance', 'ease of use'])"
+                            }
+                        })),
+                        required: Some(vec!["approaches".to_string()]),
+                    },
+                },
+                handler: ToolHandler::RagCompareApproaches,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "rag_find_related".to_string(),
+                    description: r#"Find documentation related to a specific topic or document.
+
+Use this for:
+- Discovering related concepts
+- Finding prerequisites for a topic
+- Exploring connected documentation
+- Understanding broader context
+
+Useful when you need to expand understanding of a topic."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "topic": {
+                                "type": "string",
+                                "description": "Topic or document name to find related documentation for"
+                            },
+                            "max_results": {
+                                "type": "integer",
+                                "description": "Maximum number of related documents (default: 5)"
+                            }
+                        })),
+                        required: Some(vec!["topic".to_string()]),
+                    },
+                },
+                handler: ToolHandler::RagFindRelated,
+            },
+
+            ToolDefinition {
+                tool: Tool {
                     name: "rag_health".to_string(),
                     description: "Check if the Weaviate RAG server is available.".to_string(),
                     input_schema: ToolInputSchema {
@@ -1258,6 +1385,182 @@ Categories:
                     Err(e) => Ok(ToolCallResult::text(format!(
                         "RAG search failed (Weaviate may not be running): {}",
                         e
+                    ))),
+                }
+            }
+
+            ToolHandler::RagFindImplementation => {
+                let pattern = args.get("pattern").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'pattern' is required".to_string())
+                })?;
+                let language = args.get("language").and_then(|v| v.as_str());
+
+                // Build query for code implementations
+                let query = if let Some(lang) = language {
+                    format!("code implementation {} {} example", pattern, lang)
+                } else {
+                    format!("code implementation {} example", pattern)
+                };
+
+                match weaviate.search(&query, 5).await {
+                    Ok(docs) => {
+                        // Filter to prefer code-heavy results
+                        let filtered: Vec<_> = docs
+                            .into_iter()
+                            .filter(|d| {
+                                d.content.contains("```") ||
+                                d.content.contains("FROM ") ||  // Dockerfile
+                                d.content.contains("services:") ||  // compose
+                                d.content.contains("fn ") ||
+                                d.content.contains("function ")
+                            })
+                            .collect();
+
+                        if filtered.is_empty() {
+                            // Fall back to unfiltered if no code found
+                            match weaviate.search(&query, 5).await {
+                                Ok(all) => Ok(ToolCallResult::text(format_search_results(&all))),
+                                Err(e) => Ok(ToolCallResult::text(format!("Search failed: {}", e))),
+                            }
+                        } else {
+                            Ok(ToolCallResult::text(format_search_results(&filtered)))
+                        }
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "RAG search failed (Weaviate may not be running): {}", e
+                    ))),
+                }
+            }
+
+            ToolHandler::RagGetGuidance => {
+                let problem = args.get("problem").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'problem' is required".to_string())
+                })?;
+                let constraints: Option<Vec<String>> = args
+                    .get("constraints")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
+
+                // Build query with constraints
+                let query = if let Some(ref c) = constraints {
+                    format!("architecture design pattern {} constraints: {}", problem, c.join(", "))
+                } else {
+                    format!("architecture design pattern best practice {}", problem)
+                };
+
+                match weaviate.search(&query, 7).await {
+                    Ok(docs) => {
+                        // Group by source document for better context
+                        let mut grouped: std::collections::HashMap<String, Vec<&crate::rag::Document>> = 
+                            std::collections::HashMap::new();
+                        for doc in &docs {
+                            grouped.entry(doc.source.clone()).or_default().push(doc);
+                        }
+
+                        let mut result = format!("## Guidance for: {}\n\n", problem);
+                        if let Some(c) = constraints {
+                            result.push_str(&format!("**Constraints:** {}\n\n", c.join(", ")));
+                        }
+                        result.push_str("---\n\n");
+
+                        for (source, chunks) in grouped {
+                            result.push_str(&format!("### From: {}\n\n", source));
+                            for chunk in chunks {
+                                result.push_str(&chunk.content);
+                                result.push_str("\n\n");
+                            }
+                        }
+
+                        Ok(ToolCallResult::text(result))
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "RAG search failed (Weaviate may not be running): {}", e
+                    ))),
+                }
+            }
+
+            ToolHandler::RagCompareApproaches => {
+                let approaches: Vec<String> = args
+                    .get("approaches")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .ok_or_else(|| McpError::InvalidArguments("'approaches' is required".to_string()))?;
+
+                let criteria: Option<Vec<String>> = args
+                    .get("criteria")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
+
+                let mut result = format!("## Comparison: {}\n\n", approaches.join(" vs "));
+                if let Some(ref c) = criteria {
+                    result.push_str(&format!("**Focus:** {}\n\n", c.join(", ")));
+                }
+                result.push_str("---\n\n");
+
+                for approach in &approaches {
+                    let query = if let Some(ref c) = criteria {
+                        format!("{} {} {}", approach, c.join(" "), approaches.join(" vs "))
+                    } else {
+                        format!("{} features usage documentation", approach)
+                    };
+
+                    result.push_str(&format!("### {}\n\n", approach));
+
+                    match weaviate.search(&query, 3).await {
+                        Ok(docs) => {
+                            if docs.is_empty() {
+                                result.push_str("No specific documentation found.\n\n");
+                            } else {
+                                for doc in docs {
+                                    result.push_str(&format!("**{}**\n", doc.title));
+                                    result.push_str(&doc.content);
+                                    result.push_str("\n\n");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            result.push_str(&format!("Search error: {}\n\n", e));
+                        }
+                    }
+                }
+
+                Ok(ToolCallResult::text(result))
+            }
+
+            ToolHandler::RagFindRelated => {
+                let topic = args.get("topic").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'topic' is required".to_string())
+                })?;
+                let max_results = args.get("max_results").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+
+                // Normalize topic for search
+                let query = topic.replace(".md", "").replace("-", " ").replace("_", " ");
+
+                match weaviate.search(&query, max_results + 3).await {
+                    Ok(docs) => {
+                        // Filter out the source topic itself
+                        let filtered: Vec<_> = docs
+                            .into_iter()
+                            .filter(|d| !d.source.contains(topic) && !d.title.contains(topic))
+                            .take(max_results)
+                            .collect();
+
+                        if filtered.is_empty() {
+                            Ok(ToolCallResult::text(format!(
+                                "No related documents found for: {}", topic
+                            )))
+                        } else {
+                            let mut result = format!("## Documents Related to: {}\n\n", topic);
+                            for doc in &filtered {
+                                result.push_str(&format!("### {} [{}]\n\n", doc.title, doc.category));
+                                result.push_str(&doc.content);
+                                result.push_str("\n\n---\n\n");
+                            }
+                            Ok(ToolCallResult::text(result))
+                        }
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "RAG search failed (Weaviate may not be running): {}", e
                     ))),
                 }
             }
