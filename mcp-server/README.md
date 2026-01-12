@@ -1,16 +1,16 @@
 # MechCrate MCP Server
 
-A Model Context Protocol (MCP) server that enables LLMs to interact with MechCrate projects, providing full operational capabilities for project management, service orchestration, and infrastructure configuration.
+A Model Context Protocol (MCP) server that enables LLMs to interact with MechCrate projects, providing full operational capabilities for project management, service orchestration, infrastructure configuration, and intelligent documentation retrieval.
 
 ## Features
 
 - **Full MX Command Access**: Create projects, add services, manage router, configure infrastructure
 - **Project Makefile Operations**: dev, up, down, logs, shell, restart, build, and more
 - **Project Analysis**: Detect projects, list services, inspect configuration
-- **RAG Documentation**: Semantic search across MechCrate documentation via Weaviate
+- **RAG Documentation**: Semantic search with specialized query modes via Weaviate
 - **Comprehensive Tool Descriptions**: Detailed documentation for LLM understanding
 - **Auto-Start Weaviate**: Automatically starts the RAG backend with dynamic port allocation
-- **Port Conflict Resolution**: Handles multiple Weaviate instances with automatic port allocation
+- **Port Conflict Resolution**: Handles multiple instances with automatic port allocation
 
 ## Quick Start
 
@@ -94,7 +94,7 @@ Override the ranges with environment variables:
 MX_MCP_HTTP_PORT_RANGE=9080-9179 mx mcp start
 ```
 
-## Available Tools
+## Available Tools (44 total)
 
 ### Global MX Commands
 
@@ -145,12 +145,16 @@ MX_MCP_HTTP_PORT_RANGE=9080-9179 mx mcp start
 | `project_detect` | Detect if a path is within a project |
 | `service_info` | Get details about a specific service |
 
-### RAG Documentation
+### RAG Documentation (7 tools)
 
 | Tool | Description |
 |------|-------------|
-| `rag_search` | Semantic search across documentation |
-| `rag_search_category` | Search within a specific category |
+| `rag_search` | Semantic search across all documentation |
+| `rag_search_category` | Search within a specific category (recipe, command, docker, etc.) |
+| `rag_find_implementation` | Find code examples - Dockerfiles, compose, configs, scripts |
+| `rag_get_guidance` | Get architecture/design guidance with optional constraints |
+| `rag_compare_approaches` | Compare recipes, providers, or implementation strategies |
+| `rag_find_related` | Discover related documentation for a topic |
 | `rag_health` | Check Weaviate availability |
 
 ## Architecture
@@ -167,14 +171,14 @@ MX_MCP_HTTP_PORT_RANGE=9080-9179 mx mcp start
 │  │ (bin/mx)    │  │ (make)      │  │ (analyze, discover)     │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    Tool Registry                             ││
-│  │  (40+ tools with comprehensive LLM descriptions)            ││
+│  │                    Tool Registry (44 tools)                  ││
+│  │  Comprehensive LLM descriptions for intelligent tool use    ││
 │  └─────────────────────────────────────────────────────────────┘│
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │                   Weaviate RAG Client                        ││
+│  │              Weaviate RAG Client (7 query modes)             ││
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────┬───────────────────────────────────┘
-                              │ HTTP
+                              │ HTTP (auto-allocated port)
 ┌─────────────────────────────▼───────────────────────────────────┐
 │                        Weaviate                                  │
 │  ┌─────────────────┐  ┌─────────────────────────────────────┐  │
@@ -220,6 +224,24 @@ User: How do I configure Traefik routing for my services?
 LLM uses: rag_search(query="configure Traefik routing labels for services", limit=5)
 ```
 
+### Find Code Examples
+
+```
+User: Show me how to write a multi-stage Dockerfile
+
+LLM uses: rag_find_implementation(pattern="multi-stage Dockerfile", language="dockerfile")
+```
+
+### Get Architecture Guidance
+
+```
+User: I need to choose between Laravel and Nuxt for my project. It needs SSR and good SEO.
+
+LLM uses: 
+1. rag_compare_approaches(approaches=["laravel", "nuxt"], criteria=["SSR", "SEO"])
+2. rag_get_guidance(problem="choosing between Laravel and Nuxt for SSR with SEO", constraints=["needs SSR", "SEO important"])
+```
+
 ### Analyze Project Structure
 
 ```
@@ -250,13 +272,32 @@ Set `RUST_LOG` for debug output:
 RUST_LOG=debug ./target/release/mx-mcp
 ```
 
+## MX MCP Commands
+
+```bash
+mx mcp build          # Build the MCP server binary
+mx mcp start          # Start Weaviate RAG backend (with port allocation)
+mx mcp stop           # Stop Weaviate
+mx mcp status         # Show Weaviate container status
+mx mcp logs           # Tail Weaviate logs
+mx mcp ingest         # Ingest documentation into Weaviate
+mx mcp ingest --clear # Clear and re-ingest
+mx mcp config         # Show MCP client configuration
+mx mcp run            # Run MCP server (auto-starts Weaviate)
+mx mcp test           # Test MCP server response
+mx mcp info           # Show MCP server information
+mx mcp help           # Show help
+```
+
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `WEAVIATE_URL` | Weaviate endpoint | `http://localhost:8080` |
+| `WEAVIATE_URL` | Weaviate endpoint | Auto-detected from stored port |
 | `MECH_CRATE_ROOT` | MechCrate installation directory | Auto-detected |
 | `RUST_LOG` | Log level | `info` |
+| `MX_MCP_HTTP_PORT_RANGE` | HTTP port allocation range | `8080-8179` |
+| `MX_MCP_GRPC_PORT_RANGE` | gRPC port allocation range | `50051-50150` |
 
 ## Troubleshooting
 
@@ -264,13 +305,13 @@ RUST_LOG=debug ./target/release/mx-mcp
 
 ```bash
 # Check if containers are running
-docker compose ps
+mx mcp status
 
 # View logs
-docker compose logs weaviate
+mx mcp logs
 
 # Restart
-docker compose restart
+mx mcp stop && mx mcp start
 ```
 
 ### MechCrate Root Not Found
@@ -281,12 +322,33 @@ Set explicitly:
 ./mx-mcp --mech-crate-root /path/to/mech-crate
 ```
 
+Or via environment:
+
+```bash
+export MECH_CRATE_ROOT=/path/to/mech-crate
+```
+
 ### RAG Search Returns No Results
 
 Re-ingest documentation:
 
 ```bash
-cargo run --bin mx-ingest -- --clear --mech-crate-root ..
+mx mcp ingest --clear
+```
+
+### Port Conflicts
+
+Check allocated ports:
+
+```bash
+mx mcp info
+```
+
+Force new port allocation:
+
+```bash
+rm ~/.mech-crate/mcp/.weaviate-*-port
+mx mcp start
 ```
 
 ## License
