@@ -90,7 +90,6 @@ RUN npm ci
 COPY apps/{{SERVICE_NAME}}/resources ./resources
 COPY apps/{{SERVICE_NAME}}/vite.config.ts ./
 COPY apps/{{SERVICE_NAME}}/tsconfig.json ./
-COPY apps/{{SERVICE_NAME}}/tailwind.config.js ./
 COPY apps/{{SERVICE_NAME}}/postcss.config.js ./
 
 # Build frontend assets + SSR bundle
