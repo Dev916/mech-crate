@@ -74,19 +74,26 @@
     "apps/{{SERVICE_NAME}}/tests",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
-    "docker/config",
+    "docker/.config",
     "docker/system/{{SERVICE_NAME}}"
   ],
   
   "templates": [
     { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "docker/compose/db.yml", "to": "docker/compose/db.yml" },
+    { "from": "docker/compose/db.dev.yml", "to": "docker/compose/db.dev.yml" },
+    { "from": "docker/compose/redis.yml", "to": "docker/compose/redis.yml" },
+    { "from": "docker/compose/redis.dev.yml", "to": "docker/compose/redis.dev.yml" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
     { "from": "docker/system/app", "to": "docker/system/{{SERVICE_NAME}}" },
-    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+    { "from": "docker/system/postgres", "to": "docker/system/postgres" },
+    { "from": "config/env.db", "to": "docker/.config/.env.db" },
+    { "from": "config/env.redis", "to": "docker/.config/.env.redis" },
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
   ],
   
   "post_install": {
