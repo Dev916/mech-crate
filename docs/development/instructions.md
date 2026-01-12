@@ -2,6 +2,25 @@
 
 # 📖 Codex Execution Rules
 
+## ⚡ Use MechCrate RAG for Architectural Decisions
+
+**Before implementing**: Query the MechCrate MCP server RAG tools for architectural guidance, design patterns, and code examples.
+
+**7 RAG Tools Available**:
+- `rag_search` - Semantic search across all documentation
+- `rag_search_category` - Search specific categories (recipe, command, docker, codex, infrastructure)
+- `rag_find_implementation` - Find code examples and configurations
+- `rag_get_guidance` - Get architecture and design guidance
+- `rag_compare_approaches` - Compare technologies, recipes, or strategies
+- `rag_find_related` - Discover related documentation
+- `rag_health` - Check RAG system availability
+
+**When to query**: Before choosing patterns, selecting technologies, implementing complex algorithms, designing APIs, or making architectural decisions.
+
+All codex documentation is indexed and semantically searchable. Use RAG first.
+
+---
+
 ## Table of Contents
 1. [The Journey Inward: Advanced Theory Index](#1-the-journey-inward-advanced-theory-index)
 2. [Code References](#2-code-references)
@@ -63,110 +82,6 @@ The INDEX provides comprehensive metadata for each document including:
    - Analyze those projects first.
    - They often contain framework and tool sources at the latest version.
    - Always use them to avoid outdated patterns.
-
----
-
-## 2.5. Codex Knowledge Server (MCP)
-
-**IMPORTANT**: For all architectural decisions, design patterns, and implementation guidance, consult the Codex Knowledge Server via MCP.
-
-### What It Provides
-The Codex MCP Server gives you semantic search access to 12 comprehensive guides (~40,000 lines) covering:
-- **Category Theory** (Functors, Monads, Comonads, F-Algebras, Optics)
-- **Efficient Neural Networks** (GhostNet, MobileNet, CNN optimization)
-- **Distributed Systems** (Novel theories, Sheaf theory, Domain boundaries)
-- **Database Design** (Normalization, indexing, polyglot persistence, streaming)
-- **Blockchain & RWA** (Tokenization, compliance, security tokens)
-- **Docker & DevOps** (Multi-stage builds, production patterns)
-- **Advanced Patterns** (Recursion schemes, Free monads, Effect systems)
-
-### How to Use It
-
-**Before making architectural decisions**, query the Codex Knowledge Server:
-
-```javascript
-// Use the MCP server to find relevant guidance
-const guidance = await mcp.call("get_architecture_guidance", {
-  problem: "Building a mobile CNN for real-time object detection",
-  constraints: ["latency < 50ms", "edge device", "accuracy > 70%"]
-});
-
-// Find specific implementations
-const impl = await mcp.call("find_implementation", {
-  pattern: "ghost modules",
-  language: "python"
-});
-
-// Compare different approaches
-const comparison = await mcp.call("compare_approaches", {
-  approaches: ["GhostNet", "MobileNetV2", "EfficientNet"],
-  criteria: ["FLOPs", "accuracy", "mobile latency"]
-});
-
-// Search for related documentation
-const docs = await mcp.call("search_codex", {
-  query: "How to implement monad transformers in Rust?",
-  top_k: 5,
-  min_similarity: 0.7
-});
-```
-
-### MCP Tools Available
-
-1. **`search_codex`**: Semantic search across all documentation
-   - Use for: General questions, finding relevant sections
-   - Returns: Top-k document chunks with similarity scores
-
-2. **`find_implementation`**: Find code examples and implementations
-   - Use for: Getting working code examples in specific languages
-   - Returns: Code snippets with context
-
-3. **`get_architecture_guidance`**: Get architectural recommendations
-   - Use for: Design decisions, pattern selection, trade-off analysis
-   - Returns: Relevant patterns with pros/cons
-
-4. **`compare_approaches`**: Compare multiple solutions
-   - Use for: Technology selection, pattern comparison
-   - Returns: Side-by-side comparison with metrics
-
-5. **`find_related_docs`**: Discover related documentation
-   - Use for: Exploring connected topics
-   - Returns: Related documents by semantic similarity
-
-### When to Use the MCP Server
-
-**ALWAYS consult before**:
-- Choosing between architectural patterns
-- Implementing complex algorithms (efficient CNNs, distributed systems)
-- Making technology selections (databases, frameworks, libraries)
-- Designing APIs or data models
-- Implementing category theory concepts
-- Setting up infrastructure (Docker, CI/CD)
-- Blockchain/smart contract development
-
-**Example Workflow**:
-```
-1. Receive task: "Implement efficient CNN for mobile"
-2. Query MCP: get_architecture_guidance(problem="efficient mobile CNN")
-3. Review guidance: GhostNet vs MobileNet comparison
-4. Query MCP: find_implementation(pattern="GhostNet", language="python")
-5. Implement using retrieved code examples
-6. Reference specific optimizations from retrieved docs
-```
-
-### Server Location
-- **Path**: `/Users/webmech/codex_1/codex-mcp-server`
-- **Status**: See `IMPLEMENTATION_STATUS.md` for setup instructions
-- **README**: Complete usage guide in `README.md`
-
-### Benefits
-- **No outdated patterns**: All documentation is version-controlled in codex
-- **Semantic search**: Find relevant info even with fuzzy queries
-- **Context-aware**: Get the right documentation for your specific problem
-- **Fast**: Sub-50ms queries with local vector database
-- **Comprehensive**: 12 guides covering advanced theory to production patterns
-
-**Remember**: The MCP server is your first stop for architectural decisions. It ensures consistency with established patterns and leverages the full knowledge base.
 
 ---
 
