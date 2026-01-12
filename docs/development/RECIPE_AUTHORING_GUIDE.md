@@ -123,6 +123,13 @@ The `recipe.json` file is the heart of a recipe—it defines how templates are p
     { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
   ],
 
+  "init_app": {
+    "cwd": "apps",
+    "target_dir": "apps/{{SERVICE_NAME}}",
+    "skip_if_exists": true,
+    "command": "{{INIT_CMD}}"
+  },
+
   "post_install": {
     "renames": [
       { "from": "apps/{{SERVICE_NAME}}/gitignore.template", "to": "apps/{{SERVICE_NAME}}/.gitignore" }
@@ -163,6 +170,56 @@ The `recipe.json` file is the heart of a recipe—it defines how templates are p
 1. **Placeholders in file content only**: Use `{{PLACEHOLDER}}` in file contents
 2. **Placeholders in paths are expanded**: Template paths like `docker/system/{{SERVICE_NAME}}` work
 3. **No placeholders in actual directory names**: The `from` path in templates uses literal names (e.g., `docker/system/app`)
+
+---
+
+## CLI-based App Scaffolding (`init_app`)
+
+For recipes that have an official project scaffolder (Nuxt, Astro, Zola, etc.), prefer generating the base application via the official CLI and then layering MechCrate “overlays” (Docker, configs, small app additions) on top.
+
+### How it works
+
+- `init_app` runs **before** `directories` and `templates` during `mx add ... --recipe=<name>`.
+- It runs a single shell `command` (after placeholder interpolation) in `cwd`.
+- Idempotence is supported via `skip_if_exists` (default true) and an optional `--force-init` recipe option that deletes `apps/{{SERVICE_NAME}}` first.
+
+### Recommended option pattern
+
+Add an overridable option and placeholder:
+
+```json
+{
+  "options": {
+    "init_cmd": {
+      "flag": "--init-cmd",
+      "default": "CI=true npx some-cli@latest init {{SERVICE_NAME}} --no-install",
+      "description": "Command to scaffold the app (runs from ./apps)"
+    },
+    "force_init": {
+      "flag": "--force-init",
+      "default": "false",
+      "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS)"
+    }
+  },
+  "placeholders": {
+    "INIT_CMD": { "source": "option:init_cmd" }
+  },
+  "init_app": {
+    "cwd": "apps",
+    "target_dir": "apps/{{SERVICE_NAME}}",
+    "skip_if_exists": true,
+    "command": "{{INIT_CMD}}"
+  }
+}
+```
+
+### Best practices
+
+- Use non-interactive flags when available (or set `CI=true`) to avoid prompts during scaffolding.
+- Do **not** pipe `yes` into interactive TUI prompts; prefer explicit `--template` / `--no-install` style flags.
+- Keep `templates/app/...` as an **overlay**, not a full app replacement:
+  - Prefer copying a small set of files (e.g. health endpoint) instead of `app/` wholesale.
+  - This ensures the official scaffold remains the canonical baseline.
 
 ---
 
