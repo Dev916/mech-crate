@@ -22,6 +22,16 @@
       "default": "{{SERVICE_NAME}}.localhost",
       "description": "Custom domain"
     },
+    "init_cmd": {
+      "flag": "--init-cmd",
+      "default": "CI=true NUXI_TELEMETRY_DISABLED=1 npx nuxi@latest init {{SERVICE_NAME}} --template minimal --no-install",
+      "description": "Command to scaffold the Nuxt app (runs from ./apps)"
+    },
+    "force_init": {
+      "flag": "--force-init",
+      "default": "false",
+      "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS)"
+    },
     "mode": {
       "flag": "--mode",
       "default": "ssr",
@@ -29,7 +39,7 @@
     },
     "node": {
       "flag": "--node",
-      "default": "22",
+      "default": "24",
       "description": "Node.js version"
     }
   },
@@ -39,8 +49,16 @@
     "SERVICE_SLUG": { "source": "name", "transform": "slug" },
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
     "DOMAIN": { "source": "option:domain" },
+    "INIT_CMD": { "source": "option:init_cmd" },
     "NODE_VERSION": { "source": "option:node" },
     "SSR_ENABLED": { "source": "option:mode", "transform": "ssr_bool" }
+  },
+
+  "init_app": {
+    "cwd": "apps",
+    "target_dir": "apps/{{SERVICE_NAME}}",
+    "skip_if_exists": true,
+    "command": "{{INIT_CMD}}"
   },
   
   "directories": [
@@ -58,7 +76,8 @@
   ],
   
   "templates": [
-    { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
+    { "from": "app/server/api/health.get.ts", "to": "apps/{{SERVICE_NAME}}/server/api/health.get.ts" },
+    { "from": "app/package-lock.json", "to": "apps/{{SERVICE_NAME}}/package-lock.json" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
@@ -68,9 +87,6 @@
   ],
   
   "post_install": {
-    "renames": [
-      { "from": "apps/{{SERVICE_NAME}}/gitignore.template", "to": "apps/{{SERVICE_NAME}}/.gitignore" }
-    ],
     "create_files": [
       {
         "path": "apps/{{SERVICE_NAME}}/.env.example",
@@ -81,6 +97,7 @@
   
   "next_steps": [
     "cd apps/{{SERVICE_NAME}} && npm install",
+    "mx build s={{SERVICE_NAME}}",
     "make dev s={{SERVICE_NAME}}"
   ]
 }
