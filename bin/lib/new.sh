@@ -108,34 +108,29 @@ create_project() {
     shopt -u dotglob
     chmod +x scripts/*.sh 2>/dev/null || true
     
-    # Docker config templates (rename env.* to .env.* and strip .template suffix)
+    # Docker config templates (shared only).
+    # Intentionally DO NOT scaffold any service-specific docker compose / dockerfiles / system files here.
+    # Those should be created by: mx add <service> (or mx add <service> --recipe=<recipe>)
+    info "Copying shared Docker config..."
     for config in "$TEMPLATES_DIR/docker/config/"*; do
-        if [[ -f "$config" ]]; then
-            local filename=$(basename "$config")
-            # Strip .template suffix if present
-            filename="${filename%.template}"
-            # Rename env.* to .env.*
-            local target_name="${filename/env./.env.}"
-            cp "$config" "docker/.config/$target_name"
-        fi
+        [[ -f "$config" ]] || continue
+        local filename
+        filename=$(basename "$config")
+        local target_name=""
+        case "$filename" in
+            env.shared)
+                target_name=".env.shared"
+                ;;
+            env.secrets.template)
+                target_name=".env.secrets.template"
+                ;;
+            *)
+                # Skip service-specific examples like env.app/env.db/env.redis
+                continue
+                ;;
+        esac
+        cp "$config" "docker/.config/$target_name"
     done
-    
-    # Sample compose files
-    for compose in "$TEMPLATES_DIR/docker/compose/"*; do
-        if [[ -f "$compose" ]]; then
-            cp "$compose" "docker/compose/$(basename "$compose")"
-        fi
-    done
-    
-    # Sample dockerfiles
-    if [[ -d "$TEMPLATES_DIR/docker/dockerfiles" ]]; then
-        cp -r "$TEMPLATES_DIR/docker/dockerfiles/"* "docker/dockerfiles/" 2>/dev/null || true
-    fi
-    
-    # Sample system files (1:1 structure)
-    if [[ -d "$TEMPLATES_DIR/docker/system" ]]; then
-        cp -r "$TEMPLATES_DIR/docker/system/"* "docker/system/" 2>/dev/null || true
-    fi
     
     # ─────────────────────────────────────────────────────────────────────────
     # Infrastructure Setup
@@ -234,6 +229,9 @@ A MechCrate project.
 # Check dependencies
 make doctor
 
+# Add a service (pick a recipe, or use the default template)
+mx add api --recipe=nuxt
+
 # Start development
 make dev
 
@@ -266,11 +264,10 @@ $project_name/
 └── docker/
     ├── .config/          # Environment files
     │   ├── .env.shared   # Shared config
-    │   ├── .env.secrets  # Secrets (gitignored)
-    │   └── .env.<svc>    # Per-service config
+    │   ├── .env.secrets.template  # Secrets template (gitignored secrets created on init)
+    │   └── .env.<svc>             # Per-service config (created by mx add)
     ├── compose/          # Compose files
-    │   ├── app.yml       # Service baseline
-    │   └── app.dev.yml   # Dev overrides
+    │   └── <service>.yml / <service>.dev.yml  # Created by mx add / recipes
     ├── system/           # System-level files (configs, etc.)
     │   └── <service>/    # Maps to container /
     │       ├── etc/      # Config files
