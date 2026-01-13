@@ -1,0 +1,289 @@
+% unyform.ai Document LaTeX Template
+% Professional technical documentation with brand styling
+
+\documentclass[$if(fontsize)$$fontsize$,$endif$$if(lang)$$babel-lang$,$endif$$if(papersize)$$papersize$paper,$endif$$for(classoption)$$classoption$$sep$,$endfor$]{$documentclass$}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% PACKAGES
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\usepackage{fontspec}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usepackage{etoolbox}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% COLORS - unyform.ai Brand
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\definecolor{unyformprimary}{HTML}{2563EB}
+\definecolor{unyformaccent}{HTML}{10B981}
+\definecolor{unyformdark}{HTML}{0F172A}
+\definecolor{unyformgray}{HTML}{64748B}
+\definecolor{unyformlight}{HTML}{F1F5F9}
+\definecolor{codebg}{HTML}{1E293B}
+\definecolor{linkblue}{HTML}{3B82F6}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% GEOMETRY
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\geometry{
+  $if(geometry)$
+    $for(geometry)$
+      $geometry$$sep$,
+    $endfor$
+  $else$
+    margin=1in,
+    top=1.25in,
+    bottom=1.25in,
+  $endif$
+}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% FONTS
+% ═══════════════════════════════════════════════════════════════════════════════
+
+$if(mainfont)$
+\setmainfont{$mainfont$}
+$else$
+\setmainfont{Helvetica Neue}[
+  BoldFont = {Helvetica Neue Bold},
+  ItalicFont = {Helvetica Neue Italic}
+]
+$endif$
+
+$if(monofont)$
+\setmonofont{$monofont$}
+$else$
+\setmonofont{Menlo}[Scale=0.9]
+$endif$
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% HEADERS & FOOTERS
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{unyformgray}{unyform.ai}}
+\fancyhead[R]{\small\textcolor{unyformgray}{\leftmark}}
+\fancyfoot[C]{\textcolor{unyformgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% SECTIONS
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{unyformprimary}}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+  
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{unyformprimary}}
+  {\thesection}{1em}{}
+  
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{unyformdark}}
+  {\thesubsection}{1em}{}
+  
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{unyformdark}}
+  {\thesubsubsection}{1em}{}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% TABLE OF CONTENTS
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\renewcommand{\cfttoctitlefont}{\huge\bfseries\color{unyformprimary}}
+\renewcommand{\cftchapfont}{\bfseries\color{unyformprimary}}
+\renewcommand{\cftsecfont}{\color{black}}
+\renewcommand{\cftsubsecfont}{\color{unyformgray}}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% HYPERLINKS
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\hypersetup{
+  $if(colorlinks)$
+    colorlinks=true,
+    linkcolor=$if(linkcolor)$$linkcolor$$else$unyformprimary$endif$,
+    urlcolor=$if(urlcolor)$$urlcolor$$else$linkblue$endif$,
+    citecolor=$if(citecolor)$$citecolor$$else$unyformprimary$endif$,
+  $else$
+    colorlinks=true,
+    linkcolor=unyformprimary,
+    urlcolor=linkblue,
+  $endif$
+  pdfauthor={$author$},
+  pdftitle={$title$},
+  pdfsubject={$subtitle$},
+  pdfkeywords={$for(keywords)$$keywords$$sep$, $endfor$},
+  bookmarksnumbered=true,
+}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% CODE LISTINGS
+% ═══════════════════════════════════════════════════════════════════════════════
+
+$if(highlighting-macros)$
+$highlighting-macros$
+$endif$
+
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\small\ttfamily\color{white},
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=left,
+  numbersep=5pt,
+  numberstyle=\tiny\color{unyformgray},
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=2,
+  frame=single,
+  rulecolor=\color{unyformgray},
+  keywordstyle=\color{unyformprimary},
+  commentstyle=\color{unyformgray},
+  stringstyle=\color{unyformaccent},
+}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% TABLES
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\renewcommand{\arraystretch}{1.3}
+\arrayrulecolor{unyformgray}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% IMAGES
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\graphicspath{{./}{./diagrams/}}
+
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  labelsep=period,
+  textfont=it,
+}
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% TITLE PAGE
+% ═══════════════════════════════════════════════════════════════════════════════
+
+$if(title)$
+\title{
+  \vspace{2cm}
+  {\Huge\bfseries\color{unyformprimary}$title$}
+  $if(subtitle)$
+  \vspace{0.5cm}
+  \\{\Large\color{unyformgray}$subtitle$}
+  $endif$
+}
+$endif$
+
+$if(author)$
+\author{$author$}
+$endif$
+
+$if(date)$
+\date{$date$}
+$endif$
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% ABSTRACT
+% ═══════════════════════════════════════════════════════════════════════════════
+
+$if(abstract)$
+\newcommand{\abstracttext}{$abstract$}
+$endif$
+
+% ═══════════════════════════════════════════════════════════════════════════════
+% DOCUMENT
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\begin{document}
+
+% Title page
+$if(title)$
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  
+  % Logo - unyform.ai styled
+  \begin{tikzpicture}
+    \fill[unyformprimary] (0,0) circle (1.5cm);
+    \node[white, font=\Huge\bfseries] at (0,0) {U};
+  \end{tikzpicture}
+  
+  \vspace{1.5cm}
+  
+  {\Huge\bfseries\color{unyformprimary}$title$}
+  
+  $if(subtitle)$
+  \vspace{0.5cm}
+  {\Large\color{unyformgray}$subtitle$}
+  $endif$
+  
+  \vspace{2cm}
+  
+  $if(author)$
+  {\large $author$}
+  $endif$
+  
+  \vspace{0.5cm}
+  
+  $if(date)$
+  {\large\color{unyformgray}$date$}
+  $endif$
+  
+  \vfill
+  
+  $if(abstract)$
+  \begin{minipage}{0.8\textwidth}
+    \centering
+    \textit{\color{unyformgray}$abstract$}
+  \end{minipage}
+  $endif$
+  
+  \vspace{1.5cm}
+  
+  {\small\color{unyformgray}AI that builds like your team builds}
+  
+  \vspace{1cm}
+  
+\end{titlepage}
+$endif$
+
+% Table of contents
+$if(toc)$
+{
+  \hypersetup{linkcolor=black}
+  \setcounter{tocdepth}{$if(toc-depth)$$toc-depth$$else$3$endif$}
+  \tableofcontents
+  \clearpage
+}
+$endif$
+
+% Main content
+$body$
+
+\end{document}
