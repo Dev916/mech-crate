@@ -72,18 +72,17 @@
     "apps/{{SERVICE_NAME}}/assets/css",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
-    "docker/config"
+    "docker/.config"
   ],
   
   "templates": [
     { "from": "app/server/api/health.get.ts", "to": "apps/{{SERVICE_NAME}}/server/api/health.get.ts" },
-    { "from": "app/package-lock.json", "to": "apps/{{SERVICE_NAME}}/package-lock.json" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
-    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
   ],
   
   "post_install": {
@@ -97,7 +96,7 @@
   
   "next_steps": [
     "cd apps/{{SERVICE_NAME}} && npm install",
-    "mx build s={{SERVICE_NAME}}",
+    "make build s={{SERVICE_NAME}}",
     "make dev s={{SERVICE_NAME}}"
   ]
 }
