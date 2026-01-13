@@ -491,7 +491,7 @@ install_recipe() {
     echo "    docker/compose/$service_name.yml          # Production compose"
     echo "    docker/compose/$service_name.dev.yml      # Development overrides"
     echo "    docker/dockerfiles/$service_name/         # Dockerfile"
-    echo "    docker/config/.env.$service_name          # Environment"
+    echo "    docker/.config/.env.$service_name         # Environment"
     echo ""
     
     info "Next steps:"
