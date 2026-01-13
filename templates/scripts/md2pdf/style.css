@@ -1,0 +1,401 @@
+/* MechCrate md2pdf Styles for WeasyPrint */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --mx-primary: #8b5cf6;       /* Purple accent */
+  --mx-primary-dark: #7c3aed;
+  --mx-green: #22c55e;
+  --mx-dark: #0f172a;
+  --mx-gray: #64748b;
+  --mx-light-gray: #f1f5f9;
+  --code-bg: #1e293b;
+  --link-blue: #3b82f6;
+}
+
+/* Page setup */
+@page {
+  size: letter;
+  margin: 1in;
+  
+  @top-left {
+    content: string(doc-title);
+    font-size: 10pt;
+    color: var(--mx-gray);
+  }
+  
+  @top-right {
+    content: string(chapter-title);
+    font-size: 10pt;
+    color: var(--mx-gray);
+  }
+  
+  @bottom-center {
+    content: counter(page);
+    font-size: 10pt;
+    color: var(--mx-gray);
+  }
+}
+
+@page :first {
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+
+/* Typography */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+
+/* Headings */
+h1 {
+  font-size: 28pt;
+  font-weight: 700;
+  color: var(--mx-primary);
+  margin-top: 0;
+  margin-bottom: 1em;
+  page-break-after: avoid;
+  string-set: chapter-title content(), doc-title content();
+}
+
+h2 {
+  font-size: 20pt;
+  font-weight: 600;
+  color: var(--mx-primary);
+  margin-top: 2em;
+  margin-bottom: 0.75em;
+  page-break-after: avoid;
+  border-bottom: 2px solid var(--mx-primary);
+  padding-bottom: 0.25em;
+}
+
+h3 {
+  font-size: 14pt;
+  font-weight: 600;
+  color: #333;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 12pt;
+  font-weight: 600;
+  color: #444;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+h5, h6 {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #555;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+/* Links */
+a {
+  color: var(--link-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Code */
+code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 0.9em;
+  background: #f3f4f6;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--code-bg);
+  color: #e5e7eb;
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 9pt;
+  line-height: 1.5;
+  page-break-inside: avoid;
+  margin: 1em 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+
+th, td {
+  padding: 0.5em 0.75em;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+th {
+  background: var(--mx-primary);
+  color: white;
+  font-weight: 600;
+}
+
+tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--mx-primary);
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  background: #f3f4f6;
+  font-style: italic;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+/* Lists */
+ul, ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+li {
+  margin: 0.25em 0;
+}
+
+/* Task lists */
+li.task-list-item {
+  list-style-type: none;
+  margin-left: -1em;
+}
+
+input[type="checkbox"] {
+  margin-right: 0.5em;
+}
+
+/* Horizontal rules */
+hr {
+  border: none;
+  border-top: 2px solid var(--mx-primary);
+  margin: 2em 0;
+}
+
+/* Title page styles (first h1) */
+body > h1:first-of-type {
+  font-size: 42pt;
+  text-align: center;
+  margin-top: 3in;
+  border: none;
+  page-break-after: always;
+}
+
+/* Abstract styling */
+body > blockquote:first-of-type {
+  text-align: center;
+  font-size: 12pt;
+  border: none;
+  background: none;
+  max-width: 80%;
+  margin: 2em auto;
+}
+
+/* TOC styling */
+#toc, .toc {
+  page-break-after: always;
+}
+
+#toc h2, .toc h2 {
+  font-size: 24pt;
+  border: none;
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+}
+
+/* Page breaks */
+.page-break, .newpage {
+  page-break-after: always;
+}
+
+/* Diagrams in code blocks - preserve ASCII art */
+pre:has(code) {
+  white-space: pre;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ASCII diagram containers */
+.ascii-diagram {
+  margin: 1.5em 0;
+  page-break-inside: avoid;
+}
+
+.ascii-diagram pre {
+  background: var(--code-bg);
+  color: var(--mx-green);
+  padding: 1.5em;
+  border-radius: 12px;
+  border: 2px solid var(--mx-primary);
+  font-size: 8pt;
+  line-height: 1.3;
+  overflow-x: auto;
+}
+
+/* Diagram images */
+img[src*="diagram"] {
+  display: block;
+  margin: 1.5em auto;
+  max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+figure {
+  margin: 1.5em 0;
+  text-align: center;
+  page-break-inside: avoid;
+}
+
+figcaption {
+  font-style: italic;
+  color: var(--mx-gray);
+  font-size: 10pt;
+  margin-top: 0.5em;
+}
+
+/* Appendix styling */
+h1[id*="appendix"], h1[id*="Appendix"] {
+  page-break-before: always;
+}
+
+/* Definition lists */
+dl {
+  margin: 1em 0;
+}
+
+dt {
+  font-weight: 600;
+  color: var(--mx-primary-dark);
+}
+
+dd {
+  margin-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Admonitions / callouts */
+.note, .warning, .tip, .important {
+  padding: 1em;
+  border-radius: 8px;
+  margin: 1em 0;
+  page-break-inside: avoid;
+}
+
+.note {
+  background: #dbeafe;
+  border-left: 4px solid #3b82f6;
+}
+
+.warning {
+  background: #fef3c7;
+  border-left: 4px solid #f59e0b;
+}
+
+.tip {
+  background: #d1fae5;
+  border-left: 4px solid var(--mx-green);
+}
+
+.important {
+  background: #fee2e2;
+  border-left: 4px solid #ef4444;
+}
+
+/* Print optimizations */
+@media print {
+  body {
+    font-size: 10pt;
+  }
+  
+  h1 { page-break-before: always; }
+  h2, h3 { page-break-after: avoid; }
+  pre, table { page-break-inside: avoid; }
+  
+  a {
+    color: var(--link-blue);
+  }
+  
+  a[href]:after {
+    content: none; /* Don't show URLs in print */
+  }
+}
+
+/* Syntax highlighting for code (zenburn-like) */
+.sourceCode .kw { color: #f0dfaf; font-weight: bold; } /* keyword */
+.sourceCode .dt { color: #dfdfbf; } /* datatype */
+.sourceCode .dv { color: #dcdccc; } /* decimal value */
+.sourceCode .bn { color: #dca3a3; } /* base-n value */
+.sourceCode .fl { color: #c0bed1; } /* float */
+.sourceCode .ch { color: #dca3a3; } /* char */
+.sourceCode .st { color: #cc9393; } /* string */
+.sourceCode .co { color: #7f9f7f; font-style: italic; } /* comment */
+.sourceCode .ot { color: #efef8f; } /* other */
+.sourceCode .fu { color: #efef8f; } /* function */
+.sourceCode .va { color: #dcdccc; } /* variable */
+.sourceCode .cf { color: #f0dfaf; font-weight: bold; } /* control flow */
+.sourceCode .op { color: #f0efd0; } /* operator */
+.sourceCode .er { color: #c3bf9f; font-weight: bold; } /* error */
+
+/* MechCrate-specific styling */
+.mx-logo {
+  text-align: center;
+  margin: 2em 0;
+}
+
+.mx-header {
+  color: var(--mx-primary);
+}
+
+/* Mermaid diagram styling for embedded images */
+.mermaid-diagram {
+  text-align: center;
+  margin: 1.5em 0;
+}
+
+.mermaid-diagram img {
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram-caption {
+  font-style: italic;
+  color: var(--mx-gray);
+  font-size: 10pt;
+  margin-top: 0.5em;
+  text-align: center;
+}
