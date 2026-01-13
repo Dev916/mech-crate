@@ -42,6 +42,7 @@ source "$LIB_DIR/init-code-rules.sh"
 source "$LIB_DIR/test.sh"
 source "$LIB_DIR/router.sh"
 source "$LIB_DIR/mcp.sh"
+source "$LIB_DIR/docs.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main command router
@@ -83,6 +84,9 @@ main() {
             ;;
         test)
             test_cmd "$@"
+            ;;
+        docs)
+            docs_cmd "$@"
             ;;
         doctor)
             doctor
