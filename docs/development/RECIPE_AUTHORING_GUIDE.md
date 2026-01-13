@@ -110,7 +110,7 @@ The `recipe.json` file is the heart of a recipe—it defines how templates are p
     "apps/{{SERVICE_NAME}}/src",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
-    "docker/config",
+    "docker/.config",
     "docker/system/{{SERVICE_NAME}}"
   ],
 
@@ -120,7 +120,7 @@ The `recipe.json` file is the heart of a recipe—it defines how templates are p
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/system/app", "to": "docker/system/{{SERVICE_NAME}}" },
-    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
   ],
 
   "init_app": {
