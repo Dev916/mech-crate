@@ -31,8 +31,8 @@
     },
     "init_cmd": {
       "flag": "--init-cmd",
-      "default": "cd {{SERVICE_NAME}} && yes \"\" | zola init",
-      "description": "Command to scaffold the Zola site (runs from ./apps; should create apps/{{SERVICE_NAME}})"
+      "default": "yes \"\" | zola init {{SERVICE_NAME}}",
+      "description": "Command to scaffold the Zola site (runs from ./apps; should create {{SERVICE_NAME}}/)"
     },
     "force_init": {
       "flag": "--force-init",
@@ -85,7 +85,7 @@
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
     "docker/system/{{SERVICE_NAME}}",
-    "docker/config"
+    "docker/.config"
   ],
 
   "templates": [
@@ -99,7 +99,7 @@
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/system/app", "to": "docker/system/{{SERVICE_NAME}}" },
-    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
   ],
 
   "post_install": {
