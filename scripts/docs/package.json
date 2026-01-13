@@ -1,0 +1,24 @@
+{
+  "name": "unyform-docs",
+  "version": "1.0.0",
+  "description": "PDF compilation for unyform.ai documentation",
+  "type": "module",
+  "scripts": {
+    "compile": "tsx compile.ts",
+    "compile:all": "tsx compile.ts --all",
+    "compile:whitepaper": "tsx compile.ts --doc=whitepaper",
+    "compile:executive": "tsx compile.ts --doc=executive-summary",
+    "compile:prd": "tsx compile.ts --doc=mvp-prd",
+    "compile:pitch": "tsx compile.ts --doc=pitch-deck"
+  },
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^10.6.1",
+    "tsx": "^4.7.0",
+    "gray-matter": "^4.0.3",
+    "glob": "^10.3.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}
