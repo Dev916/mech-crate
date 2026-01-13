@@ -1,7 +1,12 @@
 # MechCrate Project Makefile
 # 🦝 Crate Raccoon
 
+ROOT_DIR := $(shell pwd)
+
 .PHONY: install uninstall test help
+
+# Include documentation module
+-include make/docs.mk
 
 # Install mx command to /usr/local/bin
 install:
