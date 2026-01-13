@@ -1,0 +1,23 @@
+{
+  "name": "mx-md2pdf",
+  "version": "1.0.0",
+  "description": "MechCrate Markdown to PDF compiler with Mermaid diagram support",
+  "type": "module",
+  "bin": {
+    "md2pdf": "./md2pdf.ts"
+  },
+  "scripts": {
+    "md2pdf": "tsx md2pdf.ts"
+  },
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^10.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
