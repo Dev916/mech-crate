@@ -35,7 +35,7 @@
     },
     "php": {
       "flag": "--php",
-      "default": "8.3",
+      "default": "8.5",
       "description": "PHP version"
     }
   },
