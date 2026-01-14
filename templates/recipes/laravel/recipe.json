@@ -85,8 +85,16 @@
     { "from": "docker/compose/db.dev.yml", "to": "docker/compose/db.dev.yml" },
     { "from": "docker/compose/redis.yml", "to": "docker/compose/redis.yml" },
     { "from": "docker/compose/redis.dev.yml", "to": "docker/compose/redis.dev.yml" },
+
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
+
+    { "from": "docker/compose/service.scheduler.yml", "to": "docker/compose/{{SERVICE_NAME}}.scheduler.yml" },
+    { "from": "docker/compose/service.scheduler.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.scheduler.dev.yml" },
+
+    { "from": "docker/compose/service.worker.yml", "to": "docker/compose/{{SERVICE_NAME}}.worker.yml" },
+    { "from": "docker/compose/service.worker.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.worker.dev.yml" },
+
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
     { "from": "docker/system/app", "to": "docker/system/{{SERVICE_NAME}}" },
