@@ -2,7 +2,9 @@
 
 ## Overview
 
-The `mx docs` command converts Markdown files to professional PDF documents with automatic Mermaid diagram rendering, YAML frontmatter support, and LaTeX-based typesetting.
+The `mx docs` command is a **portable** Markdown to PDF/HTML compiler with automatic Mermaid diagram rendering.
+
+**Key Feature: Just works with Node.js** - no system dependencies required. PDF generation is enhanced if Pandoc/LaTeX are available, but you'll always get HTML output.
 
 ## Quick Start
 
@@ -14,43 +16,38 @@ mx docs README.md
 mx docs ./my-docs/
 
 # Compile all unyform.ai documents
-mx docs --unyform
+mx docs --all
 ```
 
 ---
 
 ## Installation
 
-### Dependencies
+### Required
 
-The docs command requires the following tools:
+| Tool | Installation |
+|------|--------------|
+| **Node.js 18+** | `brew install node` |
 
-| Tool | Required | Installation |
-|------|----------|--------------|
-| **Node.js 18+** | Yes | `brew install node` |
-| **npm** | Yes | Included with Node.js |
-| **Pandoc** | Yes | `brew install pandoc` |
-| **XeLaTeX** | Recommended | `brew install --cask mactex-no-gui` |
+That's it! Everything else is optional.
 
-### Check Dependencies
+### Optional (for PDF output)
 
-```bash
-# Verify all dependencies are installed
-make docs-check
+| Tool | Installation | Notes |
+|------|--------------|-------|
+| **Pandoc** | `brew install pandoc` | Enables PDF generation |
+| **XeLaTeX** | `brew install --cask mactex-no-gui` | Best PDF quality |
+| **WeasyPrint** | `pip install weasyprint` | Alternative PDF engine |
 
-# Or manually check
-pandoc --version
-xelatex --version
-node --version
-```
+Without Pandoc/LaTeX, you'll get HTML output (which is still great for viewing and printing).
 
 ### First Run
 
-On first use, the command will automatically install its npm dependencies:
+On first use, npm dependencies are auto-installed:
 
 ```bash
 mx docs --help
-# Installing documentation dependencies...
+# Installing documentation dependencies (first run)...
 # ✅ Dependencies installed
 ```
 
@@ -62,7 +59,7 @@ mx docs --help
 
 ```
 mx docs <input> [options]
-mx docs --unyform [options]
+mx docs --all [options]
 mx docs --doc=<name> [options]
 mx docs --list
 ```
@@ -71,25 +68,32 @@ mx docs --list
 
 | Argument | Description |
 |----------|-------------|
-| `<input>` | Path to a markdown file (`.md`) or directory containing markdown files |
+| `<input>` | Path to a markdown file (`.md`) or directory |
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output <path>` | Output directory for generated PDFs |
-| `--prefix <string>` | Add prefix to all output filenames |
-| `--author <string>` | Default author for documents without frontmatter |
-| `--markdown-only` | Output processed markdown instead of PDF |
-| `--no-recursive` | Don't scan subdirectories (for folder input) |
-| `-v, --verbose` | Show detailed progress information |
-| `-h, --help` | Show help message |
+| `-o, --output <path>` | Output directory |
+| `--title <title>` | Document title |
+| `--subtitle <subtitle>` | Document subtitle |
+| `--author <author>` | Document author (default: unyform.ai) |
+| `--prefix <string>` | Add prefix to output filenames |
+| `--theme <theme>` | Mermaid theme: dark, light, forest, neutral |
+| `--order <files>` | Comma-separated file order for directories |
+| `--markdown-only` | Only generate processed markdown |
+| `--html-only` | Only generate HTML (skip PDF attempt) |
+| `--no-toc` | Disable table of contents |
+| `--no-numbers` | Disable section numbering |
+| `--no-recursive` | Don't scan subdirectories |
+| `-v, --verbose` | Show detailed progress |
+| `-h, --help` | Show help |
 
 ### unyform.ai Options
 
 | Option | Description |
 |--------|-------------|
-| `--unyform` | Compile all predefined unyform.ai documents |
+| `--all` | Compile all predefined unyform.ai documents |
 | `--doc=<name>` | Compile a specific unyform document |
 | `--list` | List all available unyform documents |
 
@@ -97,46 +101,46 @@ mx docs --list
 
 ## Examples
 
-### Single File Compilation
+### Single File
 
 ```bash
-# Basic usage - outputs to ./output/readme.pdf
+# Basic usage
 mx docs README.md
 
 # Custom output directory
 mx docs docs/spec.md -o artifacts/
 
-# With verbose output
-mx docs whitepaper.md -v
+# With title and author
+mx docs guide.md --title "User Guide" --author "Engineering Team"
+
+# HTML only (no PDF attempt)
+mx docs spec.md --html-only
 ```
 
-### Folder Compilation
+### Folder
 
 ```bash
 # Compile all .md files in a folder
 mx docs ./documentation/
 
-# With custom output directory
-mx docs ./specs/ -o ./pdfs/
+# Custom output with prefix
+mx docs ./specs/ -o ./pdfs/ --prefix=v2
 
-# Add prefix to all output files
-mx docs ./api-docs/ --prefix=api
+# Control file order
+mx docs ./api/ --order="intro.md,endpoints.md,errors.md"
 
 # Skip subdirectories
 mx docs ./docs/ --no-recursive
-
-# Set default author for docs without frontmatter
-mx docs ./guides/ --author="Engineering Team"
 ```
 
 ### unyform.ai Documents
 
 ```bash
-# List available unyform documents
+# List available documents
 mx docs --list
 
 # Compile all unyform documents
-mx docs --unyform
+mx docs --all
 
 # Compile specific document
 mx docs --doc=whitepaper
@@ -150,68 +154,71 @@ mx docs --doc=pricing-strategy
 mx docs --doc=competitive-analysis
 ```
 
-### Combined Options
+---
 
-```bash
-# Folder with all options
-mx docs ./specs/ \
-  -o ./artifacts/specs/ \
-  --prefix=v2 \
-  --author="Product Team" \
-  -v
+## Output Structure
 
-# unyform docs to custom location
-mx docs --unyform -o ./investor-package/
+The compiler generates multiple formats for maximum compatibility:
+
 ```
+artifacts/<name>/
+├── <name>.pdf       # PDF (if pandoc available)
+├── <name>.html      # HTML version (always generated)
+├── <name>.md        # Processed markdown
+├── mermaid-config.json
+└── diagrams/
+    ├── diagram-1.png
+    ├── diagram-1.mmd
+    └── ...
+```
+
+### Output Priority
+
+1. **HTML** - Always generated, works everywhere
+2. **Markdown** - Processed with diagram references
+3. **PDF** - Generated if pandoc is available
 
 ---
 
 ## Frontmatter
 
-Documents can include YAML frontmatter at the beginning for metadata. The compiler will extract this information and use it for PDF generation.
+Documents can include YAML frontmatter for metadata:
+
+```yaml
+---
+title: My Document Title
+subtitle: Optional Subtitle
+author: Author Name
+toc: true
+date: January 2025
+---
+
+# Content starts here...
+```
 
 ### Supported Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `title` | string | Document title (displayed on title page) |
+| `title` | string | Document title |
 | `subtitle` | string | Document subtitle |
 | `author` | string | Author name(s) |
 | `toc` | boolean | Include table of contents (default: true) |
 | `date` | string | Document date (default: current date) |
-| `abstract` | string | Brief description/abstract |
 
-### Example Frontmatter
+### Auto-Detection
 
-```yaml
----
-title: API Specification
-subtitle: REST API Documentation v2.0
-author: Engineering Team
-toc: true
-date: January 2025
-abstract: Complete API reference for the Widget Service
----
-
-# Introduction
-
-This document describes...
-```
-
-### Auto-Generated Metadata
-
-If frontmatter is not provided, the compiler will:
-
-1. **Title**: Generate from filename (e.g., `my-spec.md` → "My Spec")
-2. **Author**: Use `--author` option or "Document Author"
-3. **Date**: Use current date
-4. **TOC**: Include by default
+If frontmatter is not provided:
+- **Title**: Extracted from first H1 heading, or generated from filename
+- **Author**: Uses `--author` option or "unyform.ai"
+- **Date**: Current date
+- **TOC**: Included by default
 
 ---
 
 ## Mermaid Diagrams
 
-The compiler automatically renders Mermaid diagrams to high-resolution PNG images.
+The compiler automatically renders Mermaid diagrams to PNG images using the npm package `@mermaid-js/mermaid-cli`.
 
 ### Supported Diagram Types
 
@@ -238,64 +245,61 @@ flowchart LR
 ```
 ````
 
-### Diagram Output
+### Themes
 
-Diagrams are rendered with:
-- **Theme**: Dark (optimized for professional documents)
-- **Background**: Transparent
-- **Width**: 1200px
-- **Format**: PNG
+| Theme | Description |
+|-------|-------------|
+| `dark` | Dark background with blue/green accents (default) |
+| `light` | Light background with blue accents |
+| `forest` | Green/forest theme |
+| `neutral` | Grayscale theme |
 
-The rendered images are stored in a `diagrams/` subdirectory of the output folder.
+```bash
+mx docs spec.md --theme=light
+```
+
+### Rendering
+
+- **Parallel**: Diagrams render in parallel using all CPU cores
+- **Resolution**: 1400px width, 2x scale for crisp output
+- **Background**: Transparent (blends with document)
 
 ---
 
-## Output Structure
+## PDF Generation
 
-### Single File
+PDF generation uses a fallback strategy for maximum compatibility:
+
+### Priority Order
+
+1. **XeLaTeX** (best quality)
+   - Professional typography
+   - Full Unicode support
+   - Custom fonts
+   
+2. **WeasyPrint** (good quality)
+   - CSS-based styling
+   - No LaTeX required
+   
+3. **Basic Pandoc** (basic quality)
+   - Works with just pandoc
+   - Minimal styling
+
+### Without Pandoc
+
+If Pandoc is not installed, you'll see:
 
 ```
-input:  ./docs/spec.md
-output: ./docs/output/
-        ├── spec.pdf
-        └── diagrams/
-            └── spec/
-                ├── diagram-0.png
-                └── diagram-1.png
+⚠️  Pandoc not found - skipping PDF generation
+💡 Install with: brew install pandoc
+📄 HTML version available at: document.html
 ```
 
-### Folder
-
-```
-input:  ./documentation/
-output: ./documentation/output/
-        ├── readme.pdf
-        ├── api.pdf
-        ├── deployment.pdf
-        └── diagrams/
-            ├── readme/
-            ├── api/
-            └── deployment/
-```
-
-### With Prefix
-
-```bash
-mx docs ./specs/ --prefix=v2
-
-output: ./specs/output/
-        ├── v2-spec-one.pdf
-        ├── v2-spec-two.pdf
-        └── diagrams/
-```
+The HTML output is fully styled and printable - you can always "Print to PDF" from a browser.
 
 ---
 
 ## Make Targets
-
-The docs command is also available through Make targets:
-
-### Basic Targets
 
 ```bash
 # Compile all unyform documents
@@ -307,172 +311,105 @@ make docs-deps
 # List available documents
 make docs-list
 
-# Clean all artifacts
-make docs-clean
+# Compile a folder
+make docs-folder DOCS_FOLDER=./my-docs/
 
-# Check dependencies
-make docs-check
+# Compile a single file
+make docs-file DOCS_FILE=./README.md
+
+# Clean artifacts
+make docs-clean
 
 # Show help
 make docs-help
 ```
 
-### Folder Compilation
+### Make Variables
 
-```bash
-# Compile a folder (DOCS_FOLDER required)
-make docs-folder DOCS_FOLDER=./my-docs/
-
-# With options
-make docs-folder \
-  DOCS_FOLDER=./specs/ \
-  DOCS_OUTPUT=./pdfs/ \
-  DOCS_PREFIX=v2 \
-  DOCS_AUTHOR="My Team"
-```
-
-### Single File Compilation
-
-```bash
-# Compile a single file (DOCS_FILE required)
-make docs-file DOCS_FILE=./README.md
-
-# With custom output
-make docs-file DOCS_FILE=./spec.md DOCS_OUTPUT=./artifacts/
-```
-
-### Individual unyform Documents
-
-```bash
-make docs-whitepaper
-make docs-executive
-make docs-roadmap
-make docs-prd
-make docs-pitch
-make docs-gtm
-make docs-architecture
-make docs-pricing
-make docs-competitive
-```
+| Variable | Description |
+|----------|-------------|
+| `DOCS_FOLDER` | Input folder path |
+| `DOCS_FILE` | Input file path |
+| `DOCS_OUTPUT` | Output directory |
+| `DOCS_PREFIX` | Filename prefix |
+| `DOCS_AUTHOR` | Default author |
 
 ---
 
-## PDF Styling
-
-The compiler uses a custom LaTeX template with professional styling:
+## Styling
 
 ### Brand Colors
 
 | Color | Hex | Usage |
 |-------|-----|-------|
-| Primary | `#2563EB` | Headings, links |
-| Accent | `#10B981` | Code strings, highlights |
-| Dark | `#0F172A` | Body text |
-| Gray | `#64748B` | Secondary text |
-| Light | `#F1F5F9` | Backgrounds |
+| Primary | `#2563eb` | Headings, links |
+| Accent | `#10b981` | Highlights |
+| Dark | `#0f172a` | Body text |
+| Gray | `#64748b` | Secondary text |
+| Light | `#f1f5f9` | Backgrounds |
 
-### Typography
+### HTML Output
 
-- **Main Font**: Helvetica Neue (or system default)
-- **Code Font**: Menlo (monospace)
-- **Heading Scale**: Chapter → Section → Subsection
-
-### Features
-
-- Professional title page with logo placeholder
-- Running headers with document title
-- Page numbers in footer
-- Syntax-highlighted code blocks
-- Styled tables with borders
-- Automatic table of contents
-- Cross-references and hyperlinks
-
----
-
-## Configuration
-
-### Template Location
-
-The LaTeX template is located at:
-```
-mech-crate/scripts/docs/template.latex
-```
-
-### Customizing the Template
-
-You can modify the template to:
-
-1. Change brand colors
-2. Add custom fonts
-3. Modify header/footer layout
-4. Add watermarks
-5. Include custom packages
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `MARKDOWN_ONLY` | Set to `1` to skip PDF generation |
+The HTML output includes embedded styles with:
+- Responsive design
+- Print-friendly layout
+- Syntax highlighting
+- Professional typography
+- Styled tables and code blocks
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+### "Installing dependencies" takes too long
 
-#### "Pandoc not found"
+First run installs `@mermaid-js/mermaid-cli` which is ~50MB. Subsequent runs are instant.
+
+### Diagrams not rendering
+
+Check that the Mermaid syntax is valid:
 
 ```bash
-# Install Pandoc
+# Test with verbose mode
+mx docs spec.md -v
+```
+
+### PDF not generated
+
+This is normal if Pandoc isn't installed:
+
+```bash
+# Check for pandoc
+which pandoc
+
+# Install if missing
 brew install pandoc
-```
 
-#### "xelatex not found"
-
-```bash
-# Install MacTeX (minimal)
+# For best quality, also install LaTeX
 brew install --cask mactex-no-gui
-
-# Or full MacTeX
-brew install --cask mactex
 ```
 
-#### "Mermaid diagram failed to render"
+### Fonts look wrong in PDF
 
-The compiler will keep the original code block if rendering fails. Check:
-- Mermaid syntax is valid
-- Node.js is installed correctly
-- Run with `-v` for detailed errors
-
-#### "PDF generation failed"
-
-Run with verbose mode to see the Pandoc error:
-```bash
-mx docs ./doc.md -v
-```
-
-Common causes:
-- Invalid LaTeX characters in content
-- Missing fonts
-- Corrupted template
-
-### Debug Mode
+Install LaTeX for better font support:
 
 ```bash
-# Generate processed markdown only (skip PDF)
-mx docs ./doc.md --markdown-only
-
-# Check the processed markdown for issues
-cat ./output/doc.md
+brew install --cask mactex-no-gui
 ```
 
-### Clean Build
+---
 
-```bash
-# Remove all artifacts and rebuild
-make docs-clean
-make docs
-```
+## Comparison with System Dependencies
+
+| Aspect | This Tool | Traditional |
+|--------|-----------|-------------|
+| **Required** | Node.js only | Pandoc, LaTeX |
+| **Install size** | ~100MB (npm) | 2-4GB (LaTeX) |
+| **First run** | ~30 seconds | Minutes |
+| **PDF output** | Optional | Required |
+| **HTML output** | Always | Varies |
+| **Diagrams** | Auto-rendered | Manual |
+| **Portability** | High | Low |
 
 ---
 
@@ -482,103 +419,45 @@ make docs
 
 ```yaml
 # GitHub Actions example
+- name: Setup Node
+  uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    
 - name: Generate Documentation
   run: |
-    npm install -g @mermaid-js/mermaid-cli
-    brew install pandoc
-    make docs-folder DOCS_FOLDER=./docs/ DOCS_OUTPUT=./artifacts/
+    cd scripts/docs && npm install
+    npx tsx compile.ts --all
     
-- name: Upload PDFs
+- name: Upload HTML
   uses: actions/upload-artifact@v3
   with:
     name: documentation
-    path: artifacts/*.pdf
+    path: artifacts/unyform/*.html
 ```
 
-### Pre-commit Hook
+### No Pandoc in CI
 
-```bash
-#!/bin/bash
-# .git/hooks/pre-commit
-
-# Regenerate docs if any .md files changed
-if git diff --cached --name-only | grep -q '\.md$'; then
-  make docs
-  git add artifacts/*.pdf
-fi
-```
-
----
-
-## File Discovery
-
-When processing a folder, the compiler:
-
-1. **Scans** the directory for `.md` files
-2. **Recurses** into subdirectories (unless `--no-recursive`)
-3. **Skips** common non-doc directories:
-   - `node_modules`
-   - `.git`
-   - `dist`
-   - `build`
-   - `coverage`
-4. **Sorts** files alphabetically
-
-### Controlling Order
-
-Files are processed in alphabetical order. To control the order in the combined output, prefix files with numbers:
-
-```
-docs/
-├── 01-introduction.md
-├── 02-getting-started.md
-├── 03-api-reference.md
-└── 04-deployment.md
-```
+The tool works without Pandoc - you'll get HTML output which is often better for web hosting anyway.
 
 ---
 
 ## API Reference
 
-### TypeScript Compiler
-
-The underlying compiler is a TypeScript application:
+### Direct Usage
 
 ```bash
-# Direct usage
 cd scripts/docs
-npx tsx compile.ts --help
-
-# Available arguments
-npx tsx compile.ts --all              # All unyform docs
-npx tsx compile.ts --doc=<name>       # Specific doc
-npx tsx compile.ts --folder=<path>    # Folder
-npx tsx compile.ts --file=<path>      # Single file
-npx tsx compile.ts --output=<path>    # Output dir
-npx tsx compile.ts --prefix=<string>  # Filename prefix
-npx tsx compile.ts --author=<string>  # Default author
-npx tsx compile.ts --no-recursive     # Skip subdirs
-npx tsx compile.ts --markdown-only    # Skip PDF
-npx tsx compile.ts --verbose          # Detailed output
-npx tsx compile.ts --list             # List docs
+npx tsx compile.ts <input> [options]
 ```
 
-### Programmatic Usage
+### Available Scripts
 
-```typescript
-// Import the compiler (if needed for custom tooling)
-import { compileFile, findMarkdownFiles } from './compile';
-
-// Find all markdown files
-const files = findMarkdownFiles('./docs', true);
-
-// Compile a single file
-await compileFile('./doc.md', './output', {
-  markdownOnly: false,
-  prefix: 'v2',
-  defaultAuthor: 'My Team',
-  verbose: true,
-});
+```bash
+npm run compile -- ./doc.md        # Compile file
+npm run compile:all                # All unyform docs
+npm run markdown -- ./doc.md       # Markdown only
+npm run html -- ./doc.md           # HTML only
 ```
 
 ---
@@ -595,12 +474,12 @@ await compileFile('./doc.md', './output', {
 
 ## Changelog
 
-### v1.0.0 (January 2025)
+### v2.0.0 (January 2025)
 
-- Initial release
-- Single file and folder compilation
-- YAML frontmatter support
-- Mermaid diagram rendering
-- Professional LaTeX template
-- unyform.ai document presets
-- Make target integration
+- **Portable**: Only requires Node.js
+- **Graceful fallback**: Works without Pandoc/LaTeX
+- **Always outputs HTML**: Guaranteed viewable output
+- **Parallel rendering**: Uses all CPU cores for diagrams
+- **Improved styling**: Better HTML and PDF output
+- **Folder support**: Compile entire directories
+- **Frontmatter**: YAML metadata support
