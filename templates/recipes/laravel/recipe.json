@@ -12,7 +12,7 @@
     "Inertia SSR enabled",
     "Vite asset bundling",
     "Tailwind CSS",
-    "PHP 8.3",
+    "PHP 8.4",
     "PostgreSQL database",
     "Redis cache/queue",
     "Task scheduler",
@@ -35,8 +35,8 @@
     },
     "php": {
       "flag": "--php",
-      "default": "8.5",
-      "description": "PHP version"
+      "default": "8.4",
+      "description": "PHP version (8.4 max - Swoole compatibility)"
     }
   },
   
