@@ -1,24 +1,25 @@
 {
-  "name": "unyform-docs",
+  "name": "mx-docs",
   "version": "1.0.0",
-  "description": "PDF compilation for unyform.ai documentation",
+  "description": "MechCrate portable Markdown to PDF compiler - no external dependencies",
   "type": "module",
   "scripts": {
-    "compile": "tsx compile.ts",
-    "compile:all": "tsx compile.ts --all",
-    "compile:whitepaper": "tsx compile.ts --doc=whitepaper",
-    "compile:executive": "tsx compile.ts --doc=executive-summary",
-    "compile:prd": "tsx compile.ts --doc=mvp-prd",
-    "compile:pitch": "tsx compile.ts --doc=pitch-deck"
+    "compile": "tsx compile.ts"
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "^10.6.1",
-    "tsx": "^4.7.0",
     "gray-matter": "^4.0.3",
-    "glob": "^10.3.10"
+    "highlight.js": "^11.9.0",
+    "marked": "^12.0.0",
+    "marked-highlight": "^2.1.0",
+    "puppeteer": "^22.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
