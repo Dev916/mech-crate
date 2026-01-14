@@ -4,6 +4,9 @@ import vue from '@vitejs/plugin-vue';
 import laravel from 'laravel-vite-plugin';
 import { defineConfig } from 'vite';
 
+// Skip wayfinder during Docker builds (no Laravel runtime available)
+const isDockerBuild = process.env.DOCKER_BUILD === 'true' || process.env.CI === 'true';
+
 export default defineConfig({
     plugins: [
         laravel({
@@ -12,9 +15,9 @@ export default defineConfig({
             refresh: true,
         }),
         tailwindcss(),
-        wayfinder({
-            formVariants: true,
-        }),
+        // Wayfinder requires Laravel runtime - skip in Docker builds
+        // Types are pre-generated and committed to the repository
+        ...(!isDockerBuild ? [wayfinder({ formVariants: true })] : []),
         vue({
             template: {
                 transformAssetUrls: {
