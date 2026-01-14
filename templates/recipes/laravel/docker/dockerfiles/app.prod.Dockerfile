@@ -83,14 +83,13 @@ FROM node:22-alpine AS frontend
 WORKDIR /app
 
 # Copy package files and install
-COPY apps/{{SERVICE_NAME}}/package*.json ./
-RUN npm ci
+COPY apps/{{SERVICE_NAME}}/package.json apps/{{SERVICE_NAME}}/yarn.lock ./
+RUN yarn install
 
 # Copy frontend source and build
 COPY apps/{{SERVICE_NAME}}/resources ./resources
 COPY apps/{{SERVICE_NAME}}/vite.config.ts ./
 COPY apps/{{SERVICE_NAME}}/tsconfig.json ./
-COPY apps/{{SERVICE_NAME}}/postcss.config.js ./
 
 # Build frontend assets + SSR bundle
 ENV NODE_ENV=production
@@ -101,6 +100,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 FROM base AS vendor
 
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY apps/{{SERVICE_NAME}}/composer.json apps/{{SERVICE_NAME}}/composer.lock* ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
