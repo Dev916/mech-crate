@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # MechCrate Docs Library
-# Markdown to PDF conversion with Mermaid diagram support
+# Portable Markdown to PDF conversion - just needs Node.js
 #
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -12,13 +12,19 @@ docs_cmd() {
     local output=""
     local prefix=""
     local author=""
+    local title=""
+    local subtitle=""
     local markdown_only=0
+    local html_only=0
     local verbose=0
     local no_recursive=0
+    local no_toc=0
+    local theme="dark"
     local show_help=0
     local list_unyform=0
     local compile_unyform=0
     local unyform_doc=""
+    local order=""
     
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -35,12 +41,36 @@ docs_cmd() {
                 author="$2"
                 shift 2
                 ;;
+            --title)
+                title="$2"
+                shift 2
+                ;;
+            --subtitle)
+                subtitle="$2"
+                shift 2
+                ;;
+            --theme)
+                theme="$2"
+                shift 2
+                ;;
+            --order)
+                order="$2"
+                shift 2
+                ;;
             --markdown-only)
                 markdown_only=1
                 shift
                 ;;
+            --html-only)
+                html_only=1
+                shift
+                ;;
             --no-recursive)
                 no_recursive=1
+                shift
+                ;;
+            --no-toc)
+                no_toc=1
                 shift
                 ;;
             -v|--verbose)
@@ -51,13 +81,17 @@ docs_cmd() {
                 list_unyform=1
                 shift
                 ;;
-            --unyform)
+            --all|--unyform)
                 compile_unyform=1
                 shift
                 ;;
             --doc)
                 unyform_doc="$2"
                 shift 2
+                ;;
+            --doc=*)
+                unyform_doc="${1#*=}"
+                shift
                 ;;
             -h|--help)
                 show_help=1
@@ -82,18 +116,19 @@ docs_cmd() {
         return 0
     fi
     
-    # Check dependencies
-    if ! check_docs_deps; then
+    # Check for Node.js (only required dependency)
+    if ! check_node; then
         return 1
     fi
     
     # Ensure compile script dependencies are installed
     local docs_script_dir="$MECH_CRATE_ROOT/scripts/docs"
     if [ ! -d "$docs_script_dir/node_modules" ]; then
-        info "Installing documentation dependencies..."
+        info "Installing documentation dependencies (first run)..."
         (cd "$docs_script_dir" && npm install --silent) || {
             error "Failed to install documentation dependencies"
         }
+        success "Dependencies installed"
     fi
     
     # Build arguments for the TypeScript tool
@@ -112,6 +147,7 @@ docs_cmd() {
         [ -n "$output" ] && args+=("--output=$(realpath "$output" 2>/dev/null || echo "$output")")
         [ "$verbose" -eq 1 ] && args+=("--verbose")
         [ "$markdown_only" -eq 1 ] && args+=("--markdown-only")
+        [ "$html_only" -eq 1 ] && args+=("--html-only")
         (cd "$docs_script_dir" && npx tsx compile.ts "${args[@]}")
         return $?
     fi
@@ -122,6 +158,7 @@ docs_cmd() {
         [ -n "$output" ] && args+=("--output=$(realpath "$output" 2>/dev/null || echo "$output")")
         [ "$verbose" -eq 1 ] && args+=("--verbose")
         [ "$markdown_only" -eq 1 ] && args+=("--markdown-only")
+        [ "$html_only" -eq 1 ] && args+=("--html-only")
         (cd "$docs_script_dir" && npx tsx compile.ts "${args[@]}")
         return $?
     fi
@@ -137,68 +174,49 @@ docs_cmd() {
         input="$(pwd)/$input"
     fi
     
-    # Determine if input is file or folder
-    if [ -d "$input" ]; then
-        args+=("--folder=$input")
-        [ "$no_recursive" -eq 1 ] && args+=("--no-recursive")
-    elif [ -f "$input" ]; then
-        args+=("--file=$input")
-    else
-        error "Input not found: $input"
-    fi
+    # Add input (file or directory)
+    args+=("$input")
     
     # Add common options
     [ -n "$output" ] && args+=("--output=$(realpath "$output" 2>/dev/null || echo "$output")")
     [ -n "$prefix" ] && args+=("--prefix=$prefix")
     [ -n "$author" ] && args+=("--author=$author")
+    [ -n "$title" ] && args+=("--title=$title")
+    [ -n "$subtitle" ] && args+=("--subtitle=$subtitle")
+    [ -n "$theme" ] && args+=("--theme=$theme")
+    [ -n "$order" ] && args+=("--order=$order")
     [ "$verbose" -eq 1 ] && args+=("--verbose")
     [ "$markdown_only" -eq 1 ] && args+=("--markdown-only")
+    [ "$html_only" -eq 1 ] && args+=("--html-only")
+    [ "$no_recursive" -eq 1 ] && args+=("--no-recursive")
+    [ "$no_toc" -eq 1 ] && args+=("--no-toc")
     
     # Run the converter
     (cd "$docs_script_dir" && npx tsx compile.ts "${args[@]}")
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Check Dependencies
+# Check Node.js (only required dependency)
 # ─────────────────────────────────────────────────────────────────────────────
-check_docs_deps() {
-    local missing=0
-    
+check_node() {
     # Check for Node.js
     if ! command -v node &> /dev/null; then
-        warn "Node.js not found. Install with: brew install node"
-        missing=1
-    else
-        # Check Node.js version
-        local node_version=$(node -v | sed 's/v//' | cut -d. -f1)
-        if [ "$node_version" -lt 18 ]; then
-            warn "Node.js 18+ required. Current version: $(node -v)"
-            missing=1
-        fi
+        error "Node.js not found."
+        echo "   💡 Install with: brew install node"
+        return 1
+    fi
+    
+    # Check Node.js version
+    local node_version=$(node -v | sed 's/v//' | cut -d. -f1)
+    if [ "$node_version" -lt 18 ]; then
+        error "Node.js 18+ required. Current version: $(node -v)"
+        return 1
     fi
     
     # Check for npm
     if ! command -v npm &> /dev/null; then
-        warn "npm not found. Install Node.js to get npm."
-        missing=1
-    fi
-    
-    # Check for Pandoc
-    if ! command -v pandoc &> /dev/null; then
-        warn "Pandoc not found. PDF generation requires Pandoc."
-        echo "   💡 Install with: brew install pandoc"
-        missing=1
-    fi
-    
-    # Check for XeLaTeX (optional but recommended)
-    if ! command -v xelatex &> /dev/null; then
-        warn "XeLaTeX not found. PDF generation may be limited."
-        echo "   💡 Install with: brew install --cask mactex-no-gui"
-    fi
-    
-    if [ "$missing" -eq 1 ]; then
-        echo ""
-        error "Missing required dependencies. Please install them first."
+        error "npm not found. Install Node.js to get npm."
+        return 1
     fi
     
     return 0
@@ -209,11 +227,14 @@ check_docs_deps() {
 # ─────────────────────────────────────────────────────────────────────────────
 show_docs_help() {
     echo ""
-    echo -e "${BOLD}mx docs${NC} - Markdown to PDF with Mermaid diagrams"
+    echo -e "${BOLD}mx docs${NC} - Portable Markdown to PDF Compiler"
+    echo ""
+    echo "  Just needs Node.js - no other system dependencies required!"
+    echo "  PDF generation via bundled Chromium - always works!"
     echo ""
     echo -e "${BOLD}USAGE${NC}"
     echo "    mx docs <input>              Convert file or folder to PDF"
-    echo "    mx docs --unyform            Compile all unyform.ai documents"
+    echo "    mx docs --all                Compile all unyform.ai documents"
     echo "    mx docs --doc=<name>         Compile specific unyform doc"
     echo "    mx docs --list               List available unyform documents"
     echo ""
@@ -221,20 +242,26 @@ show_docs_help() {
     echo "    <input>    Markdown file (.md) or directory containing .md files"
     echo ""
     echo -e "${BOLD}OPTIONS${NC}"
-    echo "    -o, --output <path>     Output directory for generated PDFs"
+    echo "    -o, --output <path>     Output directory for generated files"
+    echo "    --title <title>         Document title"
+    echo "    --subtitle <subtitle>   Document subtitle"
+    echo "    --author <author>       Document author"
     echo "    --prefix <string>       Add prefix to output filenames"
-    echo "    --author <author>       Default author for docs without frontmatter"
-    echo "    --markdown-only         Only generate processed markdown, no PDF"
+    echo "    --theme <theme>         Mermaid theme: dark, light, forest, neutral"
+    echo "    --order <files>         Comma-separated file order for directories"
+    echo "    --markdown-only         Only generate processed markdown"
+    echo "    --html-only             Only generate HTML (no PDF attempt)"
+    echo "    --no-toc                Disable table of contents"
     echo "    --no-recursive          Don't scan subfolders (for directories)"
     echo "    -v, --verbose           Show detailed progress"
     echo "    -h, --help              Show this help"
     echo ""
     echo -e "${BOLD}UNYFORM COMMANDS${NC}"
-    echo "    --unyform               Compile all predefined unyform.ai documents"
+    echo "    --all                   Compile all predefined unyform.ai documents"
     echo "    --doc=<name>            Compile a specific unyform document:"
     echo "                            whitepaper, executive-summary, roadmap,"
-    echo "                            competitive-analysis, mvp-prd, pitch-deck,"
-    echo "                            gtm-playbook, tech-architecture, pricing-strategy"
+    echo "                            mvp-prd, pitch-deck, gtm-playbook,"
+    echo "                            tech-architecture, pricing-strategy"
     echo "    --list                  List all available unyform documents"
     echo ""
     echo -e "${BOLD}FRONTMATTER${NC}"
@@ -245,8 +272,14 @@ show_docs_help() {
     echo "    subtitle: Optional Subtitle"
     echo "    author: Author Name"
     echo "    toc: true"
-    echo "    date: January 2025"
     echo "    ---"
+    echo ""
+    echo -e "${BOLD}OUTPUT${NC}"
+    echo "    artifacts/<name>/"
+    echo "    ├── <name>.pdf      # PDF (always generated)"
+    echo "    ├── <name>.html     # HTML version"
+    echo "    ├── <name>.md       # Processed markdown"
+    echo "    └── diagrams/       # Rendered Mermaid PNGs"
     echo ""
     echo -e "${BOLD}EXAMPLES${NC}"
     echo ""
@@ -256,29 +289,17 @@ show_docs_help() {
     echo ""
     echo "    # Folder (all .md files)"
     echo "    mx docs docs/guides/"
-    echo "    mx docs docs/api/ -o artifacts/api-docs/"
-    echo "    mx docs ./specs --prefix=v2 --author=\"Engineering Team\""
+    echo "    mx docs docs/api/ --title \"API Documentation\""
     echo ""
     echo "    # unyform.ai documents"
-    echo "    mx docs --unyform                    # Compile all"
-    echo "    mx docs --doc=whitepaper             # Compile specific"
-    echo "    mx docs --list                       # List available"
-    echo ""
-    echo -e "${BOLD}OUTPUT${NC}"
-    echo "    For files:   ./output/<filename>.pdf"
-    echo "    For folders: <folder>/output/<filename>.pdf"
-    echo "    Custom:      Use -o to specify output directory"
-    echo ""
-    echo -e "${BOLD}FEATURES${NC}"
-    echo "    • Renders Mermaid diagrams as high-resolution images"
-    echo "    • Auto-detects title from frontmatter or filename"
-    echo "    • Generates table of contents (configurable)"
-    echo "    • Syntax highlighting for code blocks"
-    echo "    • Recursive folder scanning"
-    echo "    • Professional LaTeX-based PDF output"
+    echo "    mx docs --all                    # Compile all"
+    echo "    mx docs --doc=whitepaper         # Compile specific"
+    echo "    mx docs --list                   # List available"
     echo ""
     echo -e "${BOLD}DEPENDENCIES${NC}"
-    echo "    Required: Node.js 18+, npm, Pandoc"
-    echo "    Recommended: XeLaTeX (brew install --cask mactex-no-gui)"
+    echo "    Required: Node.js 18+ (npm)"
+    echo ""
+    echo "    That's it! PDF generation uses bundled Chromium."
+    echo "    No Pandoc, LaTeX, or other system tools needed."
     echo ""
 }
