@@ -8,3 +8,4 @@ node_modules/
 vendor/
 .cursor/
 artifacts/
+docs/unyform/output/
