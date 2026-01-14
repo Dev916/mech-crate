@@ -1,6 +1,3 @@
-include:
-  - ./{{SERVICE_NAME}}.yml
-  
 services:
   # ─────────────────────────────────────────────────────────────────────────────
   # Task Scheduler
@@ -20,9 +17,6 @@ services:
       - APP_ENV=production
     volumes:
       - ../../apps/{{SERVICE_NAME}}/storage:/app/storage
-    depends_on:
-      {{SERVICE_NAME}}:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "scheduler-runner"]
