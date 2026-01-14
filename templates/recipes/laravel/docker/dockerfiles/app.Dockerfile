@@ -22,6 +22,7 @@ RUN apk add --no-cache \
     freetype-dev \
     libwebp-dev \
     libxml2-dev \
+    libzip-dev \
     zip \
     unzip \
     postgresql-dev \
@@ -52,10 +53,9 @@ RUN docker-php-ext-install \
     mbstring \
     xml \
     sockets \
-    intl
-
-# Configure opcache via INI (bundled with PHP 8.x)
-RUN echo "zend_extension=opcache" >> /usr/local/etc/php/conf.d/opcache.ini
+    intl \
+    zip \
+    opcache
 
 # Install Swoole extension
 RUN pecl install swoole && docker-php-ext-enable swoole
@@ -126,17 +126,50 @@ ENTRYPOINT ["/usr/local/bin/entrypoint"]
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS frontend
 
+# Install PHP runtime dependencies (libs needed by PHP, not build tools)
+RUN apk add --no-cache \
+    libpng \
+    libjpeg-turbo \
+    freetype \
+    libwebp \
+    libxml2 \
+    libzip \
+    postgresql-libs \
+    oniguruma \
+    openssl \
+    c-ares \
+    brotli-libs \
+    libstdc++ \
+    icu-libs \
+    readline \
+    gnu-libiconv \
+    sqlite-libs \
+    curl \
+    argon2-libs \
+    libsodium
+
+# Fix iconv for PHP (Alpine uses musl, PHP expects GNU libiconv)
+ENV LD_PRELOAD=/usr/lib/preloadable_libiconv.so
+
+# Copy PHP binary and extensions from base stage
+COPY --from=base /usr/local/bin/php /usr/local/bin/php
+COPY --from=base /usr/local/lib/php /usr/local/lib/php
+COPY --from=base /usr/local/etc/php /usr/local/etc/php
+
+# Copy Composer
+COPY --from=base /usr/bin/composer /usr/bin/composer
+
 WORKDIR /app
 
-# Copy package files and install
-COPY apps/{{SERVICE_NAME}}/package.json apps/{{SERVICE_NAME}}/yarn.lock ./
+# Copy composer files and install dependencies (needed for wayfinder)
+COPY apps/{{SERVICE_NAME}}/composer.json apps/{{SERVICE_NAME}}/composer.lock* ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+# Copy application code (wayfinder needs to read routes)
+COPY apps/{{SERVICE_NAME}} .
+
+# Install Node dependencies
 RUN yarn install
-
-# Copy frontend source and build
-COPY apps/{{SERVICE_NAME}}/resources ./resources
-COPY apps/{{SERVICE_NAME}}/vite.config.ts ./
-COPY apps/{{SERVICE_NAME}}/tsconfig.json ./
-
 
 # Build frontend assets + SSR bundle
 ENV NODE_ENV=production
