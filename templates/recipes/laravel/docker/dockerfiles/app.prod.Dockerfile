@@ -126,7 +126,9 @@ COPY apps/{{SERVICE_NAME}} .
 RUN yarn install
 
 # Build frontend assets + SSR bundle
-ENV NODE_ENV=production
+# DOCKER_BUILD=true skips wayfinder plugin (requires Laravel runtime)
+# Types should be pre-generated and committed to the repository
+ENV NODE_ENV=production DOCKER_BUILD=true
 RUN yarn run build
 
 # ─────────────────────────────────────────────────────────────────────────────
