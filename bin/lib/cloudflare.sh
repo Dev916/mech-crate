@@ -133,9 +133,8 @@ cloudflare_cmd() {
     local subcmd="${1:-help}"
     shift 2>/dev/null || true
     
-    if ! is_mech_crate_project; then
-        error "Not in a MechCrate project. Run 'mx new <name> --infra cloudflare' first."
-    fi
+    # Find and change to project root
+    cd_to_project_root
     
     if [[ ! -d "infra/cloudflare" ]]; then
         error "Cloudflare infrastructure not set up. Create a new project with --infra cloudflare"
