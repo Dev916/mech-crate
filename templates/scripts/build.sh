@@ -2,13 +2,14 @@
 # Build a service image
 #
 # Usage:
-#   ./scripts/build.sh <service> [tag] [mode] [push] [extra_args...]
+#   ./scripts/build.sh <service> [tag] [mode] [push] [nocache] [extra_args...]
 #
 # Arguments:
 #   service   - Service name (required)
 #   tag       - Image tag (default: latest)
 #   mode      - Build mode: dev or prod (default: dev)
 #   push      - Push to registry: 0 or 1 (default: 0)
+#   nocache   - Build without cache: 0 or 1 (default: 0)
 #   extra     - Extra docker build arguments (e.g., --platform=linux/amd64)
 #
 # Examples:
@@ -16,6 +17,7 @@
 #   ./scripts/build.sh myservice v1.0.0             # Dev build, custom tag
 #   ./scripts/build.sh myservice latest prod        # Production build
 #   ./scripts/build.sh myservice v1.0.0 prod 1     # Production build & push
+#   ./scripts/build.sh myservice latest dev 0 1    # Dev build, no cache
 
 set -e
 
@@ -28,17 +30,19 @@ SERVICE=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 TAG=${2:-latest}
 MODE=${3:-dev}
 PUSH=${4:-0}
-shift 4 2>/dev/null || true
+NOCACHE=${5:-0}
+shift 5 2>/dev/null || true
 EXTRA_ARGS="$@"
 
 if [ -z "$SERVICE" ]; then
-    echo "Usage: $0 <service> [tag] [mode] [push] [extra_args...]"
+    echo "Usage: $0 <service> [tag] [mode] [push] [nocache] [extra_args...]"
     echo ""
     echo "Arguments:"
     echo "  service   Service name (required)"
     echo "  tag       Image tag (default: latest)"
     echo "  mode      Build mode: dev or prod (default: dev)"
     echo "  push      Push to registry: 0 or 1 (default: 0)"
+    echo "  nocache   Build without cache: 0 or 1 (default: 0)"
     echo ""
     echo "Available services:"
     ls -1 docker/dockerfiles/ 2>/dev/null | sed 's/^/  - /'
@@ -124,6 +128,7 @@ echo "  Dockerfile: $DOCKERFILE"
 echo "  Target:     $TARGET"
 echo "  Version:    $IMAGE_VERSION"
 echo "  Push:       $([ "$PUSH" = "1" ] && echo "yes" || echo "no")"
+echo "  No cache:   $([ "$NOCACHE" = "1" ] && echo "yes" || echo "no")"
 [ -n "$EXTRA_ARGS" ] && echo "  Extra args: $EXTRA_ARGS"
 echo ""
 
@@ -152,6 +157,11 @@ if [ "$BUILD_MODE" = "production" ]; then
         --build-arg "RUST_ENV=production"
         --build-arg "APP_ENV=production"
     )
+fi
+
+# No-cache option
+if [ "$NOCACHE" = "1" ]; then
+    BUILD_ARGS+=(--no-cache)
 fi
 
 # Build the image
