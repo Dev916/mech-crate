@@ -362,13 +362,74 @@ EOF
             if [[ ! -f "infra/cloudflare/.env.cloudflare" ]]; then
                 info "First, let's configure your Cloudflare credentials..."
                 echo ""
-                ./scripts/cf-setup.sh || {
-                    warn "Cloudflare setup incomplete. You can run 'make cf-setup' later."
-                }
+                
+                # Check if global Cloudflare config exists
+                if _infra_has_global_config "cloudflare"; then
+                    echo -e "${BOLD}Cloudflare Configuration Options:${NC}"
+                    echo ""
+                    echo -e "  1) ${CYAN}Use global config${NC} (recommended)"
+                    echo "     Credentials from ~/.mech-crate/config/infra/cloudflare.env"
+                    echo "     Already configured - ready to use immediately"
+                    echo ""
+                    echo -e "  2) ${CYAN}Set up project-local config${NC}"
+                    echo "     New credentials specific to this project"
+                    echo "     Use if this project needs a different Cloudflare account"
+                    echo ""
+                    read -r -p "Choose [1/2] (default: 1): " cf_config_choice
+                    echo ""
+                    
+                    case "$cf_config_choice" in
+                        2)
+                            info "Setting up project-local Cloudflare credentials..."
+                            echo ""
+                            ./scripts/cf-setup.sh || {
+                                warn "Cloudflare setup incomplete. You can run 'make cf-setup' later."
+                            }
+                            ;;
+                        *)
+                            # Default to linking to global config
+                            _infra_link "cloudflare"
+                            ;;
+                    esac
+                else
+                    # No global config exists - offer to set it up globally or locally
+                    echo -e "${BOLD}No global Cloudflare configuration found.${NC}"
+                    echo ""
+                    echo -e "  1) ${CYAN}Set up global config${NC} (recommended)"
+                    echo "     Configure once, reuse across all projects"
+                    echo "     Stored at ~/.mech-crate/config/infra/cloudflare.env"
+                    echo ""
+                    echo -e "  2) ${CYAN}Set up project-local config${NC}"
+                    echo "     Credentials specific to this project only"
+                    echo ""
+                    read -r -p "Choose [1/2] (default: 1): " cf_config_choice
+                    echo ""
+                    
+                    case "$cf_config_choice" in
+                        2)
+                            info "Setting up project-local Cloudflare credentials..."
+                            echo ""
+                            ./scripts/cf-setup.sh || {
+                                warn "Cloudflare setup incomplete. You can run 'make cf-setup' later."
+                            }
+                            ;;
+                        *)
+                            # Set up global config, then link to it
+                            _infra_setup_cloudflare
+                            if _infra_has_global_config "cloudflare"; then
+                                echo ""
+                                _infra_link "cloudflare"
+                            fi
+                            ;;
+                    esac
+                fi
             fi
             
-            # Only continue if setup was successful
-            if [[ -f "infra/cloudflare/.env.cloudflare" ]]; then
+            # Only continue if setup was successful (either global linked or local created)
+            if [[ -f "infra/cloudflare/.env.cloudflare" ]] || _infra_is_linked "cloudflare"; then
+                # Load the cloudflare config into environment before running init
+                infra_load_config "cloudflare" || true
+                
                 echo ""
                 read -r -p "Enter your app name (e.g., api.example.com, my-worker): " cf_app_name
                 
