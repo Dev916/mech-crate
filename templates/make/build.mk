@@ -39,7 +39,7 @@ build-prod: ## Build production image (s=[service] t=[tag] push=[0|1])
 	@$(MAKE) _build service=$(call get_service) tag=$(call get_tag) mode=prod push=$(PUSH_IMAGE)
 
 _build:
-	@./scripts/build.sh $(service) $(tag) $(mode) $(push)
+	@./scripts/build.sh $(service) $(tag) $(mode) $(push) $(nocache)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Multi-Platform Builds (for CI/CD)
