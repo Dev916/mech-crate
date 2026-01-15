@@ -57,7 +57,21 @@ Most enterprise offerings solve parts of this problem but not the unified experi
 
 ## The Solution: unyform.ai
 
-A platform that sits between developers and AI models to provide:
+**"The Rippling for AI-assisted development."**
+
+A platform that sits between developers and AI models—following the same model that made Rippling successful: **admin sets up once, employees just work**.
+
+```mermaid
+flowchart LR
+    ADMIN["🔧 Platform Team<br/>(configures once)"] --> HUB["unyform Hub"]
+    HUB --> TOOLS["Existing Tools<br/>GitHub, IDEs, LLMs"]
+    TOOLS --> DEV["👤 Developers<br/>(zero new tools)"]
+    
+    style HUB fill:#6366f1,color:#fff
+    style DEV fill:#22c55e,color:#fff
+```
+
+**What it provides:**
 
 1. **Canonical enterprise context** - One source of truth for architecture, libraries, and rules
 2. **Policy enforcement at generation time** - Block, redact, or rewrite before code is produced
@@ -67,20 +81,30 @@ A platform that sits between developers and AI models to provide:
 
 ### How It Works: The Four Pillars
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              INGEST                                      │
-│  Connect your knowledge sources: GitHub, Confluence, internal docs       │
-├─────────────────────────────────────────────────────────────────────────┤
-│                               LEARN                                      │
-│  Build semantic enterprise context: patterns, policies, architecture    │
-├─────────────────────────────────────────────────────────────────────────┤
-│                             GENERATE                                     │
-│  Policy-compliant recipes and scaffolding tailored to your standards    │
-├─────────────────────────────────────────────────────────────────────────┤
-│                              GOVERN                                      │
-│  Enforce rules at generation time with audit trails and approval flows  │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph ingest ["📥 INGEST"]
+        i["Connect knowledge sources:<br/>GitHub, Confluence, internal docs"]
+    end
+    
+    subgraph learn ["🧠 LEARN"]
+        l["Build semantic enterprise context:<br/>patterns, policies, architecture"]
+    end
+    
+    subgraph generate ["⚡ GENERATE"]
+        g["Policy-compliant recipes and scaffolding<br/>tailored to your standards"]
+    end
+    
+    subgraph govern ["🛡️ GOVERN"]
+        gov["Enforce rules at generation time<br/>with audit trails and approval flows"]
+    end
+    
+    ingest --> learn --> generate --> govern
+    
+    style ingest fill:#6366f1,color:#fff
+    style learn fill:#8b5cf6,color:#fff
+    style generate fill:#a855f7,color:#fff
+    style govern fill:#c084fc,color:#fff
 ```
 
 ---
