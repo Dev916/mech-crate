@@ -19,7 +19,7 @@ docs_cmd() {
     local verbose=0
     local no_recursive=0
     local no_toc=0
-    local theme="dark"
+    local theme="light"
     local show_help=0
     local list_unyform=0
     local compile_unyform=0
