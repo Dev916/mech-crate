@@ -9,3 +9,4 @@ vendor/
 .cursor/
 artifacts/
 docs/unyform/output/
+.DS_Store
