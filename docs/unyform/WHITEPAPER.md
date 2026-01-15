@@ -731,25 +731,26 @@ flowchart TB
 
 #### Network Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    devmesh-traefik network                      │
-│  (global, external - shared by all projects)                    │
-│    ┌─────────┐                                                  │
-│    │ Traefik │ ←── Host(`myapp.localhost`)                      │
-│    └────┬────┘                                                  │
-│         │                                                       │
-│    ┌────▼────┐                                                  │
-│    │  myapp  │ ←── Only edge services join this network         │
-│    └────┬────┘                                                  │
-└─────────┼───────────────────────────────────────────────────────┘
-          │
-┌─────────┼───────────────────────────────────────────────────────┐
-│         │           default network (per-project)               │
-│    ┌────▼────┐    ┌─────────┐    ┌─────────┐                   │
-│    │  myapp  │────│   db    │────│  redis  │                   │
-│    └─────────┘    └─────────┘    └─────────┘                   │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph traefik_net ["devmesh-traefik network (global, shared by all projects)"]
+        TRF[Traefik Router]
+        APP_EXT[myapp<br/>edge service]
+        TRF -->|"Host(myapp.localhost)"| APP_EXT
+    end
+    
+    subgraph default_net ["default network (per-project)"]
+        APP[myapp]
+        DB[(db)]
+        REDIS[(redis)]
+        APP --- DB
+        APP --- REDIS
+    end
+    
+    APP_EXT --> APP
+    
+    style traefik_net fill:#6366f1,color:#fff
+    style default_net fill:#1e1b4b,color:#fff
 ```
 
 ### 8.2 Cloud Provider Support
@@ -801,23 +802,36 @@ flowchart LR
 
 ### 9.2 Personalization Hierarchy
 
+```mermaid
+block-beta
+    columns 1
+    block:enterprise["🔒 Enterprise Standards (REQUIRED)"]:1
+        e1["Security practices"]
+        e2["API conventions"]
+        e3["Error handling"]
+        e4["Documentation"]
+    end
+    space
+    block:team["📋 Team Standards (RECOMMENDED)"]:1
+        t1["Team patterns"]
+        t2["Naming conventions"]
+        t3["Structure"]
+    end
+    space
+    block:individual["👤 Individual Preferences (FLEXIBLE)"]:1
+        i1["Variable naming"]
+        i2["Comment style"]
+        i3["Whitespace"]
+    end
+    
+    style enterprise fill:#ef4444,color:#fff
+    style team fill:#f59e0b,color:#fff
+    style individual fill:#22c55e,color:#fff
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│              Enterprise Standards (REQUIRED)                     │
-│  Security practices, API conventions, error handling, docs      │
-│  Cannot be overridden by individual preferences                 │
-├─────────────────────────────────────────────────────────────────┤
-│                Team Standards (RECOMMENDED)                      │
-│  Team-specific patterns, naming conventions, structure          │
-│  Can be adjusted within enterprise bounds                       │
-├─────────────────────────────────────────────────────────────────┤
-│             Individual Preferences (FLEXIBLE)                    │
-│  Variable naming style, comment verbosity, whitespace           │
-│  Applied only where they don't conflict with above              │
-└─────────────────────────────────────────────────────────────────┘
 
-Priority: Enterprise > Team > Individual
-```
+**Priority:** Enterprise > Team > Individual
+
+Enterprise rules cannot be overridden. Team standards can be adjusted within enterprise bounds. Individual preferences only apply where they don't conflict with above.
 
 ### 9.3 Profile Components
 
@@ -920,9 +934,26 @@ Pre-built templates for common frameworks:
 
 | Data Type | Storage | Encryption | Retention |
 |-----------|---------|------------|-----------|
-| Source code | Embeddings only | AES-256 at rest | Configurable |
+| Source code | Minimal chunks + embeddings | AES-256 at rest | Configurable |
+| Prompts/Responses | Hashes only (default) | N/A | Per audit mode |
 | Credentials | Never stored | N/A | N/A |
 | Audit logs | Encrypted DB | AES-256 | 7 years |
+
+**Code Storage Clarification:**
+
+We store **minimal code chunks** needed for RAG retrieval, not full repositories:
+- Chunks are typically 50-200 lines, chunked at semantic boundaries
+- Embeddings enable semantic search without full text queries
+- Full source remains in Git—we reference, not duplicate
+- VPC/on-prem deployments keep all data in customer infrastructure
+
+**Audit Retention Modes:**
+
+| Mode | Prompts/Responses | Use Case |
+|------|-------------------|----------|
+| `hashes_only` (default) | SHA-256 hash stored | Privacy-first |
+| `encrypted_payloads` | AES-256 + BYOK | Compliance |
+| `full_payloads` | Plaintext (customer VPC) | Forensics |
 
 ### 11.2 Access Control
 
