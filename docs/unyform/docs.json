@@ -1,0 +1,66 @@
+{
+  "name": "unyform.ai",
+  "description": "unyform.ai documentation suite",
+  "outputDir": "artifacts/unyform",
+  "defaults": {
+    "author": "unyform.ai",
+    "theme": "light"
+  },
+  "documents": {
+    "whitepaper": {
+      "file": "WHITEPAPER.md",
+      "title": "unyform.ai Technical Whitepaper",
+      "description": "Technical whitepaper and platform overview"
+    },
+    "executive-summary": {
+      "file": "EXECUTIVE_SUMMARY.md",
+      "title": "unyform.ai Executive Summary",
+      "description": "High-level business and product overview"
+    },
+    "roadmap": {
+      "file": "ROADMAP.md",
+      "title": "unyform.ai Product Roadmap",
+      "description": "Development timeline and milestones"
+    },
+    "competitive-analysis": {
+      "file": "COMPETITIVE_ANALYSIS.md",
+      "title": "unyform.ai Competitive Analysis",
+      "description": "Market landscape and competitor comparison"
+    },
+    "mvp-prd": {
+      "file": "MVP_PRD.md",
+      "title": "unyform.ai MVP Product Requirements",
+      "description": "Detailed requirements for MVP"
+    },
+    "gtm-playbook": {
+      "file": "GTM_PLAYBOOK.md",
+      "title": "unyform.ai Go-to-Market Playbook",
+      "description": "Launch and market strategy"
+    },
+    "technical-architecture": {
+      "file": "TECHNICAL_ARCHITECTURE.md",
+      "title": "unyform.ai Technical Architecture",
+      "description": "System design and implementation specification"
+    },
+    "enterprise-integration": {
+      "file": "ENTERPRISE_INTEGRATION_CONTRACT.md",
+      "title": "unyform.ai Enterprise Integration Contract",
+      "description": "One Install - Govern Everywhere"
+    },
+    "analytics-dashboard": {
+      "file": "ANALYTICS_DASHBOARD.md",
+      "title": "unyform.ai Analytics & Leadership Dashboard",
+      "description": "Executive metrics and visibility"
+    },
+    "pitch-deck": {
+      "file": "PITCH_DECK.md",
+      "title": "unyform.ai Pitch Deck",
+      "description": "Investor presentation"
+    },
+    "pricing-strategy": {
+      "file": "PRICING_STRATEGY.md",
+      "title": "unyform.ai Pricing Strategy",
+      "description": "Packaging and unit economics"
+    }
+  }
+}
