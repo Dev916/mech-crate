@@ -1,0 +1,89 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    UNYFORM LOGO
+    Abstract uniform pocket with integrated U + F
+    + V-flap detail with centered button
+  -->
+  
+  <g transform="translate(96, 72)">
+    
+    <!-- TOP BAR - RIGHT HALF (navy, part of U) -->
+    <line 
+      x1="160" 
+      y1="0" 
+      x2="320" 
+      y2="0" 
+      stroke="#1e1b4b" 
+      stroke-width="24" 
+      stroke-linecap="round"
+    />
+    
+    <!-- TOP BAR - LEFT HALF (accent, part of F) -->
+    <line 
+      x1="0" 
+      y1="0" 
+      x2="160" 
+      y2="0" 
+      stroke="#6366f1" 
+      stroke-width="24" 
+      stroke-linecap="round"
+    />
+    
+    <!-- RIGHT SIDE + BOTTOM CURVE (navy, the U) -->
+    <path 
+      d="M 320 0 
+         L 320 240 
+         Q 320 368 160 368 
+         Q 0 368 0 240"
+      fill="none"
+      stroke="#1e1b4b"
+      stroke-width="24"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    
+    <!-- LEFT VERTICAL (accent, F stem) -->
+    <line 
+      x1="0" 
+      y1="0" 
+      x2="0" 
+      y2="240" 
+      stroke="#6366f1" 
+      stroke-width="24" 
+      stroke-linecap="round"
+    />
+    
+    <!-- HORIZONTAL CROSSBAR (accent, F middle) -->
+    <line 
+      x1="0" 
+      y1="120" 
+      x2="112" 
+      y2="120" 
+      stroke="#6366f1" 
+      stroke-width="16" 
+      stroke-linecap="round"
+    />
+    
+    <!-- V-FLAP DETAIL -->
+    <path 
+      d="M 56 40 L 160 100 L 264 40"
+      fill="none"
+      stroke="#1e1b4b"
+      stroke-width="6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    
+    <!-- BUTTON at center of V -->
+    <circle 
+      cx="160" 
+      cy="100" 
+      r="10" 
+      fill="none"
+      stroke="#1e1b4b"
+      stroke-width="5"
+    />
+    
+  </g>
+  
+</svg>
