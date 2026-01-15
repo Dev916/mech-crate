@@ -13,17 +13,62 @@
 
 ### 1.1 MVP Vision
 
-Deliver the first enterprise-ready AI governance solution that enforces organizational policies at generation time—not after—while providing canonical context for AI-assisted development.
+**The Rippling for AI-Assisted Development**
 
-### 1.2 MVP Scope
+Deliver the central hub that connects, governs, and optimizes AI-assisted development across an enterprise's entire stack—tailored to fit each organization like a fine tuxedo. One integration point for platform teams, zero-friction adoption for developers, maximum insight for leadership.
+
+**Core Promise:** Security + Velocity. Not security *or* velocity.
+
+### 1.2 The Hub Model
+
+```mermaid
+flowchart TB
+    subgraph admin_setup ["ADMIN SETUP (One-Time)"]
+        PA[Platform Admin]
+        PA --> HUB
+    end
+    
+    subgraph HUB ["unyform.ai HUB"]
+        GW[LLM Gateway]
+        PE[Policy Engine]
+        CTX[Context Service]
+        AN[Analytics Engine]
+    end
+    
+    subgraph spokes ["SPOKES (Auto-Connected)"]
+        GH[GitHub / GitLab]
+        CONF[Confluence / Notion]
+        JIRA[Jira / Linear]
+        SLACK[Slack / Teams]
+    end
+    
+    subgraph devs ["DEVELOPERS (Zero Config)"]
+        IDE1[VS Code + Extension]
+        IDE2[JetBrains + Plugin]
+        CLI[CLI / Terminal]
+    end
+    
+    HUB <--> spokes
+    devs --> HUB
+    
+    style admin_setup fill:#22c55e,color:#fff
+    style HUB fill:#6366f1,color:#fff
+    style spokes fill:#8b5cf6,color:#fff
+    style devs fill:#374151,color:#fff
+```
+
+**Philosophy:** Admin sets it up once, developers just sign in and go.
+
+### 1.3 MVP Scope
 
 **In Scope:**
 - LLM Gateway with policy enforcement (input/output scanning)
 - GitHub repository connector (code pattern ingestion)
 - Organization Instruction Packs (codified standards)
 - Basic Audit Log (compliance trail)
-- IDE Integration (VS Code extension)
+- IDE Integration (VS Code extension with onboarding bot)
 - CLI tooling (mx command enhancements)
+- Core Analytics Telemetry (AI vs Human code tracking)
 
 **Out of Scope (Deferred to Phase 2+):**
 - Confluence connector
@@ -32,9 +77,10 @@ Deliver the first enterprise-ready AI governance solution that enforces organiza
 - Conformance rewriting (auto-fix)
 - Self-hosted deployment
 - Recipe marketplace
-- Governance dashboard (web UI)
+- Leadership Analytics Dashboard (web UI)
+- Cloud Codex deployment model
 
-### 1.3 Success Criteria
+### 1.4 Success Criteria
 
 | Metric | Target |
 |--------|--------|
@@ -43,18 +89,20 @@ Deliver the first enterprise-ready AI governance solution that enforces organiza
 | Policy violations prevented | 100+ per team/month |
 | Developer adoption rate | >80% of pilot team |
 | Time to first value | <1 week |
+| Time to full team onboarding | <1 day (via onboarding bot) |
 | Gateway latency overhead | <500ms |
 | System uptime | 99.5% |
+| AI vs Human code visibility | 100% classification |
 
-### 1.4 Timeline
+### 1.5 Timeline
 
 | Milestone | Target Date |
 |-----------|-------------|
 | LLM Gateway MVP | February 2025 |
 | GitHub Connector MVP | March 2025 |
 | Policy Engine v1 | March 2025 |
-| VS Code Extension | May 2025 |
-| Audit Log | May 2025 |
+| VS Code Extension + Onboarding Bot | May 2025 |
+| Audit Log + Analytics Foundation | May 2025 |
 | Pilot Launch | June 2025 |
 
 ---
@@ -213,6 +261,17 @@ Deliver the first enterprise-ready AI governance solution that enforces organiza
 | IDE-03 | As a developer, I want to see policy violations inline so that I can fix issues | Inline warnings/errors for blocked content |
 | IDE-04 | As a developer, I want to trigger AI requests from the IDE so that I don't context switch | Command palette integration; inline triggers |
 | IDE-05 | As a developer, I want to see what context was used so that I understand suggestions | Context sources shown in response UI |
+| IDE-06 | As a new developer, I want an onboarding bot to guide me through setup | AI bot connects GitHub, explains policies, verifies setup |
+| IDE-07 | As a developer, I want zero manual configuration after signing in | Hub auto-provides all org context and policies |
+
+#### Analytics Foundation Stories
+
+| ID | Story | Acceptance Criteria |
+|----|-------|---------------------|
+| AN-01 | As a platform lead, I want to see what % of code is AI-generated vs human-written | Code origin classification in audit events |
+| AN-02 | As a security lead, I want to track AI code conformance to our standards | Conformance score per request logged |
+| AN-03 | As an engineering manager, I want velocity metrics for AI-assisted development | Acceptance rate, time-to-merge tracked |
+| AN-04 | As a CTO, I want ROI metrics on our AI investment | Cost savings, productivity gains calculated |
 
 ---
 
@@ -492,9 +551,42 @@ policies:
 | Recipe generator | Depends on pattern learning | Phase 2 |
 | Self-hosted deployment | Enterprise feature | Phase 4 |
 | Recipe marketplace | Ecosystem feature | Phase 4 |
-| Team dashboard (full) | CLI first, web later | Phase 2 |
+| Leadership Analytics Dashboard | CLI first, web later | Phase 2 |
 | JetBrains plugin | VS Code first | Phase 2 |
 | Approval workflows | Enterprise feature | Phase 3 |
+| Cloud Codex deployment | Alternative to IDE plugin | Phase 2 |
+| Hub IDE (browser-based) | Standardized environment | Phase 3 |
+| On-Prem VM images | Air-gapped enterprises | Phase 4 |
+
+### 6.1 Deployment Model Roadmap
+
+```mermaid
+flowchart LR
+    subgraph P0 ["P0: MVP"]
+        IDE[IDE Plugin<br/>VS Code Extension]
+    end
+    
+    subgraph P1 ["P1: Scale"]
+        CLOUD[Cloud Codex<br/>Online Environment]
+    end
+    
+    subgraph P2 ["P2: Expand"]
+        HUBIDE[Hub IDE<br/>Browser-Based]
+    end
+    
+    subgraph P3 ["P3: Enterprise"]
+        ONPREM[On-Prem VM<br/>Air-Gapped]
+    end
+    
+    P0 --> P1 --> P2 --> P3
+    
+    style P0 fill:#22c55e,color:#fff
+    style P1 fill:#6366f1,color:#fff
+    style P2 fill:#8b5cf6,color:#fff
+    style P3 fill:#374151,color:#fff
+```
+
+**All paths lead to the same goal:** Governed, context-aware AI development—tailored to each enterprise's needs.
 
 ---
 
