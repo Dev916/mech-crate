@@ -6,11 +6,16 @@
 
 # Doctor - check project health
 doctor() {
-    if ! is_mech_crate_project; then
+    # Try to find project root (don't error if not found)
+    local project_root
+    project_root=$(find_project_root 2>/dev/null) || true
+    
+    if [[ -n "$project_root" ]]; then
+        cd "$project_root"
+        info "Checking MechCrate project health..."
+    else
         # Check global dependencies only
         info "Checking global dependencies..."
-    else
-        info "Checking MechCrate project health..."
     fi
     
     local has_errors=false
@@ -38,8 +43,8 @@ doctor() {
         has_errors=true
     fi
     
-    # Project-specific checks
-    if is_mech_crate_project; then
+    # Project-specific checks (only if we found a project root)
+    if [[ -n "$project_root" ]]; then
         echo ""
         info "Checking project structure..."
         
