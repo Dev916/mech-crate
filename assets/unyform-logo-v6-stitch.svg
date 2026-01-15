@@ -1,0 +1,45 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    VARIATION 6: Stitch detail along edge + button
+  -->
+  
+  <g transform="translate(96, 72)">
+    
+    <!-- TOP BAR - RIGHT HALF (navy) -->
+    <line x1="160" y1="0" x2="320" y2="0" stroke="#1e1b4b" stroke-width="24" stroke-linecap="round"/>
+    
+    <!-- TOP BAR - LEFT HALF (accent) -->
+    <line x1="0" y1="0" x2="160" y2="0" stroke="#6366f1" stroke-width="24" stroke-linecap="round"/>
+    
+    <!-- RIGHT SIDE + BOTTOM CURVE (navy) -->
+    <path 
+      d="M 320 0 L 320 240 Q 320 368 160 368 Q 0 368 0 240"
+      fill="none"
+      stroke="#1e1b4b"
+      stroke-width="24"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    
+    <!-- LEFT VERTICAL (accent) -->
+    <line x1="0" y1="0" x2="0" y2="240" stroke="#6366f1" stroke-width="24" stroke-linecap="round"/>
+    
+    <!-- HORIZONTAL CROSSBAR (accent) -->
+    <line x1="0" y1="120" x2="112" y2="120" stroke="#6366f1" stroke-width="16" stroke-linecap="round"/>
+    
+    <!-- Decorative stitch along inner edge -->
+    <path 
+      d="M 40 40 L 40 200 Q 40 300 160 320 Q 280 300 280 200 L 280 40"
+      fill="none"
+      stroke="#1e1b4b"
+      stroke-width="2"
+      stroke-dasharray="8 6"
+      stroke-linecap="round"
+    />
+    
+    <!-- Button -->
+    <circle cx="250" cy="70" r="10" fill="none" stroke="#1e1b4b" stroke-width="4"/>
+    
+  </g>
+  
+</svg>
