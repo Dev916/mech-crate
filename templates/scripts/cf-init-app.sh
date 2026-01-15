@@ -94,10 +94,29 @@ if [[ ! "$APP_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
 fi
 
 # Load Cloudflare configuration
-if [[ ! -f "$CF_ENV_FILE" ]]; then
-    error "Cloudflare not configured. Run 'make cf-setup' first."
+# Supports both project-local and global (linked) configurations
+MX_GLOBAL_CF_CONFIG="${HOME}/.mech-crate/config/infra/cloudflare.env"
+
+if [[ -f "$CF_ENV_FILE" ]]; then
+    # Check if linked to global config
+    if grep -q "^MX_INFRA_USE_GLOBAL=true" "$CF_ENV_FILE" 2>/dev/null; then
+        if [[ -f "$MX_GLOBAL_CF_CONFIG" ]]; then
+            source "$MX_GLOBAL_CF_CONFIG"
+        else
+            error "Project is linked to global config, but no global config found at $MX_GLOBAL_CF_CONFIG"
+        fi
+    else
+        # Use project-local config
+        source "$CF_ENV_FILE"
+    fi
+else
+    # No project config - try global config directly
+    if [[ -f "$MX_GLOBAL_CF_CONFIG" ]]; then
+        source "$MX_GLOBAL_CF_CONFIG"
+    else
+        error "Cloudflare not configured. Run 'make cf-setup' first."
+    fi
 fi
-source "$CF_ENV_FILE"
 
 if [[ -z "$CF_ACCOUNT_ID" ]]; then
     error "CF_ACCOUNT_ID not set. Run 'make cf-setup' first."
