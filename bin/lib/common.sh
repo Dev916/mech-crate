@@ -59,16 +59,48 @@ prompt_yn() {
     fi
 }
 
-# Check if we're in a MechCrate project
+# Check if a directory is a MechCrate project root
+is_mech_crate_project_dir() {
+    local dir="${1:-.}"
+    [[ -f "$dir/Makefile" && -d "$dir/docker" && -d "$dir/make" && -d "$dir/scripts" ]]
+}
+
+# Check if we're in a MechCrate project (current directory)
 is_mech_crate_project() {
-    [[ -f "Makefile" && -d "docker" && -d "make" && -d "scripts" ]]
+    is_mech_crate_project_dir "."
+}
+
+# Find the project root by walking up the directory tree
+# Returns the path to project root, or empty string if not found
+find_project_root() {
+    local dir="$(pwd)"
+    
+    while [[ "$dir" != "/" ]]; do
+        if is_mech_crate_project_dir "$dir"; then
+            echo "$dir"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    
+    return 1
+}
+
+# Change to project root directory
+# Dies with error if not in a project
+cd_to_project_root() {
+    local project_root
+    project_root=$(find_project_root)
+    
+    if [[ -z "$project_root" ]]; then
+        error "Not in a MechCrate project. Run 'mx new <name>' first."
+    fi
+    
+    cd "$project_root" || error "Failed to change to project root: $project_root"
 }
 
 # Proxy commands to Make when in project
 proxy_to_make() {
-    if ! is_mech_crate_project; then
-        error "Not in a MechCrate project. Run 'mx new <name>' first."
-    fi
-    
+    cd_to_project_root
     make "$@"
 }
