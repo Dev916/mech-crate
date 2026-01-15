@@ -366,9 +366,8 @@ EOF
     
     transition "START" "Discovering"
     
-    if ! is_mech_crate_project; then
-        error "Not in a MechCrate project. Run 'mx new <name>' first."
-    fi
+    # Find and change to project root
+    cd_to_project_root
     
     raccoon
     info "Upgrading MechCrate project..."
