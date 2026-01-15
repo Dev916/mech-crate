@@ -35,6 +35,7 @@ gantt
     Org Instruction Packs        :p1c, 2025-02, 2025-04
     IDE Integration              :p1d, 2025-03, 2025-05
     Basic Audit Log              :p1e, 2025-04, 2025-06
+    Core Metrics Telemetry       :p1f, 2025-04, 2025-06
     
     section Phase 2 - Platform
     Confluence Connector         :p2a, 2025-05, 2025-07
@@ -42,13 +43,17 @@ gantt
     Conformance Rewriting        :p2c, 2025-06, 2025-08
     AWS + DO Scaffolding         :p2d, 2025-06, 2025-08
     Cross-Repo Context           :p2e, 2025-07, 2025-09
+    AI vs Human Code Tracking    :p2f, 2025-06, 2025-08
+    Velocity & Acceptance Metrics:p2g, 2025-07, 2025-09
     
     section Phase 3 - Enterprise
     Governance Engine            :p3a, 2025-08, 2025-11
     Approval Workflows           :p3b, 2025-09, 2025-11
     Developer Style Profiles     :p3c, 2025-09, 2025-12
     Security Conformance         :p3d, 2025-10, 2025-12
-    Team Dashboard               :p3e, 2025-11, 2026-02
+    Leadership Analytics Hub     :p3e, 2025-10, 2026-01
+    Executive Dashboard          :p3f, 2025-11, 2026-02
+    ROI Calculator               :p3g, 2025-12, 2026-02
     
     section Phase 4 - Scale
     Enterprise SSO               :p4a, 2025-12, 2026-02
@@ -56,6 +61,7 @@ gantt
     Evaluation Suite             :p4c, 2026-02, 2026-04
     Recipe Marketplace           :p4d, 2026-03, 2026-06
     Partner Integrations         :p4e, 2026-05, 2026-08
+    Cross-Org Benchmarking       :p4f, 2026-04, 2026-06
 ```
 
 ---
@@ -172,11 +178,30 @@ Codified enterprise standards that apply to all AI interactions.
 
 ### 1.4 IDE Integration (Q2 2025)
 
+**Primary deployment model: IDE Plugin with onboarding bot.**
+
+```mermaid
+flowchart LR
+    DL["Download Plugin"] --> SI["Sign In"]
+    SI --> BOT["Onboarding Bot"]
+    BOT --> GH["Connect GitHub"]
+    GH --> DONE["Ready to Code"]
+    
+    style BOT fill:#6366f1,color:#fff
+    style DONE fill:#22c55e,color:#fff
+```
+
 | IDE | Features | Target |
 |-----|----------|--------|
-| VS Code | Extension with gateway integration | May 2025 |
+| VS Code | Extension with gateway + onboarding bot | May 2025 |
 | Cursor | Native MCP integration (existing) | ✅ Complete |
 | JetBrains | Plugin (IntelliJ, WebStorm) | June 2025 |
+
+**Plugin Capabilities:**
+- Routes AI requests through unyform gateway
+- Brings in CLI + MCP tooling
+- Onboarding AI bot guides GitHub/Confluence connection
+- Zero workflow change for developers
 
 ### 1.5 Basic Audit Log (Q2 2025)
 
@@ -263,6 +288,29 @@ Automatically transform AI output to match enterprise standards.
 | Architecture patterns | Identify common approaches | September 2025 |
 | Permission-aware retrieval | Respect repo access rights | September 2025 |
 
+### 2.6 Analytics Foundation (Q2-Q3 2025)
+
+Foundation for the metrics that matter to leadership—setting up the instrumentation before building dashboards.
+
+| Feature | Description | Target |
+|---------|-------------|--------|
+| AI Code Origin Tracking | Classify each completion as human/AI-assisted/AI-generated | June 2025 |
+| IDE Telemetry Integration | Capture acceptance/rejection/modification of suggestions | July 2025 |
+| Conformance Scoring | Real-time scoring against org standards | July 2025 |
+| Velocity Metrics Capture | PR cycle time, review comments, acceptance rate | August 2025 |
+| TimescaleDB Integration | Time-series storage for metrics | August 2025 |
+| Basic Metrics API | Query endpoints for aggregated metrics | September 2025 |
+
+**Core Metric Categories:**
+
+| Category | Metrics Captured |
+|----------|------------------|
+| **Code Origin** | Human-only, AI-assisted, AI-generated, AI-modified |
+| **Acceptance** | Accepted as-is, minor edits, major edits, rejected |
+| **Conformance** | Naming, imports, patterns, documentation scores |
+| **Velocity** | Suggestions/day, acceptance rate, time saved |
+| **Security** | Violations blocked, secrets prevented, policies passed |
+
 ---
 
 ## Phase 3: Enterprise (Q3 2025 - Q1 2026)
@@ -315,17 +363,23 @@ Per-engineer AI tuning that respects enterprise constraints.
 
 **Personalization Boundaries:**
 
+```mermaid
+flowchart TB
+    subgraph enterprise ["🔒 Enterprise Standards (REQUIRED)"]
+        e["Security practices, API conventions, error handling, docs"]
+    end
+    
+    subgraph individual ["👤 Individual Preferences (FLEXIBLE)"]
+        i["Variable naming, comment style, import organization"]
+    end
+    
+    enterprise --> individual
+    
+    style enterprise fill:#ef4444,color:#fff
+    style individual fill:#22c55e,color:#fff
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                 Enterprise Standards (REQUIRED)                  │
-│  Security practices, API conventions, error handling, docs      │
-├─────────────────────────────────────────────────────────────────┤
-│              Individual Preferences (FLEXIBLE)                   │
-│  Variable naming, comment style, import organization            │
-└─────────────────────────────────────────────────────────────────┘
 
-Priority: Enterprise Standards > Team Standards > Individual Preferences
-```
+**Priority:** Enterprise Standards > Team Standards > Individual Preferences
 
 ### 3.4 Security Conformance (Q4 2025)
 
@@ -336,14 +390,64 @@ Priority: Enterprise Standards > Team Standards > Individual Preferences
 | Secrets management | Vault, cloud secrets integration | December 2025 |
 | Compliance mapping | SOC2, HIPAA, PCI-DSS templates | January 2026 |
 
-### 3.5 Team Dashboard (Q4 2025 - Q1 2026)
+### 3.5 Analytics & Leadership Hub (Q4 2025 - Q1 2026)
+
+The Analytics Hub is the **primary differentiator** for enterprise customers—the only system that provides complete visibility into AI-assisted development.
+
+**The Hub Model:** unyform.ai becomes the central integration point. Platform teams configure once; developers install a lightweight client (extension/CLI), sign in, and keep their workflow—no new tools to learn, no configuration required. All AI traffic flows through the gateway = all metrics are automatically captured.
+
+| Stakeholder | New Tools Required | What They Get |
+|-------------|-------------------|---------------|
+| IC Developer | **Zero** | Same IDE, faster suggestions |
+| Team Lead | Dashboard (optional) | Team metrics, coaching insights |
+| Platform Engineer | Admin console | Full configuration, policies |
+| VP/CTO | Dashboard (read-only) | Executive metrics, ROI |
+| Security/Compliance | Dashboard + exports | Audit logs, compliance reports |
+
+#### Core Metrics (The Five Pillars)
+
+| Pillar | What It Measures | Why Leadership Cares |
+|--------|------------------|----------------------|
+| **AI vs Human Code** | % of code with AI involvement | Adoption, risk, effectiveness |
+| **Conformance Index** | Adherence to org standards | Quality, tech debt |
+| **Velocity** | Speed impact of AI | Productivity ROI |
+| **Quality & Security** | Vulnerabilities prevented | Risk reduction |
+| **ROI** | Dollar value delivered | Investment justification |
+
+#### Deliverables
 
 | Feature | Description | Target |
 |---------|-------------|--------|
-| Project overview | All projects, services, health status | January 2026 |
-| Policy management | Create/edit policies via UI | January 2026 |
-| Metrics dashboard | Adoption, time saved, violations prevented | February 2026 |
-| Team management | Users, roles, permissions | February 2026 |
+| AI Code Origin Tracking | Classify code as human/AI-assisted/AI-generated | October 2025 |
+| Conformance Scoring | Score code against org standards (AI vs human comparison) | November 2025 |
+| Per-Developer Metrics | Individual AI adoption, acceptance rate, conformance | November 2025 |
+| Team Aggregation | Team-level rollups with drill-down | December 2025 |
+| Executive Dashboard | 4-number summary: AI %, conformance, security, ROI | January 2026 |
+| Security Dashboard | Real-time blocks, violations, compliance exports | January 2026 |
+| ROI Calculator | Automated value calculation from usage metrics | February 2026 |
+| Custom Reports | Exportable reports for compliance (SOC2, HIPAA) | February 2026 |
+
+#### AI vs Human Code Metric (Primary)
+
+This is the **killer metric** that no other system provides:
+
+```
+Without unyform: Organizations have ZERO visibility into AI code volume
+With unyform: Every request is instrumented at the gateway
+
+Metrics captured:
+- Lines of code by origin (human-only, AI-assisted, AI-generated)
+- Per-developer AI adoption rate
+- Team and org-level AI code percentage
+- AI code vs human code conformance comparison
+- AI code vs human code vulnerability rates
+```
+
+**Why this matters to leadership:**
+- "What % of our codebase is AI-generated?" → Risk assessment
+- "Which teams are effectively adopting AI?" → Training priorities
+- "Is AI code better or worse than human code?" → Investment validation
+- "Are we getting ROI from AI tools?" → Budget justification
 
 ---
 
@@ -409,6 +513,41 @@ Repeatable test harness for measuring quality and compliance.
 | ArgoCD | GitOps deployment | July 2026 |
 | Datadog/NewRelic | Observability | August 2026 |
 
+### 4.6 Advanced Deployment Models (Q2-Q4 2026)
+
+Beyond the IDE Plugin (primary), unyform expands to additional deployment models for different enterprise situations:
+
+```mermaid
+flowchart TB
+    subgraph phase1 ["Phase 1 (MVP)"]
+        P1["🔌 IDE Plugin<br/>VS Code, Cursor, JetBrains"]
+    end
+    
+    subgraph phase2 ["Phase 2"]
+        P2["☁️ Cloud Codex<br/>AI Agent Environment"]
+    end
+    
+    subgraph phase3 ["Phase 3"]
+        P3["🖥️ Hub IDE<br/>Standardized Dev Environment"]
+    end
+    
+    subgraph phase4 ["Phase 4"]
+        P4["🏢 On-Prem VM<br/>Air-Gapped / Regulated"]
+    end
+    
+    P1 --> P2 --> P3 --> P4
+    
+    style P1 fill:#22c55e,color:#fff
+```
+
+| Model | Description | Target | Best For |
+|-------|-------------|--------|----------|
+| **Cloud Codex** | AI agent works on repos (like Codex/Devin) | Q3 2026 | Autonomous tasks, migrations |
+| **Hub IDE** | Browser-based IDE (code-server) | Q4 2026 | Standardized environments |
+| **On-Prem VM** | Pre-built VM images, VNC | Q4 2026 | Regulated, air-gapped |
+
+**All models share the same unyform hub** — just different ways to access it.
+
 ---
 
 ## Go-to-Market Strategy
@@ -471,6 +610,9 @@ Repeatable test harness for measuring quality and compliance.
 | Policies enforced | 10,000+/month |
 | Compliance reports | 500+ |
 | Developer profiles | 1,000+ |
+| AI code tracking coverage | 100% of gateway traffic |
+| Executive dashboards deployed | 15+ orgs |
+| ROI reports generated | 100+/quarter |
 
 ### Phase 4 (Scale)
 
@@ -508,26 +650,38 @@ Repeatable test harness for measuring quality and compliance.
 - [ ] VS Code extension
 - [ ] Basic Audit Log
 - [ ] CI integration for verification
+- [ ] AI Code Origin Tracking (foundation)
+- [ ] IDE Telemetry Integration
 
 ### Q3 2025
 - [ ] Confluence Connector
 - [ ] AI Recipe Generator v1
 - [ ] AWS & DO Scaffolding
 - [ ] Conformance rewriting
+- [ ] Conformance Scoring
+- [ ] Velocity Metrics Capture
+- [ ] TimescaleDB Metrics Store
 
 ### Q4 2025
 - [ ] Governance Engine MVP
 - [ ] Developer Style Profiles
 - [ ] Approval workflows
 - [ ] Security tool integrations
+- [ ] Per-Developer Analytics
+- [ ] Team Aggregation Dashboard
+- [ ] Executive Dashboard MVP
 
 ### Q1 2026
 - [ ] Enterprise SSO
 - [ ] Self-Hosted Beta
 - [ ] Evaluation Suite v1
+- [ ] ROI Calculator
+- [ ] Compliance Report Exports (SOC2, HIPAA)
+- [ ] Security Dashboard
 
 ### Q2-Q3 2026
 - [ ] Recipe Marketplace
+- [ ] Cross-Org Benchmarking
 - [ ] Partner Integrations
 - [ ] Self-Hosted GA
 
