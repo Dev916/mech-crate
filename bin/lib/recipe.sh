@@ -478,6 +478,28 @@ install_recipe() {
             mkdir -p "$(dirname "$target")"
             printf '%b' "$content" > "$target"
         done < <(jq -r '.post_install.create_files[]? | "\(.path)|\(.content)"' "$recipe_json" 2>/dev/null)
+        
+        # Run scripts
+        while IFS='|' read -r cmd desc; do
+            [[ -z "$cmd" ]] && continue
+            local interpolated_cmd=$(_interpolate "$cmd" "${placeholder_args[@]}")
+            [[ -n "$desc" ]] && info "$desc..."
+            if ! bash -c "$interpolated_cmd" 2>/dev/null; then
+                warn "Script failed: $interpolated_cmd"
+            fi
+        done < <(jq -r '.post_install.run[]? | "\(.command)|\(.description)"' "$recipe_json" 2>/dev/null)
+        
+        # Add to .gitignore
+        local gitignore_file=".gitignore"
+        while read -r pattern; do
+            [[ -z "$pattern" ]] && continue
+            local interpolated_pattern=$(_interpolate "$pattern" "${placeholder_args[@]}")
+            if [[ -f "$gitignore_file" ]]; then
+                grep -qxF "$interpolated_pattern" "$gitignore_file" 2>/dev/null || echo "$interpolated_pattern" >> "$gitignore_file"
+            else
+                echo "$interpolated_pattern" >> "$gitignore_file"
+            fi
+        done < <(jq -r '.post_install.gitignore[]?' "$recipe_json" 2>/dev/null)
     fi
     
     # ─────────────────────────────────────────────────────────────────────────
