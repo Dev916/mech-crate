@@ -70,12 +70,13 @@ RUN apk del $PHPIZE_DEPS linux-headers
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Create www-data user (Alpine compatibility)
+# Container starts as root (Supervisor needs it), but app processes run as www-data
 RUN addgroup -g 82 -S www-data 2>/dev/null || true && \
-    adduser -u 82 -D -S -G www-data www-data 2>/dev/null || true
+    adduser -u 82 -D -S -G www-data -h /app www-data 2>/dev/null || true
 
-# Setup directories
-RUN mkdir -p /var/log/supervisor /var/log/nginx /var/run && \
-    chown -R www-data:www-data /var/log/supervisor
+# Setup directories with proper ownership
+RUN mkdir -p /var/log/supervisor /var/log/nginx /var/run /app && \
+    chown -R www-data:www-data /var/log/supervisor /app
 
 WORKDIR /app
 
@@ -245,20 +246,21 @@ RUN php artisan config:cache && \
     php artisan event:cache && \
     (php artisan filament:cache-components 2>/dev/null || true)
 
-# Set permissions
+# Set permissions - www-data owns all application files
 RUN mkdir -p /app/storage/framework/{cache,sessions,views} \
              /app/storage/logs \
              /app/bootstrap/cache && \
-    chown -R www-data:www-data /app/storage /app/bootstrap/cache && \
+    chown -R www-data:www-data /app && \
     chmod -R 775 /app/storage /app/bootstrap/cache
 
-USER octane
-ENV OCTANE_SERVER=swoole
-ENV INERTIA_SSR_ENABLED=true
+ENV OCTANE_SERVER=swoole \
+    INERTIA_SSR_ENABLED=true
 EXPOSE 80 13714
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget -q --spider http://localhost/up || exit 1
 
+# Container runs as root (Supervisor needs it for process management)
+# Supervisor spawns Nginx and Octane processes as www-data
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
