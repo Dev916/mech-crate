@@ -569,6 +569,11 @@ _infra_setup() {
 _infra_list() {
     _infra_ensure_config_dir
     
+    # Try to find project root (don't fail if not in a project)
+    local _project_root
+    _project_root=$(find_project_root 2>/dev/null) || true
+    [[ -n "$_project_root" ]] && cd "$_project_root"
+    
     echo -e "${BOLD}Global Infrastructure Configurations${NC}"
     echo -e "${CYAN}Location: ${MX_INFRA_CONFIG_DIR}${NC}"
     echo ""
@@ -613,7 +618,7 @@ _infra_list() {
     echo ""
     
     # Show project-level configs if in a project
-    if is_mech_crate_project; then
+    if [[ -n "$_project_root" ]]; then
         echo -e "${BOLD}Project-Level Configurations${NC}"
         local project_found=false
         
@@ -642,6 +647,11 @@ _infra_list() {
 
 _infra_inspect() {
     local provider="${1:-}"
+    
+    # Try to find project root (don't fail if not in a project)
+    local _project_root
+    _project_root=$(find_project_root 2>/dev/null) || true
+    [[ -n "$_project_root" ]] && cd "$_project_root"
     
     if [[ -z "$provider" ]]; then
         _infra_die "Usage: mx infra inspect <provider>"
@@ -672,7 +682,7 @@ _infra_inspect() {
         echo -e "  Global:  ${RED}not configured${NC}"
     fi
     
-    if is_mech_crate_project; then
+    if [[ -n "$_project_root" ]]; then
         if [[ -f "$project_config" ]]; then
             if _infra_is_linked "$provider"; then
                 echo -e "  Project: ${BLUE}linked to global${NC}"
@@ -715,9 +725,8 @@ _infra_inspect() {
 _infra_link() {
     local provider="${1:-}"
     
-    if ! is_mech_crate_project; then
-        _infra_die "Not in a MechCrate project. Run 'mx new <name>' first."
-    fi
+    # Find and change to project root
+    cd_to_project_root
     
     if [[ -z "$provider" ]]; then
         _infra_die "Usage: mx infra link <provider>"
@@ -769,9 +778,8 @@ EOF
 _infra_unlink() {
     local provider="${1:-}"
     
-    if ! is_mech_crate_project; then
-        _infra_die "Not in a MechCrate project. Run 'mx new <name>' first."
-    fi
+    # Find and change to project root
+    cd_to_project_root
     
     if [[ -z "$provider" ]]; then
         _infra_die "Usage: mx infra unlink <provider>"
