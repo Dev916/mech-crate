@@ -13,62 +13,139 @@
 
 ### 1.1 High-Level Architecture
 
+```mermaid
+flowchart TB
+    subgraph devlayer ["Developer Layer"]
+        VS[VS Code<br/>Extension]
+        JB[JetBrains<br/>Plugin]
+        CLI[CLI<br/>mx tool]
+        CICD[CI/CD<br/>GitHub Actions]
+    end
+    
+    subgraph gateway ["unyform.ai Gateway"]
+        AUTH[Auth<br/>Service]
+        POL[Policy<br/>Engine]
+        CTX[Context<br/>Injection]
+        AUD[Audit<br/>Logger]
+    end
+    
+    subgraph llms ["LLM Providers"]
+        CLAUDE[Claude<br/>Anthropic]
+        OPENAI[OpenAI<br/>API]
+        AZURE[Azure<br/>OpenAI]
+    end
+    
+    subgraph platform ["Platform Services"]
+        ECS[Enterprise Context<br/>Weaviate]
+        ING[Ingestion<br/>Pipeline]
+        CONF[Conformance<br/>Layer]
+        MCP[MCP<br/>Server]
+    end
+    
+    subgraph data ["Data Layer"]
+        PG[(PostgreSQL<br/>metadata, audit)]
+        WV[(Weaviate<br/>vectors, context)]
+        RD[(Redis<br/>cache, queue)]
+        OBJ[(Object Store<br/>artifacts)]
+    end
+    
+    VS --> gateway
+    JB --> gateway
+    CLI --> gateway
+    CICD --> gateway
+    
+    gateway --> CLAUDE
+    gateway --> OPENAI
+    gateway --> AZURE
+    
+    gateway --> ECS
+    gateway --> ING
+    gateway --> CONF
+    gateway --> MCP
+    
+    ECS --> WV
+    ING --> PG
+    AUD --> PG
+    MCP --> RD
+    
+    style devlayer fill:#1e1b4b,color:#fff
+    style gateway fill:#6366f1,color:#fff
+    style llms fill:#8b5cf6,color:#fff
+    style platform fill:#312e81,color:#fff
+    style data fill:#1e1b4b,color:#fff
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              DEVELOPER LAYER                                 │
-├───────────────┬───────────────┬───────────────┬─────────────────────────────┤
-│   VS Code     │   JetBrains   │     CLI       │        CI/CD                │
-│   Extension   │    Plugin     │  (mx tool)    │    (GitHub Actions)         │
-└───────┬───────┴───────┬───────┴───────┬───────┴─────────────┬───────────────┘
-        │               │               │                     │
-        └───────────────┴───────────────┼─────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             unyform.ai GATEWAY                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
-│  │    Auth      │  │   Policy     │  │   Context    │  │    Audit     │    │
-│  │   Service    │  │   Engine     │  │  Injection   │  │   Logger     │    │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘    │
-└──────────────────────────────────┬──────────────────────────────────────────┘
-                                   │
-        ┌──────────────────────────┼──────────────────────────┐
-        │                          │                          │
-        ▼                          ▼                          ▼
-┌───────────────┐        ┌─────────────────┐        ┌─────────────────┐
-│    Claude     │        │     OpenAI      │        │  Azure OpenAI   │
-│  (Anthropic)  │        │      API        │        │      API        │
-└───────────────┘        └─────────────────┘        └─────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             PLATFORM SERVICES                                │
-├──────────────────┬──────────────────┬──────────────────┬────────────────────┤
-│   Enterprise     │    Ingestion     │   Conformance    │     MCP           │
-│   Context Svc    │    Pipeline      │     Layer        │    Server         │
-│   (Weaviate)     │   (GitHub, etc)  │   (Rust)         │   (existing)      │
-└──────────────────┴──────────────────┴──────────────────┴────────────────────┘
+### 1.2 Control Plane vs Data Plane
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               DATA LAYER                                     │
-├──────────────────┬──────────────────┬──────────────────┬────────────────────┤
-│   PostgreSQL     │    Weaviate      │     Redis        │   Object Store    │
-│   (metadata,     │   (vectors,      │    (cache,       │   (large files,   │
-│    audit)        │    context)      │     queue)       │    artifacts)     │
-└──────────────────┴──────────────────┴──────────────────┴────────────────────┘
+The architecture cleanly separates **control plane** (configuration, policies, dashboards) from **data plane** (request handling, enforcement, execution). This enables flexible deployment while maintaining centralized governance.
+
+```mermaid
+flowchart TB
+    subgraph control ["CONTROL PLANE (SaaS Hub)"]
+        direction TB
+        ADMIN[Admin Dashboard]
+        POLICY_MGMT[Policy Management]
+        CONNECTOR_CFG[Connector Config]
+        ANALYTICS[Analytics + Reporting]
+        APPROVAL[Approval Workflows]
+    end
+    
+    subgraph data ["DATA PLANE (Enforcement Runtime)"]
+        direction TB
+        GW[LLM Gateway]
+        PE[Policy Engine]
+        CTX[Context Retrieval]
+        TOOL[Tool Execution]
+        AUDIT_EMIT[Audit Emission]
+    end
+    
+    control <-->|"Config Sync"| data
+    
+    subgraph deploy_options ["DEPLOYMENT OPTIONS"]
+        SAAS_DP[SaaS Data Plane]
+        VPC_DP[VPC Data Plane]
+        ONPREM_DP[On-Prem Data Plane]
+    end
+    
+    data --> SAAS_DP
+    data --> VPC_DP
+    data --> ONPREM_DP
+    
+    style control fill:#6366f1,color:#fff
+    style data fill:#22c55e,color:#fff
+    style deploy_options fill:#374151,color:#fff
 ```
 
-### 1.2 Component Summary
+**Control Plane (always SaaS):**
+- Organization, team, user management
+- Policy sets and instruction packs
+- Connector configurations (GitHub, Confluence, etc.)
+- Analytics dashboards and reporting
+- Audit log viewing and export
 
-| Component | Responsibility | Technology |
-|-----------|----------------|------------|
-| **LLM Gateway** | Request proxy, policy enforcement, context injection | Rust (Axum) |
-| **Policy Engine** | Rule evaluation, enforcement decisions | Rust |
-| **Enterprise Context Service** | Pattern storage, semantic search, RAG | Rust + Weaviate |
-| **Ingestion Pipeline** | Code indexing, embedding generation | Rust + Tree-sitter |
-| **Conformance Layer** | Code rewriting, style enforcement | Rust |
-| **Audit Service** | Immutable event logging, compliance | Rust + PostgreSQL |
-| **MCP Server** | LLM tool interface (existing) | Rust |
-| **Management API** | Admin operations, configuration | Rust (Axum) |
+**Data Plane (customer choice):**
+- LLM Gateway (request interception)
+- Policy evaluation (real-time decisions)
+- Context retrieval (RAG queries)
+- Tool execution (MCP actions)
+- Audit event emission
+
+This separation means: **governance lives centrally, enforcement lives where you need it.**
+
+### 1.3 Component Summary
+
+| Component | Plane | Responsibility | Technology |
+|-----------|-------|----------------|------------|
+| **Admin Dashboard** | Control | Configuration UI, reporting | TypeScript (React) |
+| **Policy Management** | Control | Rule authoring, versioning | TypeScript + Rust API |
+| **LLM Gateway** | Data | Request proxy, policy enforcement, context injection | Rust (Axum) |
+| **Policy Engine** | Data | Rule evaluation, enforcement decisions | Rust |
+| **Enterprise Context Service** | Data | Pattern storage, semantic search, RAG | Rust + Weaviate |
+| **Ingestion Pipeline** | Data | Code indexing, embedding generation | Rust + Tree-sitter |
+| **Conformance Layer** | Data | Code rewriting, style enforcement | Rust |
+| **Audit Service** | Data | Immutable event logging, compliance | Rust + PostgreSQL |
+| **MCP Server** | Data | LLM tool interface (existing) | Rust |
+| **Management API** | Control | Admin operations, configuration | Rust (Axum) |
 
 ---
 
@@ -342,6 +419,161 @@ lazy_static! {
     ];
 }
 ```
+
+---
+
+### 2.2.2 Tool Policy Engine
+
+Beyond prompts and responses, the Policy Engine governs **tool actions**. Every MCP tool invocation passes through the same PDP (Policy Decision Point) pattern.
+
+```mermaid
+flowchart LR
+    subgraph tool_call ["TOOL INVOCATION"]
+        REQ[Tool Request]
+    end
+    
+    subgraph pdp ["POLICY DECISION POINT"]
+        AUTH[Authorization]
+        PARAM[Parameter Check]
+        RATE[Rate Limit]
+    end
+    
+    subgraph actions ["ENFORCEMENT"]
+        ALLOW[Allow]
+        BLOCK[Block]
+        REDACT[Redact Params]
+        APPROVE[Require Approval]
+    end
+    
+    REQ --> pdp --> actions
+    
+    style tool_call fill:#374151,color:#fff
+    style pdp fill:#6366f1,color:#fff
+    style actions fill:#f59e0b,color:#fff
+```
+
+```rust
+// Tool policy types
+#[derive(Debug, Clone)]
+pub struct ToolPolicy {
+    pub tool_name: String,
+    pub action: ToolPolicyAction,
+    pub conditions: Vec<ToolCondition>,
+    pub rate_limit: Option<RateLimit>,
+    pub approvers: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ToolPolicyAction {
+    Allow,
+    Block,
+    RequireApproval,
+    RedactParameters { fields: Vec<String> },
+    RateLimit { max_calls: u32, window_secs: u64 },
+}
+
+#[derive(Debug, Clone)]
+pub enum ToolCondition {
+    TeamMembership(Vec<String>),
+    RepoScope(Vec<String>),
+    TimeWindow { start: String, end: String },
+    ParameterMatch { field: String, pattern: String },
+}
+
+// Tool policy evaluation
+impl ToolPolicyEngine {
+    pub async fn evaluate_tool_call(
+        &self,
+        tool_name: &str,
+        params: &serde_json::Value,
+        context: &RequestContext,
+    ) -> Result<ToolPolicyResult, PolicyError> {
+        let policy = self.get_tool_policy(tool_name)?;
+        
+        // Check authorization
+        if !self.check_tool_authorization(&policy, context)? {
+            return Ok(ToolPolicyResult::Block {
+                reason: "Not authorized for this tool".to_string(),
+            });
+        }
+        
+        // Check rate limits
+        if let Some(limit) = &policy.rate_limit {
+            if self.is_rate_limited(context.user_id, tool_name, limit)? {
+                return Ok(ToolPolicyResult::Block {
+                    reason: "Rate limit exceeded".to_string(),
+                });
+            }
+        }
+        
+        // Check parameter policies
+        let redacted_params = self.check_parameters(params, &policy)?;
+        
+        // Determine final action
+        match policy.action {
+            ToolPolicyAction::Allow => {
+                Ok(ToolPolicyResult::Allow { params: redacted_params })
+            }
+            ToolPolicyAction::RequireApproval => {
+                Ok(ToolPolicyResult::RequireApproval {
+                    approvers: policy.approvers.clone(),
+                    params: redacted_params,
+                })
+            }
+            ToolPolicyAction::Block => {
+                Ok(ToolPolicyResult::Block {
+                    reason: "Tool blocked by policy".to_string(),
+                })
+            }
+            _ => Ok(ToolPolicyResult::Allow { params: redacted_params }),
+        }
+    }
+}
+```
+
+**Example tool policies:**
+
+```yaml
+tool_policies:
+  # File operations - allow with logging
+  file_read:
+    action: allow
+    
+  file_write:
+    action: allow
+    rate_limit:
+      max_calls: 100
+      window_secs: 3600
+      
+  # Git operations - require approval for commits
+  git_commit:
+    action: require_approval
+    approvers: [tech-lead, senior-dev]
+    
+  git_push:
+    action: require_approval
+    approvers: [tech-lead]
+    
+  # Network - block external, allow internal
+  network_request:
+    action: block
+    conditions:
+      - parameter_match:
+          field: url
+          pattern: "^https://internal\\.acme\\.com"
+        override_action: allow
+        
+  # Deployment - strict approval
+  deploy:
+    action: require_approval
+    approvers: [platform-team]
+    conditions:
+      - time_window:
+          start: "09:00"
+          end: "17:00"
+```
+
+This makes unyform.ai defensible: **it's not just "prompt DLP," it's enterprise action governance.**
 
 ---
 
@@ -742,59 +974,126 @@ impl AuditService {
 
 ### 3.1 Entity Relationship Diagram
 
-```
-┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Organization   │────<│       Team       │────<│       User       │
-├──────────────────┤     ├──────────────────┤     ├──────────────────┤
-│ id               │     │ id               │     │ id               │
-│ name             │     │ organization_id  │     │ team_id          │
-│ slug             │     │ name             │     │ email            │
-│ provider_config  │     │ created_at       │     │ github_id        │
-│ settings         │     └──────────────────┘     │ api_key_hash     │
-│ created_at       │                              │ created_at       │
-└──────────────────┘                              └──────────────────┘
-        │
-        │1:N
-        ▼
-┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   PolicySet      │────<│     Policy       │────<│   PolicyRule     │
-├──────────────────┤     ├──────────────────┤     ├──────────────────┤
-│ id               │     │ id               │     │ id               │
-│ organization_id  │     │ policy_set_id    │     │ policy_id        │
-│ name             │     │ name             │     │ rule_type        │
-│ version          │     │ type             │     │ config           │
-│ is_active        │     │ severity         │     │ created_at       │
-│ created_at       │     │ action           │     └──────────────────┘
-└──────────────────┘     │ created_at       │
-                         └──────────────────┘
-        │
-        │1:N
-        ▼
-┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│  Repository      │────<│  IndexedFile     │────<│   CodeChunk      │
-├──────────────────┤     ├──────────────────┤     ├──────────────────┤
-│ id               │     │ id               │     │ id (in Weaviate) │
-│ organization_id  │     │ repository_id    │     │ file_id          │
-│ github_id        │     │ path             │     │ content          │
-│ full_name        │     │ language         │     │ embedding        │
-│ default_branch   │     │ hash             │     │ symbols          │
-│ indexed_at       │     │ indexed_at       │     │ chunk_type       │
-│ created_at       │     └──────────────────┘     └──────────────────┘
-└──────────────────┘
+```mermaid
+erDiagram
+    Organization ||--o{ Team : has
+    Organization ||--o{ PolicySet : owns
+    Organization ||--o{ Repository : connects
+    Organization ||--o{ InstructionPack : defines
+    
+    Team ||--o{ User : contains
+    
+    PolicySet ||--o{ Policy : contains
+    Policy ||--o{ PolicyRule : defines
+    
+    Repository ||--o{ IndexedFile : indexes
+    IndexedFile ||--o{ CodeChunk : contains
+    
+    Organization ||--o{ AuditEvent : logs
+    User ||--o{ AuditEvent : generates
 
-┌──────────────────┐     ┌──────────────────┐
-│ InstructionPack  │     │   AuditEvent     │
-├──────────────────┤     ├──────────────────┤
-│ id               │     │ id               │
-│ organization_id  │     │ organization_id  │
-│ name             │     │ user_id          │
-│ version          │     │ request_id       │
-│ content          │     │ prompt_hash      │
-│ is_default       │     │ response_hash    │
-│ created_at       │     │ action_taken     │
-└──────────────────┘     │ violations       │
-                         │ created_at       │
-                         └──────────────────┘
+    Organization {
+        uuid id PK
+        string name
+        string slug UK
+        jsonb provider_config
+        jsonb settings
+        timestamp created_at
+    }
+    
+    Team {
+        uuid id PK
+        uuid organization_id FK
+        string name
+        timestamp created_at
+    }
+    
+    User {
+        uuid id PK
+        uuid organization_id FK
+        uuid team_id FK
+        string email
+        string github_id
+        string api_key_hash
+        timestamp created_at
+    }
+    
+    PolicySet {
+        uuid id PK
+        uuid organization_id FK
+        string name
+        string version
+        boolean is_active
+        timestamp created_at
+    }
+    
+    Policy {
+        uuid id PK
+        uuid policy_set_id FK
+        string name
+        string type
+        string severity
+        string action
+        timestamp created_at
+    }
+    
+    PolicyRule {
+        uuid id PK
+        uuid policy_id FK
+        string rule_type
+        jsonb config
+        timestamp created_at
+    }
+    
+    Repository {
+        uuid id PK
+        uuid organization_id FK
+        bigint github_id
+        string full_name
+        string default_branch
+        timestamp indexed_at
+        timestamp created_at
+    }
+    
+    IndexedFile {
+        uuid id PK
+        uuid repository_id FK
+        string path
+        string language
+        string hash
+        timestamp indexed_at
+    }
+    
+    CodeChunk {
+        uuid id PK "in Weaviate"
+        uuid file_id FK
+        text content
+        vector embedding
+        array symbols
+        string chunk_type
+    }
+    
+    InstructionPack {
+        uuid id PK
+        uuid organization_id FK
+        string name
+        string version
+        text content
+        boolean is_default
+        timestamp created_at
+    }
+    
+    AuditEvent {
+        uuid id PK
+        uuid organization_id FK
+        uuid user_id FK
+        uuid request_id
+        string prompt_hash
+        string response_hash
+        string action_taken
+        jsonb violations
+        timestamp created_at
+    }
 ```
 
 ### 3.2 PostgreSQL Schema
@@ -1169,33 +1468,31 @@ setup_url: https://app.unyform.ai/setup/github
 
 ### 5.2 VS Code Extension Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                 VS Code Extension                        │
-├─────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │   Commands   │  │   Providers  │  │    Views     │  │
-│  │   Palette    │  │   (Inline)   │  │   (Panel)    │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-│           │               │               │             │
-│           └───────────────┼───────────────┘             │
-│                           │                             │
-│                    ┌──────▼──────┐                      │
-│                    │   Gateway   │                      │
-│                    │   Client    │                      │
-│                    └──────┬──────┘                      │
-│                           │                             │
-│                    ┌──────▼──────┐                      │
-│                    │    Auth     │                      │
-│                    │   Service   │                      │
-│                    └──────┬──────┘                      │
-└───────────────────────────┼─────────────────────────────┘
-                            │
-                            ▼
-                    ┌───────────────┐
-                    │   unyform.ai  │
-                    │    Gateway    │
-                    └───────────────┘
+```mermaid
+flowchart TB
+    subgraph ext ["VS Code Extension"]
+        subgraph ui ["User Interface Layer"]
+            CMD[Commands<br/>Palette]
+            PROV[Providers<br/>Inline Completion]
+            VIEW[Views<br/>Panel]
+        end
+        
+        GWC[Gateway Client]
+        AUTH[Auth Service]
+        
+        CMD --> GWC
+        PROV --> GWC
+        VIEW --> GWC
+        GWC --> AUTH
+    end
+    
+    GATEWAY[unyform.ai<br/>Gateway]
+    
+    AUTH --> GATEWAY
+    
+    style ext fill:#1e1b4b,color:#fff
+    style ui fill:#312e81,color:#fff
+    style GATEWAY fill:#6366f1,color:#fff
 ```
 
 ```typescript
@@ -1417,7 +1714,387 @@ impl Serialize for SensitiveString {
 
 ---
 
-## 8. Infrastructure
+## 8. Analytics & Metrics Engine
+
+The Analytics Engine provides comprehensive visibility into AI-assisted development across the organization—the only system that knows how much code is AI-generated and whether it conforms to standards.
+
+### 8.1 The Hub Integration Model
+
+unyform.ai positions as the **central nervous system** for AI-assisted development. All AI requests flow through the gateway, enabling complete instrumentation with zero friction for individual developers.
+
+```mermaid
+flowchart TB
+    subgraph devtools ["Developer Tools (No Changes Required)"]
+        VS[VS Code]
+        CUR[Cursor]
+        JB[JetBrains]
+    end
+    
+    subgraph hub ["unyform.ai Hub"]
+        direction TB
+        GW[LLM Gateway]
+        PE[Policy Engine]
+        AN[Analytics Engine]
+        CTX[Context Service]
+    end
+    
+    subgraph backends [Backend Services]
+        LLM[LLM Providers<br/>Claude, GPT]
+        GH[GitHub/GitLab<br/>Code Source]
+        TS[TimescaleDB<br/>Analytics Store]
+    end
+    
+    VS --> GW
+    CUR --> GW
+    JB --> GW
+    
+    GW --> PE
+    GW --> CTX
+    GW --> AN
+    
+    GW --> LLM
+    CTX --> GH
+    AN --> TS
+    
+    style hub fill:#6366f1,color:#fff
+    style devtools fill:#1e1b4b,color:#fff
+```
+
+**Key insight:** Platform team configures the hub once. Developers install a lightweight client (extension/CLI), sign in, and keep their existing workflow—no new tools to learn, no configuration required.
+
+**Integration Philosophy:**
+
+| Stakeholder | What They Configure | New Tools |
+|-------------|---------------------|-----------|
+| **IC Developer** | Nothing | **Zero** - same IDE |
+| **Team Lead** | Team policies (optional) | Dashboard (read-only) |
+| **Platform Engineer** | Gateway, policies, connectors | Admin console |
+| **Security** | Security policies | Dashboard + exports |
+| **VP/CTO** | Nothing (read-only) | Executive dashboard |
+
+### 8.2 Core Metrics Framework
+
+```rust
+// Analytics event types
+#[derive(Debug, Clone, Serialize)]
+pub struct AnalyticsEvent {
+    pub event_id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub organization_id: Uuid,
+    pub team_id: Option<Uuid>,
+    pub user_id: Uuid,
+    
+    pub request_metrics: RequestMetrics,
+    pub code_metrics: CodeMetrics,
+    pub policy_metrics: PolicyMetrics,
+    pub conformance_metrics: ConformanceMetrics,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CodeMetrics {
+    pub lines_generated: u32,
+    pub language: String,
+    pub classification: CodeClassification,
+    pub acceptance_status: AcceptanceStatus,
+    pub modification_ratio: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum CodeClassification {
+    HumanOnly,      // Written entirely by developer
+    AiAssisted,     // Human-initiated, AI suggestions modified
+    AiGenerated,    // Primarily AI-generated, human approved
+    AiModified,     // Human code, AI rewrote for conformance
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ConformanceMetrics {
+    pub overall_score: f32,
+    pub naming_score: f32,
+    pub imports_score: f32,
+    pub patterns_score: f32,
+    pub documentation_score: f32,
+}
+```
+
+### 8.3 The Five Pillars of AI Engineering Metrics
+
+| Pillar | What It Measures | Why Leadership Cares |
+|--------|------------------|----------------------|
+| **AI vs Human Code** | % of code with AI involvement | Adoption, risk exposure, effectiveness |
+| **Conformance Index** | Adherence to org standards | Quality, maintainability, tech debt |
+| **Velocity Metrics** | Speed impact of AI assistance | ROI, productivity gains |
+| **Quality & Security** | Vulnerabilities, violations prevented | Risk reduction, compliance |
+| **Efficiency & ROI** | Dollar value delivered | Investment justification |
+
+### 8.4 AI vs Human Code Tracking
+
+This is the **primary metric**—the one no other system can provide:
+
+```rust
+// AI code attribution service
+impl AnalyticsService {
+    pub async fn track_code_origin(
+        &self,
+        request: &CompletionRequest,
+        response: &CompletionResponse,
+        user_action: &UserAction,
+    ) -> Result<CodeOriginEvent, AnalyticsError> {
+        let classification = match user_action {
+            UserAction::AcceptedUnmodified => CodeClassification::AiGenerated,
+            UserAction::AcceptedWithMinorEdits(ratio) if *ratio < 0.1 => {
+                CodeClassification::AiAssisted
+            }
+            UserAction::AcceptedWithMajorEdits(_) => CodeClassification::AiAssisted,
+            UserAction::Rejected => return Ok(CodeOriginEvent::rejected()),
+        };
+        
+        let event = CodeOriginEvent {
+            id: Uuid::new_v4(),
+            user_id: request.user_id,
+            team_id: request.team_id,
+            org_id: request.org_id,
+            classification,
+            lines_of_code: count_lines(&response.content),
+            language: detect_language(&response.content),
+            repository: request.context.repository.clone(),
+            timestamp: Utc::now(),
+        };
+        
+        self.store.insert(&event).await?;
+        Ok(event)
+    }
+    
+    pub async fn get_ai_code_ratio(
+        &self,
+        org_id: Uuid,
+        period: TimePeriod,
+    ) -> Result<AiCodeRatio, AnalyticsError> {
+        let stats = sqlx::query_as!(
+            CodeStats,
+            r#"
+            SELECT 
+                SUM(CASE WHEN classification IN ('ai_generated', 'ai_assisted') 
+                    THEN lines_of_code ELSE 0 END) as ai_lines,
+                SUM(lines_of_code) as total_lines,
+                COUNT(DISTINCT user_id) as developers
+            FROM code_origin_events
+            WHERE org_id = $1 AND timestamp >= $2
+            "#,
+            org_id,
+            period.start()
+        )
+        .fetch_one(&self.db)
+        .await?;
+        
+        Ok(AiCodeRatio {
+            ai_percentage: stats.ai_lines as f32 / stats.total_lines as f32 * 100.0,
+            total_lines: stats.total_lines,
+            ai_lines: stats.ai_lines,
+            developer_count: stats.developers,
+        })
+    }
+}
+```
+
+### 8.5 Metrics Aggregation Levels
+
+```sql
+-- Real-time metrics view by organization
+CREATE MATERIALIZED VIEW org_metrics_daily AS
+SELECT 
+    org_id,
+    date_trunc('day', timestamp) as date,
+    
+    -- AI vs Human
+    SUM(CASE WHEN classification IN ('ai_generated', 'ai_assisted') 
+        THEN lines_of_code ELSE 0 END)::float / 
+        NULLIF(SUM(lines_of_code), 0) * 100 as ai_code_percentage,
+    
+    -- Conformance
+    AVG(conformance_score) * 100 as avg_conformance,
+    
+    -- Velocity
+    COUNT(*) as total_requests,
+    AVG(CASE WHEN acceptance_status = 'accepted' THEN 1 ELSE 0 END) * 100 
+        as acceptance_rate,
+    
+    -- Security
+    SUM(CASE WHEN policy_action = 'blocked' THEN 1 ELSE 0 END) as violations_blocked,
+    SUM(CASE WHEN policy_action = 'blocked' AND violation_type = 'secret' 
+        THEN 1 ELSE 0 END) as secrets_prevented
+        
+FROM analytics_events
+GROUP BY org_id, date_trunc('day', timestamp);
+
+-- Team-level rollup
+CREATE MATERIALIZED VIEW team_metrics_weekly AS
+SELECT 
+    org_id,
+    team_id,
+    date_trunc('week', timestamp) as week,
+    
+    -- Per-developer breakdown available via drill-down
+    COUNT(DISTINCT user_id) as active_developers,
+    SUM(lines_of_code) as total_lines,
+    AVG(ai_code_percentage) as avg_ai_percentage,
+    AVG(conformance_score) as avg_conformance
+    
+FROM analytics_events
+GROUP BY org_id, team_id, date_trunc('week', timestamp);
+```
+
+### 8.6 Dashboard API
+
+```rust
+// Dashboard data endpoints
+#[derive(Debug, Serialize)]
+pub struct ExecutiveDashboard {
+    pub ai_adoption: AiAdoptionMetrics,
+    pub conformance: ConformanceSummary,
+    pub security: SecuritySummary,
+    pub roi: RoiSummary,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AiAdoptionMetrics {
+    pub overall_percentage: f32,
+    pub trend: TrendDirection,
+    pub by_team: Vec<TeamAiMetrics>,
+    pub by_seniority: SeniorityBreakdown,
+}
+
+// API handlers
+pub async fn get_executive_dashboard(
+    State(state): State<AppState>,
+    auth: AuthToken,
+    Query(params): Query<DashboardParams>,
+) -> Result<Json<ExecutiveDashboard>, ApiError> {
+    let org_id = state.auth.get_org_id(&auth)?;
+    let period = params.period.unwrap_or(TimePeriod::LastMonth);
+    
+    let dashboard = ExecutiveDashboard {
+        ai_adoption: state.analytics.get_ai_adoption(org_id, period).await?,
+        conformance: state.analytics.get_conformance_summary(org_id, period).await?,
+        security: state.analytics.get_security_summary(org_id, period).await?,
+        roi: state.analytics.calculate_roi(org_id, period).await?,
+    };
+    
+    Ok(Json(dashboard))
+}
+
+pub async fn get_team_dashboard(
+    State(state): State<AppState>,
+    auth: AuthToken,
+    Path(team_id): Path<Uuid>,
+) -> Result<Json<TeamDashboard>, ApiError> {
+    // Team-level metrics with per-developer breakdown
+    // ...
+}
+
+pub async fn export_compliance_report(
+    State(state): State<AppState>,
+    auth: AuthToken,
+    Query(params): Query<ReportParams>,
+) -> Result<Response, ApiError> {
+    // Generate SOC2, audit log exports, etc.
+    // ...
+}
+```
+
+### 8.7 ROI Calculation Engine
+
+```rust
+#[derive(Debug, Serialize)]
+pub struct RoiCalculation {
+    pub period: TimePeriod,
+    pub total_value: Decimal,
+    pub breakdown: RoiBreakdown,
+    pub unyform_cost: Decimal,
+    pub roi_multiple: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RoiBreakdown {
+    pub developer_time_saved: ValueItem,
+    pub code_review_time_saved: ValueItem,
+    pub security_incidents_prevented: ValueItem,
+    pub onboarding_acceleration: ValueItem,
+}
+
+impl AnalyticsService {
+    pub async fn calculate_roi(
+        &self,
+        org_id: Uuid,
+        period: TimePeriod,
+        config: &RoiConfig,
+    ) -> Result<RoiCalculation, AnalyticsError> {
+        let metrics = self.get_period_metrics(org_id, period).await?;
+        
+        // Developer time saved: acceptance rate improvement × time saved per accepted suggestion
+        let dev_time_saved = metrics.accepted_suggestions as f32 
+            * config.avg_time_saved_per_suggestion_hours 
+            * config.hourly_rate;
+        
+        // Code review savings: reduction in review comments × time per comment
+        let review_savings = (metrics.baseline_review_comments - metrics.current_review_comments)
+            as f32 * config.time_per_review_comment_hours * config.hourly_rate;
+        
+        // Security: blocked secrets × estimated incident cost × probability
+        let security_savings = metrics.secrets_blocked as f32 
+            * config.estimated_secret_exposure_cost 
+            * config.exposure_probability;
+        
+        let total_value = dev_time_saved + review_savings + security_savings;
+        let unyform_cost = config.seat_price * metrics.active_users as f32 * period.months() as f32;
+        
+        Ok(RoiCalculation {
+            period,
+            total_value: Decimal::from_f32(total_value).unwrap(),
+            breakdown: RoiBreakdown {
+                developer_time_saved: ValueItem::new("Developer Time", dev_time_saved),
+                code_review_time_saved: ValueItem::new("Code Review", review_savings),
+                security_incidents_prevented: ValueItem::new("Security", security_savings),
+                onboarding_acceleration: ValueItem::new("Onboarding", 0.0), // Calculated separately
+            },
+            unyform_cost: Decimal::from_f32(unyform_cost).unwrap(),
+            roi_multiple: total_value / unyform_cost,
+        })
+    }
+}
+```
+
+### 8.8 Analytics Data Store
+
+```yaml
+# TimescaleDB for time-series metrics
+analytics:
+  database: timescaledb
+  retention:
+    raw_events: 90 days
+    hourly_aggregates: 1 year
+    daily_aggregates: 3 years
+    
+  hypertables:
+    - name: analytics_events
+      time_column: timestamp
+      chunk_interval: 1 day
+      
+    - name: conformance_scores
+      time_column: timestamp
+      chunk_interval: 1 week
+      
+  continuous_aggregates:
+    - name: hourly_metrics
+      refresh: 1 hour
+      
+    - name: daily_metrics
+      refresh: 1 day
+```
+
+---
+
+## 9. Infrastructure
 
 ### 8.1 Cloud Deployment (Cloudflare)
 
@@ -1475,43 +2152,312 @@ services:
       - redis_data:/data
 ```
 
-### 8.2 Self-Hosted Architecture
+### 9.2 Self-Hosted Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Customer VPC / On-Prem                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                     Kubernetes Cluster                           │   │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐       │   │
-│  │  │   Gateway     │  │   Gateway     │  │   Gateway     │       │   │
-│  │  │   (pod)       │  │   (pod)       │  │   (pod)       │       │   │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘       │   │
-│  │         │                  │                  │                 │   │
-│  │         └──────────────────┼──────────────────┘                 │   │
-│  │                            │                                    │   │
-│  │  ┌─────────────────────────▼─────────────────────────────────┐ │   │
-│  │  │                  Internal Services                         │ │   │
-│  │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │ │   │
-│  │  │  │   Weaviate   │  │  PostgreSQL  │  │    Redis     │     │ │   │
-│  │  │  │  (StatefulSet)│  │  (StatefulSet)│  │  (StatefulSet)│   │ │   │
-│  │  │  └──────────────┘  └──────────────┘  └──────────────┘     │ │   │
-│  │  └───────────────────────────────────────────────────────────┘ │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                     Customer Systems                             │   │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐       │   │
-│  │  │   GitHub      │  │  LLM API      │  │  Dev Machines │       │   │
-│  │  │   Enterprise  │  │  (OpenAI, etc)│  │   (IDE)       │       │   │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘       │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph vpc ["Customer VPC / On-Prem"]
+        subgraph k8s ["Kubernetes Cluster"]
+            subgraph gateways ["Gateway Replicas"]
+                GW1[Gateway Pod 1]
+                GW2[Gateway Pod 2]
+                GW3[Gateway Pod 3]
+            end
+            
+            subgraph data ["Data Services (StatefulSets)"]
+                WV[(Weaviate)]
+                PG[(PostgreSQL)]
+                RD[(Redis)]
+            end
+            
+            GW1 --> WV
+            GW1 --> PG
+            GW1 --> RD
+            GW2 --> WV
+            GW2 --> PG
+            GW2 --> RD
+            GW3 --> WV
+            GW3 --> PG
+            GW3 --> RD
+        end
+        
+        subgraph customer ["Customer Systems"]
+            GHE[GitHub Enterprise]
+            LLM[LLM API<br/>OpenAI/Anthropic]
+            DEV[Dev Machines<br/>IDE]
+        end
+        
+        DEV --> GW1
+        DEV --> GW2
+        DEV --> GW3
+        GW1 --> LLM
+        GW1 --> GHE
+    end
+    
+    style vpc fill:#1e1b4b,color:#fff
+    style k8s fill:#312e81,color:#fff
 ```
 
 ---
 
-## 9. Technology Stack
+## 10. Deployment Models
+
+unyform.ai supports multiple deployment models to fit different enterprise situations. All paths lead to the same goal: **governed AI-assisted development with full visibility**.
+
+### 10.1 Deployment Model Overview
+
+```mermaid
+flowchart TB
+    subgraph models ["Deployment Models (Choose One)"]
+        direction TB
+        M1["🔌 IDE Plugin<br/>(Recommended Start)"]
+        M2["🖥️ Hub IDE<br/>(Standardized)"]
+        M3["☁️ Cloud Codex<br/>(Hosted Agent)"]
+        M4["🏢 On-Prem VM<br/>(Air-Gapped)"]
+    end
+    
+    subgraph hub ["unyform Hub (Always Central)"]
+        GW[Gateway]
+        POL[Policies]
+        CTX[Context]
+        AN[Analytics]
+    end
+    
+    subgraph integrations ["Connected Services"]
+        GH[GitHub/GitLab]
+        CONF[Confluence]
+        SEC[Security Tools]
+        LLM[LLM Providers]
+    end
+    
+    M1 --> hub
+    M2 --> hub
+    M3 --> hub
+    M4 --> hub
+    
+    hub <--> GH
+    hub <--> CONF
+    hub <--> SEC
+    hub <--> LLM
+    
+    style hub fill:#6366f1,color:#fff
+    style M1 fill:#22c55e,color:#fff
+```
+
+### 10.2 Model 1: IDE Plugin (Primary Target)
+
+**The lightest-touch deployment. Start here.**
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant MP as Marketplace
+    participant Plugin as unyform Plugin
+    participant Bot as Onboarding Bot
+    participant Hub as unyform Hub
+    participant GH as GitHub
+    
+    Dev->>MP: Download plugin
+    MP-->>Dev: Install complete
+    Dev->>Plugin: Sign in
+    Plugin->>Bot: Start onboarding
+    Bot->>Dev: "Connect your GitHub?"
+    Dev->>Hub: Authorize GitHub
+    Hub->>GH: OAuth connection
+    Bot->>Dev: "You're set up!"
+    Note over Dev,Hub: Developer stays in their IDE<br/>Zero workflow change
+```
+
+| Aspect | Detail |
+|--------|--------|
+| **Developer Experience** | Download from marketplace → Sign in → Done |
+| **What Plugin Does** | Routes AI requests through hub, brings in CLI + MCP |
+| **Onboarding** | AI bot guides through GitHub/Confluence connection |
+| **Admin Setup** | Configure policies in hub, approve GitHub org |
+| **Best For** | Teams already using VS Code, Cursor, JetBrains |
+
+**Implementation:**
+
+| IDE | Approach | Priority |
+|-----|----------|----------|
+| **VS Code** | Extension (TypeScript) | P0 - Primary |
+| **Cursor** | Already has MCP support | P0 - Native |
+| **JetBrains** | Plugin (Kotlin) | P1 |
+| **Neovim** | Plugin (Lua) | P2 |
+
+### 10.3 Model 2: Hub IDE (Standardized Environment)
+
+**For enterprises that want to standardize developer tooling.**
+
+```mermaid
+flowchart LR
+    subgraph enterprise ["Enterprise"]
+        DEV[Developer]
+    end
+    
+    subgraph hub ["unyform Hub"]
+        IDE["code-server<br/>(VS Code in browser)"]
+        GW[Gateway]
+        CTX[Context]
+    end
+    
+    subgraph cloud ["Cloud/On-Prem"]
+        GH[GitHub]
+        LLM[LLMs]
+    end
+    
+    DEV -->|"Browser"| IDE
+    IDE --> GW
+    GW --> LLM
+    IDE --> GH
+    
+    style hub fill:#6366f1,color:#fff
+```
+
+| Aspect | Detail |
+|--------|--------|
+| **Developer Experience** | Log into web IDE, everything pre-configured |
+| **Admin Control** | Full control over extensions, settings, policies |
+| **Best For** | Enterprises wanting standardized dev environments |
+| **Technology** | code-server, Gitpod, or custom VS Code fork |
+
+### 10.4 Model 3: Cloud Codex (AI Agent Environment)
+
+**Like OpenAI Codex / Devin — an AI agent that works on your repos.**
+
+```mermaid
+flowchart TB
+    subgraph user ["User Interface"]
+        CHAT[Chat / Task Interface]
+    end
+    
+    subgraph cloud ["unyform Cloud"]
+        AGENT[AI Agent]
+        ENV[Sandboxed Dev Environment]
+        CLI[unyform CLI + MCP]
+    end
+    
+    subgraph repos ["Customer Repos"]
+        GH[GitHub]
+    end
+    
+    CHAT --> AGENT
+    AGENT --> ENV
+    ENV --> CLI
+    CLI --> GH
+    
+    style cloud fill:#6366f1,color:#fff
+```
+
+| Aspect | Detail |
+|--------|--------|
+| **Developer Experience** | Give task, AI works on repo, submits PR |
+| **How It Works** | Cloud environment with unyform tooling, connected to GitHub |
+| **Best For** | Autonomous coding tasks, bulk migrations, boilerplate |
+| **Security** | Sandboxed, policies enforced, audit logged |
+
+### 10.5 Model 4: On-Premise VM (Air-Gapped)
+
+**For regulated industries and high-security environments.**
+
+```mermaid
+flowchart TB
+    subgraph customer ["Customer Data Center / VPC"]
+        subgraph vms ["Pre-Built VMs"]
+            VM1[Dev Workstation 1]
+            VM2[Dev Workstation 2]
+            VM3[Dev Workstation n]
+        end
+        
+        subgraph hub ["unyform Hub (Self-Hosted)"]
+            GW[Gateway]
+            WV[(Weaviate)]
+            PG[(PostgreSQL)]
+        end
+        
+        subgraph llm ["LLM (Customer Choice)"]
+            LOCAL[Local Model<br/>Ollama/vLLM]
+            AZURE[Azure OpenAI<br/>Private Endpoint]
+        end
+    end
+    
+    VM1 --> hub
+    VM2 --> hub
+    VM3 --> hub
+    hub --> LOCAL
+    hub --> AZURE
+    
+    style customer fill:#1e1b4b,color:#fff
+    style hub fill:#6366f1,color:#fff
+```
+
+| Aspect | Detail |
+|--------|--------|
+| **Deployment** | Pre-built VM images (OVA, AMI, etc.) or VNC |
+| **LLM Options** | Local (Ollama), Azure Private, AWS Bedrock |
+| **Network** | Fully air-gapped if needed |
+| **Best For** | Finance, healthcare, defense, government |
+
+### 10.6 Deployment Model Priority
+
+| Phase | Model | Why |
+|-------|-------|-----|
+| **Phase 1 (MVP)** | IDE Plugin | Lowest friction, largest market |
+| **Phase 2** | Cloud Codex | Differentiated, high value |
+| **Phase 3** | Hub IDE | Enterprise standardization |
+| **Phase 4** | On-Prem VM | Regulated industries, high ACV |
+
+```mermaid
+gantt
+    title Deployment Model Roadmap
+    dateFormat YYYY-MM
+    
+    section IDE Plugin
+    VS Code Extension     :p1a, 2025-01, 2025-04
+    Cursor Native         :p1b, 2025-01, 2025-03
+    JetBrains Plugin      :p1c, 2025-04, 2025-07
+    
+    section Cloud Codex
+    Agent Environment     :p2a, 2025-05, 2025-09
+    GitHub Integration    :p2b, 2025-06, 2025-08
+    
+    section Hub IDE
+    code-server Base      :p3a, 2025-08, 2025-11
+    Enterprise Customization :p3b, 2025-10, 2026-01
+    
+    section On-Prem
+    VM Images             :p4a, 2025-12, 2026-03
+    Air-Gap Support       :p4b, 2026-02, 2026-05
+```
+
+### 10.7 Why Start with IDE Plugin
+
+| Factor | IDE Plugin Wins |
+|--------|----------------|
+| **Time to Market** | 2-3 months vs 6+ months |
+| **Developer Adoption** | Zero behavior change |
+| **Enterprise Buy-in** | "Works with existing tools" |
+| **Investment** | Lowest engineering cost |
+| **Expansion Path** | Plugin users → Cloud users → Enterprise standardization |
+
+**The funnel:**
+
+```mermaid
+flowchart TB
+    A["Developer downloads plugin"] --> B["Signs in, connects GitHub"]
+    B --> C["Uses AI with governance"]
+    C --> D["Team sees value"]
+    D --> E["Enterprise wants more control"]
+    E --> F["Upgrade to Hub IDE or Cloud Codex"]
+    F --> G["Regulated? Add On-Prem"]
+    
+    style A fill:#22c55e,color:#fff
+    style G fill:#6366f1,color:#fff
+```
+
+---
+
+## 11. Technology Stack
 
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
@@ -1528,9 +2474,9 @@ services:
 
 ---
 
-## 10. Development Practices
+## 12. Development Practices
 
-### 10.1 Repository Structure
+### 12.1 Repository Structure
 
 ```
 unyform/
@@ -1569,7 +2515,7 @@ unyform/
 └── scripts/                # Development scripts
 ```
 
-### 10.2 CI/CD Pipeline
+### 12.2 CI/CD Pipeline
 
 ```yaml
 # .github/workflows/ci.yml
@@ -1624,7 +2570,7 @@ jobs:
           docker push unyform/gateway:latest
 ```
 
-### 10.3 Testing Strategy
+### 12.3 Testing Strategy
 
 | Level | Tool | Coverage Target |
 |-------|------|-----------------|
