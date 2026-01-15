@@ -75,7 +75,8 @@
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
     "docker/.config",
-    "docker/system/{{SERVICE_NAME}}"
+    "docker/system/{{SERVICE_NAME}}",
+    "scripts"
   ],
   
   "templates": [
@@ -101,7 +102,10 @@
     { "from": "docker/system/postgres", "to": "docker/system/postgres" },
     { "from": "config/env.db", "to": "docker/.config/.env.db" },
     { "from": "config/env.redis", "to": "docker/.config/.env.redis" },
-    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" },
+    { "from": "config/env.secrets", "to": "docker/.config/.env.secrets" },
+    { "from": "config/env.shared", "to": "docker/.config/.env.shared" },
+    { "from": "scripts/generate-secrets.sh", "to": "scripts/generate-secrets.sh" }
   ],
   
   "post_install": {
@@ -109,7 +113,11 @@
       { "from": "apps/{{SERVICE_NAME}}/env.template", "to": "apps/{{SERVICE_NAME}}/.env.example" }
     ],
     "chmod": [
-      { "path": "apps/{{SERVICE_NAME}}/artisan", "mode": "+x" }
+      { "path": "apps/{{SERVICE_NAME}}/artisan", "mode": "+x" },
+      { "path": "scripts/generate-secrets.sh", "mode": "+x" }
+    ],
+    "run": [
+      { "command": "./scripts/generate-secrets.sh", "description": "Generating secure secrets" }
     ],
     "gitkeep": [
       "apps/{{SERVICE_NAME}}/storage/logs",
@@ -120,6 +128,9 @@
       "apps/{{SERVICE_NAME}}/app/Filament/Resources",
       "apps/{{SERVICE_NAME}}/app/Filament/Pages",
       "apps/{{SERVICE_NAME}}/app/Filament/Widgets"
+    ],
+    "gitignore": [
+      "docker/.config/.env.secrets"
     ]
   },
   
