@@ -406,42 +406,36 @@ Zenity.io solved AI agent security and governance but never addressed:
 
 ### The Gap We Fill
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              THE MARKET GAP                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   LANDO                   NEXOS.AI                  ZENITY.IO               │
-│   ┌─────────┐            ┌─────────┐               ┌─────────┐              │
-│   │ Local   │            │ AI      │               │ AI      │              │
-│   │ Dev     │            │ Gateway │               │ Agent   │              │
-│   │ Env     │            │ + Obs   │               │Security │              │
-│   └────┬────┘            └────┬────┘               └────┬────┘              │
-│        │                      │                         │                    │
-│        │                      │                         │                    │
-│        ▼                      ▼                         ▼                    │
-│   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │                                                                      │   │
-│   │                         THE GAP                                      │   │
-│   │                                                                      │   │
-│   │   • Organizational pattern learning                                  │   │
-│   │   • Code conformance enforcement                                     │   │
-│   │   • Generation-time policy enforcement                               │   │
-│   │   • Developer workflow integration                                   │   │
-│   │   • Infrastructure scaffolding                                       │   │
-│   │   • Full lifecycle governance                                        │   │
-│   │                                                                      │   │
-│   └─────────────────────────────────────────────────────────────────────┘   │
-│                                      │                                       │
-│                                      │                                       │
-│                                      ▼                                       │
-│                              ┌─────────────┐                                │
-│                              │ unyform.ai  │                                │
-│                              │ FILLS THE   │                                │
-│                              │ GAP         │                                │
-│                              └─────────────┘                                │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph competitors ["Existing Solutions"]
+        LANDO["🔧 Lando<br/>Local Dev Env"]
+        NEXOS["🌐 Nexos.ai<br/>AI Gateway + Obs"]
+        ZENITY["🔒 Zenity.io<br/>AI Agent Security"]
+    end
+    
+    subgraph gap ["THE GAP — What's Missing"]
+        G1["Organizational pattern learning"]
+        G2["Code conformance enforcement"]
+        G3["Generation-time policy enforcement"]
+        G4["Developer workflow integration"]
+        G5["Infrastructure scaffolding"]
+        G6["Full lifecycle governance"]
+    end
+    
+    subgraph solution ["The Solution"]
+        UNY["✅ unyform.ai<br/>FILLS THE GAP"]
+    end
+    
+    LANDO --> gap
+    NEXOS --> gap
+    ZENITY --> gap
+    gap --> UNY
+    
+    style competitors fill:#374151,color:#fff
+    style gap fill:#ef4444,color:#fff
+    style solution fill:#22c55e,color:#fff
+    style UNY fill:#6366f1,color:#fff
 ```
 
 ### Positioning Statement
