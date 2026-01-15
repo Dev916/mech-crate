@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * MechCrate docs - Portable Markdown to PDF Compiler
+ * Portable Markdown to PDF Compiler
  * 
- * Zero external dependencies for core functionality:
+ * A generic tool for converting markdown documents to PDF with:
  * - marked: Markdown to HTML
  * - puppeteer: HTML to PDF (bundles its own Chromium)
  * - mermaid-cli: Diagram rendering
@@ -13,9 +13,16 @@
  * Usage:
  *   npx tsx compile.ts <input.md>           # Single file
  *   npx tsx compile.ts <input-dir/>         # Directory
- *   npx tsx compile.ts --list               # List unyform docs
- *   npx tsx compile.ts --all                # Compile all unyform docs
- *   npx tsx compile.ts --doc=whitepaper     # Compile specific unyform doc
+ *   npx tsx compile.ts --config=<dir>       # Use docs.json from directory
+ *   npx tsx compile.ts --list               # List docs from detected config
+ *   npx tsx compile.ts --all                # Compile all docs from config
+ *   npx tsx compile.ts --doc=<name>         # Compile specific doc from config
+ * 
+ * Config Detection:
+ *   The compiler looks for a docs.json file in:
+ *   1. The --config directory (if specified)
+ *   2. The input directory (if compiling a folder)
+ *   3. Common locations (docs/unyform/, docs/, etc.)
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, rmSync } from 'fs';
@@ -34,46 +41,26 @@ import hljs from 'highlight.js';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MECH_CRATE_ROOT = resolve(__dirname, '../..');
+const WORKSPACE_ROOT = resolve(__dirname, '../..');
 
-// Unyform document definitions
-const UNYFORM_DOCS: Record<string, { file: string; title: string; description: string }> = {
-  'whitepaper': {
-    file: 'docs/unyform/WHITEPAPER.md',
-    title: 'Unyform Whitepaper',
-    description: 'Technical whitepaper and platform overview'
-  },
-  'executive-summary': {
-    file: 'docs/unyform/EXECUTIVE_SUMMARY.md', 
-    title: 'Executive Summary',
-    description: 'High-level business and product overview'
-  },
-  'roadmap': {
-    file: 'docs/unyform/ROADMAP.md',
-    title: 'Product Roadmap',
-    description: 'Development timeline and milestones'
-  },
-  'competitive-analysis': {
-    file: 'docs/unyform/COMPETITIVE_ANALYSIS.md',
-    title: 'Competitive Analysis',
-    description: 'Market landscape and competitor comparison'
-  },
-  'mvp-prd': {
-    file: 'docs/unyform/MVP_PRD.md',
-    title: 'MVP Product Requirements',
-    description: 'Detailed requirements for MVP'
-  },
-  'gtm-playbook': {
-    file: 'docs/unyform/GTM_PLAYBOOK.md',
-    title: 'Go-to-Market Playbook',
-    description: 'Launch and market strategy'
-  },
-  'enterprise': {
-    file: 'docs/unyform/enterprise-ai-consistency-platform.md',
-    title: 'Enterprise AI Platform',
-    description: 'Enterprise AI Trust and Consistency Layer specification'
-  },
-};
+// docs.json schema
+interface DocsConfig {
+  name: string;
+  description?: string;
+  outputDir?: string;
+  defaults?: {
+    author?: string;
+    theme?: string;
+  };
+  documents: Record<string, {
+    file: string;
+    title: string;
+    description?: string;
+  }>;
+}
+
+// Cached config
+let loadedConfig: { config: DocsConfig; configDir: string } | null = null;
 
 interface Options {
   input?: string;
@@ -92,6 +79,7 @@ interface Options {
   list: boolean;
   all: boolean;
   doc?: string;
+  config?: string;  // Path to docs.json or directory containing it
 }
 
 interface DiagramInfo {
@@ -129,8 +117,9 @@ function parseArguments(): Options {
       subtitle: { type: 'string' },
       author: { type: 'string' },
       prefix: { type: 'string' },
-      theme: { type: 'string', default: 'dark' },
+      theme: { type: 'string', default: 'light' },
       order: { type: 'string' },
+      config: { type: 'string', short: 'c' },
       'markdown-only': { type: 'boolean', default: false },
       'html-only': { type: 'boolean', default: false },
       verbose: { type: 'boolean', short: 'v', default: false },
@@ -161,22 +150,24 @@ function parseArguments(): Options {
     list: values.list ?? false,
     all: values.all ?? false,
     doc: values.doc,
+    config: values.config,
   };
 }
 
 function printHelp(): void {
   console.log(`
-🦝 MechCrate docs - Portable Markdown to PDF Compiler
+Portable Markdown to PDF Compiler
 
 Usage:
   npx tsx compile.ts <input.md>            # Single file
   npx tsx compile.ts <input-dir/>          # Directory  
-  npx tsx compile.ts --list                # List unyform documents
-  npx tsx compile.ts --all                 # Compile all unyform docs
-  npx tsx compile.ts --doc=<name>          # Compile specific unyform doc
+  npx tsx compile.ts -c <dir> --list       # List docs from config
+  npx tsx compile.ts -c <dir> --all        # Compile all docs from config
+  npx tsx compile.ts -c <dir> --doc=<name> # Compile specific doc
 
 Options:
   -o, --output <path>     Output directory for generated files
+  -c, --config <dir>      Directory containing docs.json config
   --title <title>         Document title
   --subtitle <subtitle>   Document subtitle
   --author <author>       Document author
@@ -190,11 +181,26 @@ Options:
   -v, --verbose           Show detailed progress
   -h, --help              Show this help
 
-Unyform Commands:
-  --list                  List all available unyform documents
-  --all                   Compile all unyform documents
-  --doc=<name>            Compile specific: whitepaper, executive-summary, 
-                          roadmap, mvp-prd, gtm-playbook, enterprise
+Config Commands (requires docs.json):
+  --list                  List all documents defined in config
+  --all                   Compile all documents from config
+  --doc=<name>            Compile specific document by key name
+
+Config Detection:
+  The compiler looks for docs.json in:
+  1. Directory specified by --config
+  2. Input directory (if compiling folder)
+  3. Common locations: docs/unyform/, docs/, ./
+
+docs.json Format:
+  {
+    "name": "My Docs",
+    "outputDir": "artifacts/mydocs",
+    "defaults": { "author": "Team", "theme": "dark" },
+    "documents": {
+      "readme": { "file": "README.md", "title": "Overview" }
+    }
+  }
 
 Features:
   • Zero external dependencies for HTML output
@@ -255,27 +261,109 @@ const MERMAID_THEMES: Record<string, object> = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// CONFIG DETECTION & LOADING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Try to find and load docs.json from various locations
+ */
+function detectConfig(options: Options): { config: DocsConfig; configDir: string } | null {
+  // Return cached config if already loaded
+  if (loadedConfig) return loadedConfig;
+  
+  const searchPaths: string[] = [];
+  
+  // 1. Explicit --config path
+  if (options.config) {
+    const configPath = resolve(options.config);
+    if (existsSync(configPath)) {
+      if (statSync(configPath).isDirectory()) {
+        searchPaths.push(join(configPath, 'docs.json'));
+      } else if (configPath.endsWith('.json')) {
+        searchPaths.push(configPath);
+      }
+    }
+  }
+  
+  // 2. Input directory
+  if (options.input) {
+    const inputPath = resolve(options.input);
+    if (existsSync(inputPath) && statSync(inputPath).isDirectory()) {
+      searchPaths.push(join(inputPath, 'docs.json'));
+    }
+  }
+  
+  // 3. Common locations relative to workspace
+  searchPaths.push(
+    join(WORKSPACE_ROOT, 'docs/unyform/docs.json'),
+    join(WORKSPACE_ROOT, 'docs/docs.json'),
+    join(WORKSPACE_ROOT, 'docs.json'),
+    join(process.cwd(), 'docs.json'),
+  );
+  
+  // Try each path
+  for (const configPath of searchPaths) {
+    if (existsSync(configPath)) {
+      try {
+        const content = readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(content) as DocsConfig;
+        const configDir = dirname(configPath);
+        loadedConfig = { config, configDir };
+        return loadedConfig;
+      } catch (err) {
+        // Invalid JSON, try next
+        continue;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Require config to be present, exit with error if not found
+ */
+function requireConfig(options: Options): { config: DocsConfig; configDir: string } {
+  const result = detectConfig(options);
+  if (!result) {
+    console.error('❌ No docs.json config found.');
+    console.error('');
+    console.error('   Searched locations:');
+    if (options.config) {
+      console.error(`   • ${resolve(options.config)}`);
+    }
+    console.error(`   • docs/unyform/docs.json`);
+    console.error(`   • docs/docs.json`);
+    console.error(`   • ./docs.json`);
+    console.error('');
+    console.error('   Create a docs.json or specify --config=<path>');
+    process.exit(1);
+  }
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function main() {
   const options = parseArguments();
 
-  // Handle --list
+  // Handle --list (requires config)
   if (options.list) {
-    listUnyformDocs();
+    listConfigDocs(options);
     return;
   }
 
-  // Handle --all (compile all unyform docs)
+  // Handle --all (compile all docs from config)
   if (options.all) {
-    await compileAllUnyformDocs(options);
+    await compileAllConfigDocs(options);
     return;
   }
 
-  // Handle --doc=<name>
+  // Handle --doc=<name> (compile specific doc from config)
   if (options.doc) {
-    await compileUnyformDoc(options.doc, options);
+    await compileConfigDoc(options.doc, options);
     return;
   }
 
@@ -300,20 +388,28 @@ async function main() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// UNYFORM DOCUMENT HANDLING
+// CONFIG-BASED DOCUMENT HANDLING
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function listUnyformDocs(): void {
+function listConfigDocs(options: Options): void {
+  const { config, configDir } = requireConfig(options);
+  
   console.log('');
-  console.log('📚 Available unyform.ai documents:');
+  console.log(`📚 ${config.name || 'Available documents'}:`);
+  if (config.description) {
+    console.log(`   ${config.description}`);
+  }
+  console.log(`   Config: ${configDir}/docs.json`);
   console.log('');
   
-  for (const [key, doc] of Object.entries(UNYFORM_DOCS)) {
-    const filePath = join(MECH_CRATE_ROOT, doc.file);
+  for (const [key, doc] of Object.entries(config.documents)) {
+    const filePath = join(configDir, doc.file);
     const exists = existsSync(filePath);
     const status = exists ? '✅' : '❌';
     console.log(`  ${status} ${key.padEnd(22)} ${doc.title}`);
-    console.log(`     ${doc.description}`);
+    if (doc.description) {
+      console.log(`     ${doc.description}`);
+    }
     if (!exists) {
       console.log(`     (file not found: ${doc.file})`);
     }
@@ -321,19 +417,33 @@ function listUnyformDocs(): void {
   }
 }
 
-async function compileAllUnyformDocs(options: Options): Promise<void> {
+async function compileAllConfigDocs(options: Options): Promise<void> {
+  const { config, configDir } = requireConfig(options);
+  
   console.log('');
-  console.log('🦝 MechCrate docs - Compiling all unyform documents');
+  console.log(`${config.name || 'Docs'} - Compiling all documents`);
   console.log('════════════════════════════════════════════════════════════════');
   
-  const outputDir = options.output || join(MECH_CRATE_ROOT, 'artifacts/unyform');
+  // Determine output directory
+  const outputDir = options.output || (
+    config.outputDir 
+      ? join(WORKSPACE_ROOT, config.outputDir)
+      : join(configDir, 'output')
+  );
   mkdirSync(outputDir, { recursive: true });
+  
+  // Apply defaults from config
+  const mergedOptions = {
+    ...options,
+    author: options.author || config.defaults?.author,
+    theme: options.theme || (config.defaults?.theme as Options['theme']) || 'dark',
+  };
   
   let compiled = 0;
   let skipped = 0;
   
-  for (const [key, doc] of Object.entries(UNYFORM_DOCS)) {
-    const filePath = join(MECH_CRATE_ROOT, doc.file);
+  for (const [key, doc] of Object.entries(config.documents)) {
+    const filePath = join(configDir, doc.file);
     if (!existsSync(filePath)) {
       console.log(`   ⏭️  Skipping ${key} (file not found)`);
       skipped++;
@@ -341,7 +451,7 @@ async function compileAllUnyformDocs(options: Options): Promise<void> {
     }
     
     console.log(`\n📄 Compiling ${key}...`);
-    await compileFile(filePath, { ...options, output: outputDir });
+    await compileFile(filePath, { ...mergedOptions, output: outputDir });
     compiled++;
   }
   
@@ -351,21 +461,35 @@ async function compileAllUnyformDocs(options: Options): Promise<void> {
   console.log(`   Output: ${outputDir}`);
 }
 
-async function compileUnyformDoc(name: string, options: Options): Promise<void> {
-  const doc = UNYFORM_DOCS[name];
+async function compileConfigDoc(name: string, options: Options): Promise<void> {
+  const { config, configDir } = requireConfig(options);
+  
+  const doc = config.documents[name];
   if (!doc) {
     console.error(`❌ Unknown document: ${name}`);
-    console.error(`   Available: ${Object.keys(UNYFORM_DOCS).join(', ')}`);
+    console.error(`   Available: ${Object.keys(config.documents).join(', ')}`);
     process.exit(1);
   }
   
-  const filePath = join(MECH_CRATE_ROOT, doc.file);
+  const filePath = join(configDir, doc.file);
   if (!existsSync(filePath)) {
     console.error(`❌ Document file not found: ${doc.file}`);
     process.exit(1);
   }
   
-  await compileFile(filePath, options);
+  // Apply defaults from config
+  const mergedOptions = {
+    ...options,
+    author: options.author || config.defaults?.author,
+    theme: options.theme || (config.defaults?.theme as Options['theme']) || 'dark',
+    output: options.output || (
+      config.outputDir 
+        ? join(WORKSPACE_ROOT, config.outputDir)
+        : undefined
+    ),
+  };
+  
+  await compileFile(filePath, mergedOptions);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -388,7 +512,7 @@ async function compileFile(filePath: string, options: Options): Promise<void> {
   // e.g., docs/unyform/WHITEPAPER.md -> artifacts/unyform/WHITEPAPER/
   const outputDir = options.output 
     ? resolve(options.output)
-    : join(MECH_CRATE_ROOT, 'artifacts', parentFolderName, fileName);
+    : join(WORKSPACE_ROOT, 'artifacts', parentFolderName, fileName);
   
   const diagramsDir = join(outputDir, 'diagrams');
   
@@ -400,7 +524,7 @@ async function compileFile(filePath: string, options: Options): Promise<void> {
   mkdirSync(diagramsDir, { recursive: true });
   
   console.log('');
-  console.log('🦝 MechCrate docs - Markdown to PDF Compiler');
+  console.log('unyform.ai docs - Markdown to PDF Compiler');
   console.log('════════════════════════════════════════════════════════════════');
   console.log(`   📥 Input:  ${absolutePath}`);
   console.log(`   📤 Output: ${outputDir}`);
@@ -530,7 +654,7 @@ async function compileFolder(folderPath: string, options: Options): Promise<void
   }
   
   console.log('');
-  console.log('🦝 MechCrate docs - Compiling folder');
+  console.log('unyform.ai docs - Compiling folder');
   console.log('════════════════════════════════════════════════════════════════');
   console.log(`   📁 Folder: ${absolutePath}`);
   
@@ -731,6 +855,34 @@ documentclass: report
 function generateHtmlDocument(body: string, meta: DocumentMeta, outputDir: string): string {
   const toc = meta.toc ? generateToc(body) : '';
   
+  // Unyform logo SVG (corner variant) embedded inline
+  const unyformLogoSvg = `
+    <svg width="180" height="180" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <g transform="translate(96, 72)">
+        <!-- TOP BAR - RIGHT HALF (navy) -->
+        <line x1="160" y1="0" x2="320" y2="0" stroke="#1e1b4b" stroke-width="24" stroke-linecap="round"/>
+        <!-- TOP BAR - LEFT HALF (accent) -->
+        <line x1="0" y1="0" x2="160" y2="0" stroke="#6366f1" stroke-width="24" stroke-linecap="round"/>
+        <!-- RIGHT SIDE + BOTTOM CURVE (navy) -->
+        <path 
+          d="M 320 0 L 320 240 Q 320 368 160 368 Q 0 368 0 240"
+          fill="none"
+          stroke="#1e1b4b"
+          stroke-width="24"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <!-- LEFT VERTICAL (accent) -->
+        <line x1="0" y1="0" x2="0" y2="240" stroke="#6366f1" stroke-width="24" stroke-linecap="round"/>
+        <!-- HORIZONTAL CROSSBAR (accent) -->
+        <line x1="0" y1="120" x2="112" y2="120" stroke="#6366f1" stroke-width="16" stroke-linecap="round"/>
+        <!-- CORNER REINFORCEMENT -->
+        <line x1="296" y1="24" x2="296" y2="48" stroke="#1e1b4b" stroke-width="5" stroke-linecap="round"/>
+        <line x1="280" y1="24" x2="296" y2="24" stroke="#1e1b4b" stroke-width="5" stroke-linecap="round"/>
+      </g>
+    </svg>
+  `;
+  
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -743,7 +895,8 @@ ${getStyles()}
 </head>
 <body>
   <div class="cover-page">
-    <div class="logo">🦝</div>
+    <div class="logo">${unyformLogoSvg}</div>
+    <p class="company-name">unyform.ai</p>
     <h1 class="title">${escapeHtml(meta.title)}</h1>
     ${meta.subtitle ? `<p class="subtitle">${escapeHtml(meta.subtitle)}</p>` : ''}
     <p class="author">${escapeHtml(meta.author || '')}</p>
@@ -936,8 +1089,20 @@ function getStyles(): string {
     }
     
     .logo {
-      font-size: 72pt;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .logo svg {
+      width: 180px;
+      height: 180px;
+    }
+    
+    .company-name {
+      font-size: 28pt;
+      font-weight: 700;
+      color: #1e1b4b;
+      margin: 0 0 0.5rem 0;
+      letter-spacing: -0.02em;
     }
     
     .title {
