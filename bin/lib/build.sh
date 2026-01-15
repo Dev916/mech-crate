@@ -12,6 +12,7 @@ build_cmd() {
     local tag="latest"
     local mode="dev"
     local push=0
+    local nocache=0
     local extra_args=""
     
     # Parse arguments
@@ -37,6 +38,10 @@ build_cmd() {
                 push=1
                 shift
                 ;;
+            --no-cache|--nocache)
+                nocache=1
+                shift
+                ;;
             --platform)
                 extra_args="--platform=$2"
                 shift 2
@@ -57,10 +62,8 @@ build_cmd() {
         esac
     done
     
-    # Validate we're in a project
-    if ! is_mech_crate_project; then
-        error "Not in a MechCrate project. Run 'mx new <name>' first."
-    fi
+    # Find and change to project root
+    cd_to_project_root
     
     # Service is required
     if [ -z "$service" ]; then
@@ -86,10 +89,10 @@ build_cmd() {
     # Run the build
     if [ "$mode" = "prod" ]; then
         info "Building production image for $service..."
-        make _build service="$service" tag="$tag" mode=prod push="$push"
+        make _build service="$service" tag="$tag" mode=prod push="$push" nocache="$nocache"
     else
         info "Building development image for $service..."
-        make _build service="$service" tag="$tag" mode=dev push="$push"
+        make _build service="$service" tag="$tag" mode=dev push="$push" nocache="$nocache"
     fi
 }
 
@@ -111,6 +114,7 @@ show_build_help() {
     echo "    --dev, --development     Build development image (default)"
     echo "    -t, --tag <tag>          Image tag (default: latest)"
     echo "    --push                   Push image to registry after build"
+    echo "    --no-cache               Build without using cache"
     echo "    --platform <platform>    Target platform (e.g., linux/amd64)"
     echo "    -h, --help               Show this help"
     echo ""
