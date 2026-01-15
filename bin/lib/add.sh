@@ -41,9 +41,8 @@ add_service() {
         error "Service name is required. Usage: mx add <service-name> [--recipe=<recipe>]"
     fi
     
-    if ! is_mech_crate_project; then
-        error "Not in a MechCrate project. Run 'mx new <name>' first."
-    fi
+    # Find and change to project root
+    cd_to_project_root
     
     # Use recipe if specified, otherwise default service
     if [[ -n "$recipe" ]]; then
