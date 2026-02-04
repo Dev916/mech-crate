@@ -14,8 +14,9 @@ RUN apk add --no-cache \
     pkgconfig \
     perl \
     make \
-    nodejs \
-    npm
+    curl \
+    libstdc++ \
+    libgcc
 
 # Install cargo-leptos
 RUN cargo install cargo-leptos
@@ -23,8 +24,18 @@ RUN cargo install cargo-leptos
 # Install wasm target
 RUN rustup target add wasm32-unknown-unknown
 
-# Install Tailwind CSS
-RUN npm install -g tailwindcss
+# Install Tailwind CSS v3 standalone CLI (no Node.js required)
+# v4 has breaking config changes, pinning to v3.4.17
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        TAILWIND_ARCH="linux-arm64-musl"; \
+    else \
+        TAILWIND_ARCH="linux-x64-musl"; \
+    fi && \
+    
+    curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-${TAILWIND_ARCH}" && \
+    chmod +x "tailwindcss-${TAILWIND_ARCH}" && \
+    mv "tailwindcss-${TAILWIND_ARCH}" /usr/local/bin/tailwindcss
 
 WORKDIR /app
 
