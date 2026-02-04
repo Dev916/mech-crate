@@ -9,6 +9,6 @@ cd lara
 
 mx add vel --recipe=laravel --no-prompt
 
-make build s=vel BUILD_MODE=prod --no-cache
+mx build vel --prod --no-cache
 
-make dev s=vel
+mx dev vel
