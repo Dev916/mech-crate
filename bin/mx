@@ -43,6 +43,7 @@ source "$LIB_DIR/test.sh"
 source "$LIB_DIR/router.sh"
 source "$LIB_DIR/mcp.sh"
 source "$LIB_DIR/docs.sh"
+source "$LIB_DIR/unyform.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main command router
@@ -90,6 +91,19 @@ main() {
             ;;
         doctor)
             doctor
+            ;;
+        # Unyform integration commands
+        login)
+            login_cmd "$@"
+            ;;
+        logout)
+            logout_cmd "$@"
+            ;;
+        whoami)
+            whoami_cmd "$@"
+            ;;
+        unyform)
+            unyform_cmd "$@"
             ;;
         version|--version|-v)
             show_version
