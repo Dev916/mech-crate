@@ -1,0 +1,7 @@
+# Redis service - Development Overrides
+
+services:
+  redis:
+    ports:
+      - "6379:6379"  # Expose for local tools
+    restart: "no"
