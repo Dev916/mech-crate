@@ -3,8 +3,7 @@
 # Traefik routes to this service via devmesh-traefik network
 
 include:
-  - path: ../../docker/compose/db.yml
-    optional: true
+  - path: ./db.yml
 
 services:
   {{SERVICE_NAME}}:
