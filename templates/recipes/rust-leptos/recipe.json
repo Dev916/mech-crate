@@ -66,18 +66,32 @@
     "apps/{{SERVICE_NAME}}/public",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
-    "docker/config"
+    "docker/.config"
   ],
   
   "templates": [
     { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "common://docker/compose/db.yml", "to": "docker/compose/db.yml" },
+    { "from": "common://docker/compose/db.dev.yml", "to": "docker/compose/db.dev.yml" },
+    { "from": "common://docker/compose/redis.yml", "to": "docker/compose/redis.yml" },
+    { "from": "common://docker/compose/redis.dev.yml", "to": "docker/compose/redis.dev.yml" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
-    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" }
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" },
+    { "from": "common://docker/config/env.db", "to": "docker/.config/.env.db" },
+    { "from": "common://docker/config/env.redis", "to": "docker/.config/.env.redis" },
+    { "from": "common://docker/config/env.secrets", "to": "docker/.config/.env.secrets" },
+    { "from": "common://docker/config/env.shared", "to": "docker/.config/.env.shared" }
   ],
+  
+  "post_install": {
+    "gitignore": [
+      "docker/.config/.env.secrets"
+    ]
+  },
   
   "next_steps": [
     "cd apps/{{SERVICE_NAME}}",
