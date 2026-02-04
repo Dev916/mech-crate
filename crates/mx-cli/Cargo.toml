@@ -1,0 +1,51 @@
+[package]
+name = "mx-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MechCrate CLI - project scaffolding, service management, and infrastructure automation"
+readme = "../../README.md"
+keywords = ["cli", "devops", "docker", "infrastructure", "scaffolding"]
+categories = ["development-tools", "command-line-utilities"]
+
+[dependencies]
+# Internal crates
+mx-lib = { path = "../mx-lib", features = ["cli"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# CLI argument parsing
+clap = { workspace = true }
+
+# Interactive prompts
+dialoguer = { workspace = true }
+console = { workspace = true }
+indicatif = { workspace = true }
+
+# Process execution
+which = { workspace = true }
+
+# Home directory
+dirs = { workspace = true }
+
+# Directory walking
+walkdir = "2.5"
+
+[[bin]]
+name = "mx"
+path = "src/main.rs"
