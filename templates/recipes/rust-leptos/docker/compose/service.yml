@@ -3,8 +3,8 @@
 # Traefik routes to this service via devmesh-traefik network
 
 include:
-  - path: redis.yml
-  - path: db.yml
+  - ./redis.yml
+  - ./db.yml
 
 services:
   {{SERVICE_NAME}}:
