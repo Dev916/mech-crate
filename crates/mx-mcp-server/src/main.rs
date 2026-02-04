@@ -10,6 +10,7 @@ mod mx;
 mod project;
 mod rag;
 mod tools;
+mod unyform;
 mod weaviate;
 
 use clap::Parser;
