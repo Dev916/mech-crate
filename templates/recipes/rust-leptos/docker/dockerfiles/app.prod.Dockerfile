@@ -13,7 +13,6 @@
 # Build Arguments
 # ─────────────────────────────────────────────────────────────────────────────
 ARG RUST_VERSION={{RUST_VERSION}}
-ARG NODE_VERSION=22
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: Rust Build Environment
@@ -27,7 +26,10 @@ RUN apk add --no-cache \
     openssl-libs-static \
     pkgconfig \
     perl \
-    make
+    make \
+    curl \
+    libstdc++ \
+    libgcc
 
 # Install cargo-leptos
 RUN cargo install cargo-leptos --locked
@@ -35,21 +37,43 @@ RUN cargo install cargo-leptos --locked
 # Install wasm target
 RUN rustup target add wasm32-unknown-unknown
 
+# Install Tailwind CSS standalone CLI (no Node.js required)
+# Detects architecture and downloads appropriate musl binary
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        TAILWIND_ARCH="linux-arm64-musl"; \
+    else \
+        TAILWIND_ARCH="linux-x64-musl"; \
+    fi && \
+    curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-${TAILWIND_ARCH}" && \
+    chmod +x "tailwindcss-${TAILWIND_ARCH}" && \
+    mv "tailwindcss-${TAILWIND_ARCH}" /usr/local/bin/tailwindcss
+
 WORKDIR /app
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Tailwind CSS Build
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine AS tailwind
+FROM alpine:3.20 AS tailwind
 
 WORKDIR /app
 
-# Install Tailwind
-RUN npm install -g tailwindcss
+# Install Tailwind CSS standalone CLI (detects architecture)
+RUN apk add --no-cache curl libstdc++ libgcc && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        TAILWIND_ARCH="linux-arm64-musl"; \
+    else \
+        TAILWIND_ARCH="linux-x64-musl"; \
+    fi && \
+    curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-${TAILWIND_ARCH}" && \
+    chmod +x "tailwindcss-${TAILWIND_ARCH}" && \
+    mv "tailwindcss-${TAILWIND_ARCH}" /usr/local/bin/tailwindcss && \
+    apk del curl
 
-# Copy CSS source
+# Copy CSS source and Rust source for class detection
 COPY apps/{{SERVICE_NAME}}/style ./style
-COPY apps/{{SERVICE_NAME}}/tailwind.config.js ./
+COPY apps/{{SERVICE_NAME}}/src ./src
 
 # Build minified CSS
 RUN tailwindcss -i style/tailwind.css -o style/main.css --minify
