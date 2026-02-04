@@ -6,12 +6,44 @@
 
 🦝 **Crate Raccoon is the mascot.** MechCrate is the project scaffolding kit for Docker-based development.
 
+## Installation
+
+### Quick Install
+
+```bash
+# Clone the repo
+git clone https://github.com/your-org/mech-crate.git
+cd mech-crate
+
+# Build and install globally
+make install-local    # Installs to ~/.local/bin (no sudo)
+# or
+make install          # Installs to /usr/local/bin (may need sudo)
+```
+
+### Manual Build
+
+```bash
+# Build release binaries
+cargo build --release
+
+# Initialize MechCrate templates
+MECH_CRATE_ROOT=$(pwd) ./target/release/mx init
+
+# Add to PATH or copy to a directory in your PATH
+cp target/release/mx ~/.local/bin/
+```
+
+### Verify Installation
+
+```bash
+mx --version
+mx doctor
+```
+
 ## Quick Start
 
 ```bash
-# Install mx (add to your PATH)
-export PATH="$PATH:/path/to/mech-crate/bin"
-
 # Start the global router (first-time only)
 mx router install
 mx router up
@@ -38,30 +70,68 @@ It standardizes:
 
 ## The mx CLI Tool
 
-```bash
-mx new <name>        # Create a new MechCrate project
-mx add <service>     # Add a new service to existing project
-mx router <cmd>      # Manage global Traefik router
-mx doctor            # Check project health and dependencies
-mx help              # Show all commands
+The `mx` CLI is written in Rust for performance and reliability.
 
-# Router commands (global)
+### Global Commands
+
+```bash
+mx init              # Initialize MechCrate (~/.mech-crate)
+mx doctor            # Check system health
+mx recipes list      # List available recipes
+mx recipes info <name>  # Show recipe details
+
 mx router install    # First-time setup
 mx router up         # Start the global router
 mx router down       # Stop the router
 mx router status     # Check router status
 mx router inspect    # Show dashboard URL and connected services
 
-# Project commands (run from project root)
-mx dev [s=service]     # Start services in development mode
-mx up [s=service]      # Start services in production mode
-mx down [s=service]    # Stop services
-mx logs [s=service]    # Tail service logs
-mx build <s=service> [--prod]  # Build a service image
-mx restart <s=service> # Restart a service
-mx sh <s=service>      # Shell into a service
-mx ps                # List running services
+mx mcp build         # Build MCP server for AI integration
+mx mcp start         # Start Weaviate RAG backend
+mx mcp status        # Check MCP status
+
+mx infra list        # List infrastructure providers
+mx infra setup <provider>  # Configure provider credentials
 ```
+
+### Project Commands
+
+```bash
+mx new <name>        # Create a new MechCrate project
+mx new <name> --with api  # With a specific service
+mx add <service>     # Add a new service to existing project
+mx add api --recipe rust-api  # Add with a specific recipe
+mx upgrade           # Update project with latest scaffolding
+mx upgrade --diff    # Show diffs before updating
+```
+
+### Make Commands (in project)
+
+```bash
+make dev             # Start services in development mode
+make up              # Start services (production mode)
+make down            # Stop all services
+make logs            # Tail all logs
+make logs s=app      # Tail specific service logs
+make sh s=app        # Shell into service
+make build s=app     # Build service image
+make restart s=app   # Restart service
+make ps              # List running services
+make doctor          # Check project health
+make help            # Show all commands
+```
+
+## Available Recipes
+
+| Recipe | Description |
+|--------|-------------|
+| `astro` | Full-stack Astro 5 with Vue 3 islands, SSR |
+| `laravel` | Laravel 12 + Octane (Swoole) with Filament admin |
+| `nuxt` | Nuxt 3 SSR/SSG application with Nitro server |
+| `rust-api` | Rust API service with Actix-web, SQLx |
+| `rust-leptos` | Leptos SSR + Actix-web with shadcn-ui |
+| `rust-worker` | High-performance job worker with Redis |
+| `zola` | Zola static site generator |
 
 ## Non-Negotiable Folder Contract
 
@@ -71,60 +141,25 @@ If a repo uses MechCrate, the structure must exist exactly like this:
 project-root/
 ├── Makefile                          # Root makefile
 ├── make/                             # Make modules
-│   ├── common.mk                     # Shared helpers
-│   ├── dev.mk                        # Development commands
-│   ├── up.mk                         # Service management
-│   ├── down.mk
-│   ├── build.mk
-│   ├── logs.mk
-│   ├── restart.mk
-│   ├── sh.mk
-│   ├── run.mk
-│   ├── start.mk
-│   └── stop.mk
+│   ├── common.mk
+│   ├── dev.mk
+│   └── ...
 ├── scripts/                          # Shell scripts
-│   ├── .bashrc                       # Helper functions
-│   ├── dev.sh
-│   ├── up.sh
-│   ├── down.sh
-│   ├── build.sh
-│   ├── logs.sh
-│   ├── restart.sh
-│   ├── sh.sh
-│   ├── run.sh
-│   ├── exec.sh
-│   ├── start.sh
-│   ├── stop.sh
-│   ├── ps.sh
-│   ├── init.sh
-│   ├── test.sh
-│   ├── doctor.sh
-│   └── help.sh
+│   └── ...
+├── apps/                             # Application source code
+│   └── <service>/
 └── docker/
     ├── .config/                      # Environment files
-    │   ├── .env.shared               # Shared across all services
-    │   ├── .env.secrets              # Credentials (gitignored)
-    │   ├── .env.secrets.template     # Template for secrets
-    │   ├── .env.app                  # Per-service config
-    │   ├── .env.db
-    │   └── .env.redis
-    ├── compose/                      # Compose files (atomic)
-    │   ├── app.yml                   # Baseline (production)
-    │   ├── app.dev.yml               # Development overrides
-    │   ├── db.yml
-    │   ├── db.dev.yml
-    │   ├── redis.yml
-    │   └── redis.dev.yml
+    │   ├── .env.shared
+    │   ├── .env.secrets
+    │   └── .env.<service>
+    ├── compose/                      # Compose files
+    │   ├── <service>.yml
+    │   └── <service>.dev.yml
     ├── system/                       # 1:1 filesystem mounts
-    │   ├── app/
-    │   │   ├── app/                  # → /app
-    │   │   ├── etc/app/              # → /etc/app
-    │   │   └── var/log/app/          # → /var/log/app
-    │   └── postgres/
-    │       └── docker-entrypoint-initdb.d/
+    │   └── <service>/
     └── dockerfiles/                  # Dockerfiles
-        └── app/
-            └── app                   # Multi-stage Dockerfile
+        └── <service>/
 ```
 
 ## Environment Config Rules
@@ -141,8 +176,8 @@ MechCrate uses centralized env files loaded in a consistent order:
 Each service is defined in its own compose file inside `docker/compose/`. This lets you compose any stack you want by passing multiple `-f` files.
 
 ### Baseline + Dev Override Pattern
-- **Production**: `app.yml` only (baseline)
-- **Development**: `app.yml` + `app.dev.yml` (baseline + overrides)
+- **Production**: `service.yml` only (baseline)
+- **Development**: `service.yml` + `service.dev.yml` (baseline + overrides)
 
 Development overrides add:
 - Volume mounts for hot-reload
@@ -150,69 +185,51 @@ Development overrides add:
 - Development-only environment variables
 - Disabled health checks
 
-## 1:1 Filesystem Mirroring Rule
-
-Host directory `docker/system/<service>/path/to/file` maps to container path `/path/to/file`.
-
-This makes Dockerfiles clean:
-```dockerfile
-COPY docker/system/app/ /
-COPY docker/system/nginx/ /
-COPY docker/system/postgres/ /
-```
-
-## Make Commands
-
-| Command | Description |
-|---------|-------------|
-| `make dev` | Start all services in dev mode |
-| `make dev s=app` | Start specific service in dev mode |
-| `make up` | Start services (production mode) |
-| `make up s=app` | Start specific service |
-| `make down` | Stop all services |
-| `make down s=app` | Stop specific service |
-| `make logs` | Tail all logs |
-| `make logs s=app` | Tail specific service logs |
-| `make sh s=app` | Shell into service |
-| `make build s=app` | Build service image |
-| `make build s=app t=v1.0` | Build with specific tag |
-| `make restart s=app` | Restart service |
-| `make ps` | List running services |
-| `make doctor` | Check project health |
-| `make init` | Initialize environment |
-| `make help` | Show all commands |
-
-## Adding a New Service
-
-Using mx:
-```bash
-mx add api
-```
-
-Or manually:
-1. Add `docker/compose/<service>.yml`
-2. Add `docker/compose/<service>.dev.yml` (dev overrides)
-3. Add `docker/.config/.env.<service>` (config)
-4. Add `docker/system/<service>/...` (filesystem content)
-5. Add `docker/dockerfiles/<service>/app` (Dockerfile)
-
-## Project Structure Reference
-
-See `reference/mono/` for a complete working example with multiple services.
-
 ## Documentation
 
 | Guide | Description |
 |-------|-------------|
-| [Router Guide](docs/router.md) | Global Traefik reverse proxy setup and usage |
+| [Router Guide](docs/router.md) | Global Traefik reverse proxy setup |
 | [Recipe Authoring](docs/development/RECIPE_AUTHORING_GUIDE.md) | Create custom service recipes |
-| [Cloudflare Infrastructure](docs/cloudflare.md) | Deploy apps to Cloudflare Workers + Containers |
+| [Rust CLI Development](docs/development/RUST_CLI_DEVELOPMENT.md) | Develop the mx CLI |
+| [Quick Reference](docs/development/QUICK_REFERENCE.md) | Common commands cheatsheet |
 
 ## Development
 
-The MechCrate tool lives in:
-- `bin/mx` - CLI tool
-- `templates/` - Project templates
+### Project Structure
+
+```
+mech-crate/
+├── Cargo.toml              # Workspace manifest
+├── crates/
+│   ├── mx-lib/             # Shared library (core logic)
+│   ├── mx-cli/             # CLI binary (the `mx` command)
+│   └── mx-mcp-server/      # MCP server for AI agents
+├── templates/              # Recipe templates
+│   ├── project/            # Base project structure
+│   ├── recipes/            # Service recipes
+│   └── router/             # Global router
+└── docs/                   # Documentation
+```
+
+### Building
+
+```bash
+# Build debug
+make build
+
+# Build release
+make build-release
+
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# Install locally
+make install-local
+```
 
 ---
 
