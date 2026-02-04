@@ -1,0 +1,62 @@
+#!/bin/sh
+
+# Function to display usage
+usage() {
+    echo "Usage: $0 -s <service> [-D]"
+    echo "    -s <service>   Specify the service to run (nuxt or api)"
+    echo "    -D             Run in development mode"
+    exit 1
+}
+
+# Initialize variables
+SERVICE=""
+DEV_MODE=0
+
+echo "Setup app cache"
+/usr/bin/php /srv/app/artisan config:cache
+
+
+
+# Parse command line arguments
+while getopts "s:D" opt; do
+    case $opt in
+    s)
+        SERVICE=$OPTARG
+        ;;
+    D)
+        DEV_MODE=1
+        ;;
+    *)
+        usage
+        ;;
+    esac
+done
+
+# Validate service argument
+if [ -z "$SERVICE" ]; then
+    echo "Error: Service not specified"
+    usage
+fi
+
+if [ "$SERVICE" = "php" ]; then
+    if [ $DEV_MODE -eq 1 ]; then
+        echo "Running octane in dev mode"
+        /usr/bin/php /srv/app/artisan octane:start --watch --host=0.0.0.0 --port=8000 --workers=auto &
+    else
+        echo "Running octane in prod mode"
+        /usr/bin/php /srv/app/artisan octane:start --host=0.0.0.0 --port=8000 --workers=auto &    
+    fi
+
+    sleep 10
+    echo "Compiling opcache"
+    /usr/bin/php /srv/app/artisan opcache:compile
+
+    wait
+else
+    echo "Error: Invalid service specified ($SERVICE) t(^^t)"
+    echo ""
+    echo ""
+    usage
+fi
+
+
