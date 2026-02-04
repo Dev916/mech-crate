@@ -1,0 +1,68 @@
+[package]
+name = "mx-mcp-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MCP Server for MechCrate - enabling LLMs to manage projects, services, and infrastructure"
+readme = "README.md"
+keywords = ["mcp", "llm", "devops", "docker", "infrastructure"]
+categories = ["development-tools", "command-line-utilities"]
+
+[dependencies]
+# Internal crates
+mx-lib = { path = "../mx-lib" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# MCP Protocol (JSON-RPC over stdio)
+async-trait = { workspace = true }
+
+# HTTP client for Weaviate
+reqwest = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Process execution
+which = { workspace = true }
+
+# UUID for request IDs
+uuid = { workspace = true }
+
+# Time handling
+chrono = { workspace = true }
+
+# Glob patterns for file matching
+glob = { workspace = true }
+
+# Directory walking
+walkdir = { workspace = true }
+
+# Environment variables
+dotenvy = { workspace = true }
+
+# CLI argument parsing (for standalone mode)
+clap = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[[bin]]
+name = "mx-mcp"
+path = "src/main.rs"
+
+[[bin]]
+name = "mx-ingest"
+path = "src/bin/ingest.rs"
