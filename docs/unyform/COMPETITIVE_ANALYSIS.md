@@ -8,9 +8,11 @@
 
 ## Executive Summary
 
-The enterprise AI infrastructure and governance market is rapidly evolving, with multiple players addressing different aspects of the challenge. This analysis examines three key competitors—**Lando**, **Nexos.ai**, and **Zenity.io**—to identify how unyform.ai can match, surpass, and differentiate itself in the market.
+The enterprise AI infrastructure and governance market is rapidly evolving, with players taking two distinct approaches: **horizontal platforms** (serve all AI use cases across the business) and **vertical platforms** (serve one domain exceptionally well). This analysis examines direct competitors (**Lando**, **Nexos.ai**, **Zenity.io**) and adjacent horizontal platforms (**Airia**) to clarify unyform.ai's market position.
 
-**Key Finding:** No single competitor addresses the full spectrum of enterprise needs—from local development consistency to AI governance to production infrastructure. unyform.ai is uniquely positioned to unify these capabilities into a cohesive platform.
+**Key Finding:** unyform.ai is a **vertical platform** focused exclusively on AI-assisted software development. We don't compete with horizontal AI platforms like Airia—they power AI for HR, sales, ops, and support. We do one thing: help engineering teams ship secure, compliant software faster with AI. This specialization is our strength.
+
+**Our Position:** While horizontal platforms go wide and shallow across many use cases, we go deep on the specific pain points of AI development in enterprises: codebase pattern learning, code conformance, IDE integration, and infrastructure lifecycle. For engineering teams, depth beats breadth.
 
 ---
 
@@ -28,6 +30,7 @@ quadrantChart
     "Lando": [0.2, 0.3]
     "Nexos.ai": [0.7, 0.85]
     "Zenity.io": [0.85, 0.75]
+    "Airia": [0.8, 0.9]
     "unyform.ai": [0.65, 0.7]
 ```
 
@@ -37,11 +40,12 @@ quadrantChart
 |---------|-------------|-------------|
 | **Local Development** | Dev environment setup, workflow automation | Lando, DDEV, Docker Desktop |
 | **AI Orchestration** | Multi-model access, centralized AI management | Nexos.ai, Portkey, Helicone |
-| **AI Security/Governance** | AI agent security, compliance, risk management | Zenity.io, Robust Intelligence |
+| **AI Agent Platforms** | Agent building, orchestration, enterprise AI deployment | Airia, UiPath, Kore.ai |
+| **AI Security/Governance** | AI agent security, compliance, risk management | Zenity.io, Airia, Robust Intelligence |
 | **Developer Platforms** | Service catalogs, templates, scaffolding | Backstage, Port.io |
 | **IaC/Infrastructure** | Cloud provisioning, infrastructure management | Terraform, Pulumi |
 
-**unyform.ai sits at the intersection**—combining dev environment consistency, AI governance, and infrastructure scaffolding into a unified enterprise trust layer.
+**unyform.ai sits at the intersection**—combining dev environment consistency, AI coding assistant governance, and infrastructure scaffolding into a unified enterprise trust layer. Unlike agent-focused platforms (Airia), we target the **developer workflow** specifically.
 
 ---
 
@@ -354,51 +358,203 @@ Zenity.io solved AI agent security and governance but never addressed:
 
 ---
 
+## 4. Airia
+
+### Overview
+
+**What it is:** A **horizontal** enterprise AI platform—an "AI operating system" for the entire business. Airia powers AI agents across HR, sales, marketing, operations, customer service, finance, and more. It's designed to be the single AI layer for **all business functions**.
+
+**Website:** https://airia.com  
+**Funding:** $100M (Series B, September 2025)  
+**Target Market:** Entire enterprise—every department, every function, every use case
+
+### Why Airia Is NOT a Direct Competitor
+
+**Critical Distinction:** Airia is **horizontal** (all AI use cases across the business). unyform.ai is **vertical** (deep focus on software development). These are fundamentally different market positions.
+
+```mermaid
+flowchart TB
+    subgraph airia_scope ["AIRIA SCOPE: Horizontal AI Platform"]
+        direction LR
+        HR["HR & Recruiting"]
+        SALES["Sales & CRM"]
+        MKT["Marketing"]
+        OPS["Operations"]
+        CS["Customer Service"]
+        FIN["Finance"]
+        LEGAL["Legal"]
+        DEV["Development<br/>(shallow)"]
+    end
+    
+    subgraph unyform_scope ["unyform.ai SCOPE: Vertical Developer Platform"]
+        direction TB
+        IDE["IDE Integration"]
+        CODE["Code Generation"]
+        CTX["Codebase Context"]
+        CONF["Conformance"]
+        INFRA["Infrastructure"]
+        CICD["CI/CD Pipeline"]
+        PROD["Production Deploy"]
+    end
+    
+    style airia_scope fill:#8b5cf6,color:#fff
+    style unyform_scope fill:#22c55e,color:#fff
+```
+
+| Dimension | Airia | unyform.ai |
+|-----------|-------|------------|
+| **Scope** | All business functions | Software development only |
+| **Depth** | Wide and shallow across many domains | Deep and specialized in one domain |
+| **Use Cases** | Thousands (any AI task) | Focused (secure, compliant code shipping) |
+| **Target Buyer** | CIO/CDO (enterprise-wide AI) | CTO/VP Eng (engineering teams) |
+| **Value Prop** | "AI for everything" | "Ship secure software faster" |
+
+### What Airia Does (And Does Well)
+
+| Feature | Description |
+|---------|-------------|
+| **Agent Builder** | No-code + pro-code agent creation for any business process |
+| **Model Agnostic** | Support for multiple LLM providers |
+| **AI Governance** | Enterprise-wide agent & model registries |
+| **Security Stack** | DLP, encryption, audit trails |
+| **2,500+ Pre-built Agents** | HR bots, sales assistants, support agents, etc. |
+| **Browser Extension** | AI embedded into any web workflow |
+| **Deployment Options** | Cloud, on-prem, hybrid |
+
+### The Opportunity: Where Airia Goes Wide, We Go Deep
+
+Airia's use cases are **exponentially broader**—they're trying to be the AI layer for your entire company. That's both their strength and their limitation for engineering teams.
+
+**What "horizontal" means for development:**
+- Development is just one of many use cases they serve
+- No deep IDE integration (browser extension, not VS Code)
+- No codebase pattern learning (generic agents, not code-aware)
+- No code conformance (they filter, not rewrite)
+- No infrastructure scaffolding (agents, not deployments)
+
+**What "vertical" means for unyform.ai:**
+- Development is our **only** use case—we own it completely
+- Deep IDE integration (VS Code, JetBrains, CLI)
+- Codebase pattern learning (your patterns, your standards)
+- Code conformance rewriting (output matches your style)
+- Full infrastructure lifecycle (dev → staging → production)
+
+### Why Vertical Wins for Engineering Teams
+
+| Pain Point | Airia's Answer | unyform.ai's Answer |
+|------------|----------------|---------------------|
+| "AI doesn't know our codebase" | Generic agents, bring your own context | Learns your repo patterns automatically |
+| "AI output doesn't match our style" | Filter/block bad output | Rewrite to conform to your standards |
+| "Security can't see what AI generates" | General audit logs | Code-specific audit with conformance scores |
+| "AI slows down code review" | Not addressed | Pre-checked conformance, less review burden |
+| "We need consistency to production" | Not their focus | Full lifecycle: dev → AI → deploy |
+
+### Complementary, Not Competitive
+
+**The Enterprise Reality:** Large companies may use BOTH:
+- **Airia** for business-wide AI (HR bots, sales assistants, support agents)
+- **unyform.ai** for engineering-specific AI (coding assistants, infrastructure)
+
+```mermaid
+flowchart LR
+    subgraph enterprise ["ENTERPRISE AI STACK"]
+        subgraph biz ["Business Operations"]
+            AIRIA["Airia<br/>HR, Sales, Ops, Support"]
+        end
+        
+        subgraph eng ["Engineering"]
+            UNYFORM["unyform.ai<br/>Code, Infra, Deploy"]
+        end
+    end
+    
+    style biz fill:#8b5cf6,color:#fff
+    style eng fill:#22c55e,color:#fff
+```
+
+### What We Learn From Airia
+
+| Airia Strength | Lesson for unyform.ai |
+|----------------|----------------------|
+| "Single integration" messaging | Double down on "one integration for engineering" |
+| 2,500+ pre-built agents | Build deep recipe library for infra patterns |
+| Governance as a pillar | Position governance prominently, but CODE-specific |
+| $100M funding credibility | Emphasize production-ready foundation (MechCrate) |
+| Browser extension UX | Ensure IDE extension is equally seamless |
+
+### Our Advantage: Specialization
+
+**Airia's challenge:** Serving everyone means optimizing for no one. A sales bot and a code generator have fundamentally different governance needs.
+
+**unyform.ai's advantage:** We solve ONE problem exceptionally well—shipping secure, compliant software faster with AI. Every feature, every integration, every policy is designed for this specific outcome.
+
+| Metric | Airia (Horizontal) | unyform.ai (Vertical) |
+|--------|-------------------|----------------------|
+| Use cases served | 100+ | 1 (done deeply) |
+| IDE integration depth | Browser only | Native IDE + CLI + CI |
+| Code pattern learning | ❌ | ✅ |
+| Conformance rewriting | ❌ | ✅ |
+| Infrastructure lifecycle | ❌ | ✅ |
+| Time to value for devs | Moderate | Fast (dev-native) |
+
+---
+
 ## Comprehensive Feature Comparison
 
 ### Feature Matrix
 
-| Feature Category | Feature | Lando | Nexos.ai | Zenity.io | unyform.ai |
-|-----------------|---------|-------|----------|-----------|------------|
-| **Dev Environment** | Local dev setup | ✅ | ❌ | ❌ | ✅ |
-| | Docker-based | ✅ | ❌ | ❌ | ✅ |
-| | Multi-stack support | ✅ | ❌ | ❌ | ✅ |
-| | Recipe/template system | ✅ | ❌ | ❌ | ✅ |
-| **AI Integration** | Multi-model access | ❌ | ✅ | ❌ | ✅ |
-| | AI gateway/proxy | ❌ | ✅ | ❌ | ✅ |
-| | Codebase context | ❌ | ❌ | ❌ | ✅ |
-| | Pattern learning | ❌ | ❌ | ❌ | ✅ |
-| | MCP protocol support | ❌ | ❌ | ❌ | ✅ |
-| **Governance** | Policy engine | ❌ | Partial | ✅ | ✅ |
-| | Generation-time enforcement | ❌ | Partial | ❌ | ✅ |
-| | Conformance rewriting | ❌ | ❌ | ❌ | ✅ |
-| | Approval workflows | ❌ | ❌ | ✅ | ✅ |
-| **Security** | Input/output filtering | ❌ | ✅ | ✅ | ✅ |
-| | Secrets detection | ❌ | ✅ | ✅ | ✅ |
-| | DLP | ❌ | ✅ | ✅ | ✅ |
-| | Vulnerability scanning | ❌ | ❌ | ✅ | ✅ |
-| **Compliance** | Audit trails | ❌ | ✅ | ✅ | ✅ |
-| | Compliance reports | ❌ | ❌ | ✅ | ✅ |
-| | SOC2/HIPAA/PCI templates | ❌ | ❌ | ✅ | ✅ |
-| **Infrastructure** | Cloud scaffolding | ❌ | ❌ | ❌ | ✅ |
-| | Multi-cloud support | ❌ | ❌ | ❌ | ✅ |
-| | Production deployment | ❌ | ❌ | ❌ | ✅ |
-| **Developer Experience** | IDE integration | ❌ | ❌ | ❌ | ✅ |
-| | CLI tooling | ✅ | ❌ | ❌ | ✅ |
-| | Workflow integration | ✅ | ❌ | ❌ | ✅ |
-| **Enterprise** | Team management | ❌ | ✅ | ✅ | ✅ |
-| | SSO/SAML | ❌ | ✅ | ✅ | ✅ |
-| | Self-hosted option | ✅ | ❌ | ✅ | ✅ |
-| | API access | ❌ | ✅ | ✅ | ✅ |
+| Feature Category | Feature | Lando | Nexos.ai | Zenity.io | Airia | unyform.ai |
+|-----------------|---------|-------|----------|-----------|-------|------------|
+| **Dev Environment** | Local dev setup | ✅ | ❌ | ❌ | ❌ | ✅ |
+| | Docker-based | ✅ | ❌ | ❌ | ❌ | ✅ |
+| | Multi-stack support | ✅ | ❌ | ❌ | ❌ | ✅ |
+| | Recipe/template system | ✅ | ❌ | ❌ | ❌ | ✅ |
+| **AI Integration** | Multi-model access | ❌ | ✅ | ❌ | ✅ | ✅ |
+| | AI gateway/proxy | ❌ | ✅ | ❌ | ✅ | ✅ |
+| | Codebase context | ❌ | ❌ | ❌ | ❌ | ✅ |
+| | Pattern learning | ❌ | ❌ | ❌ | ❌ | ✅ |
+| | MCP protocol support | ❌ | ❌ | ❌ | ❌ | ✅ |
+| | Agent orchestration | ❌ | ❌ | ❌ | ✅ | ❌ |
+| | Pre-built agent library | ❌ | ❌ | ❌ | ✅ | ❌ |
+| **Governance** | Policy engine | ❌ | Partial | ✅ | ✅ | ✅ |
+| | Generation-time enforcement | ❌ | Partial | ❌ | Partial | ✅ |
+| | Conformance rewriting | ❌ | ❌ | ❌ | ❌ | ✅ |
+| | Approval workflows | ❌ | ❌ | ✅ | ✅ | ✅ |
+| | Agent/Model registry | ❌ | ❌ | ❌ | ✅ | ✅ |
+| | Risk classification | ❌ | ❌ | ✅ | ✅ | ✅ |
+| **Security** | Input/output filtering | ❌ | ✅ | ✅ | ✅ | ✅ |
+| | Secrets detection | ❌ | ✅ | ✅ | ✅ | ✅ |
+| | DLP | ❌ | ✅ | ✅ | ✅ | ✅ |
+| | Vulnerability scanning | ❌ | ❌ | ✅ | Partial | ✅ |
+| **Compliance** | Audit trails | ❌ | ✅ | ✅ | ✅ | ✅ |
+| | Compliance reports | ❌ | ❌ | ✅ | ✅ | ✅ |
+| | SOC2/HIPAA/PCI templates | ❌ | ❌ | ✅ | ✅ | ✅ |
+| **Infrastructure** | Cloud scaffolding | ❌ | ❌ | ❌ | ❌ | ✅ |
+| | Multi-cloud support | ❌ | ❌ | ❌ | ✅ | ✅ |
+| | Production deployment | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **Developer Experience** | IDE integration | ❌ | ❌ | ❌ | ❌ | ✅ |
+| | CLI tooling | ✅ | ❌ | ❌ | ❌ | ✅ |
+| | Browser extension | ❌ | ❌ | ❌ | ✅ | ❌ |
+| | Workflow integration | ✅ | ❌ | ❌ | ✅ | ✅ |
+| **Enterprise** | Team management | ❌ | ✅ | ✅ | ✅ | ✅ |
+| | SSO/SAML | ❌ | ✅ | ✅ | ✅ | ✅ |
+| | Self-hosted option | ✅ | ❌ | ✅ | ✅ | ✅ |
+| | API access | ❌ | ✅ | ✅ | ✅ | ✅ |
 
-### Scoring Summary
+### Scoring Summary (Direct Competitors Only)
 
-| Competitor | Dev Environment | AI Integration | Governance | Security | Infrastructure | Enterprise |
-|------------|-----------------|----------------|------------|----------|----------------|------------|
-| **Lando** | 5/5 | 0/5 | 0/5 | 1/5 | 0/5 | 1/5 |
-| **Nexos.ai** | 0/5 | 4/5 | 2/5 | 4/5 | 0/5 | 4/5 |
-| **Zenity.io** | 0/5 | 1/5 | 4/5 | 5/5 | 0/5 | 4/5 |
-| **unyform.ai** | 5/5 | 5/5 | 5/5 | 4/5 | 5/5 | 5/5 |
+| Competitor | Dev Environment | AI Integration | Governance | Security | Infrastructure | Enterprise | **Total** |
+|------------|-----------------|----------------|------------|----------|----------------|------------|-----------|
+| **Lando** | 5/5 | 0/5 | 0/5 | 1/5 | 0/5 | 1/5 | **7/30** |
+| **Nexos.ai** | 0/5 | 4/5 | 2/5 | 4/5 | 0/5 | 4/5 | **14/30** |
+| **Zenity.io** | 0/5 | 1/5 | 4/5 | 5/5 | 0/5 | 4/5 | **14/30** |
+| **unyform.ai** | 5/5 | 5/5 | 5/5 | 4/5 | 5/5 | 5/5 | **29/30** |
+
+**Airia (Horizontal Platform—Not Direct Competitor):**
+| Dev Environment | AI Integration | Governance | Security | Infrastructure | Enterprise |
+|-----------------|----------------|------------|----------|----------------|------------|
+| 0/5 (not their focus) | 4/5 | 4/5 | 4/5 | 1/5 | 5/5 |
+
+**Key Insight:** Direct competitors (Lando, Nexos.ai, Zenity.io) each solve a piece of the puzzle. Horizontal platforms like Airia solve different problems (business-wide AI). unyform.ai is the only vertical platform that solves the complete software development AI governance challenge.
 
 ---
 
@@ -412,15 +568,16 @@ flowchart TB
         LANDO["🔧 Lando<br/>Local Dev Env"]
         NEXOS["🌐 Nexos.ai<br/>AI Gateway + Obs"]
         ZENITY["🔒 Zenity.io<br/>AI Agent Security"]
+        AIRIA["🤖 Airia<br/>AI Agent Platform"]
     end
     
     subgraph gap ["THE GAP — What's Missing"]
-        G1["Organizational pattern learning"]
-        G2["Code conformance enforcement"]
-        G3["Generation-time policy enforcement"]
-        G4["Developer workflow integration"]
+        G1["AI CODING ASSISTANT governance"]
+        G2["Developer IDE integration"]
+        G3["Codebase pattern learning"]
+        G4["Code conformance enforcement"]
         G5["Infrastructure scaffolding"]
-        G6["Full lifecycle governance"]
+        G6["Full dev lifecycle governance"]
     end
     
     subgraph solution ["The Solution"]
@@ -430,6 +587,7 @@ flowchart TB
     LANDO --> gap
     NEXOS --> gap
     ZENITY --> gap
+    AIRIA --> gap
     gap --> UNY
     
     style competitors fill:#374151,color:#fff
@@ -438,9 +596,46 @@ flowchart TB
     style UNY fill:#6366f1,color:#fff
 ```
 
+### The Critical Distinction: Horizontal vs. Vertical
+
+```mermaid
+flowchart TB
+    subgraph horizontal ["HORIZONTAL PLATFORMS (Airia, etc.)"]
+        direction LR
+        H1["Wide scope"]
+        H2["Many use cases"]
+        H3["Shallow in each domain"]
+        H4["'AI for everything'"]
+    end
+    
+    subgraph vertical ["VERTICAL PLATFORMS (unyform.ai)"]
+        direction LR
+        V1["Narrow scope"]
+        V2["One use case"]
+        V3["Deep expertise"]
+        V4["'Best-in-class for X'"]
+    end
+    
+    style horizontal fill:#8b5cf6,color:#fff
+    style vertical fill:#22c55e,color:#fff
+```
+
+**This is the key insight:** Horizontal platforms (Airia) serve everyone—HR, sales, ops, support, and development. Vertical platforms (unyform.ai) serve one audience exceptionally well. For engineering teams building software, depth beats breadth.
+
 ### Positioning Statement
 
-> **unyform.ai is the Enterprise AI Trust and Consistency Layer that combines the developer experience of Lando, the AI governance of Nexos.ai, and the security rigor of Zenity.io—while adding what none of them have: organizational pattern learning, generation-time conformance enforcement, and full-lifecycle infrastructure scaffolding.**
+> **unyform.ai is the purpose-built AI governance platform for software development. We don't try to power your entire business—we focus exclusively on helping engineering teams ship secure, compliant software faster. One problem, solved completely.**
+
+### Why Specialization Wins
+
+| Horizontal (Airia, etc.) | Vertical (unyform.ai) |
+|-------------------------|----------------------|
+| Serves 100+ use cases | Serves 1 use case deeply |
+| Generic governance patterns | Code-specific governance |
+| Browser-based integration | Native IDE integration |
+| Agent-centric (tasks) | Developer-centric (code) |
+| Optimizes for breadth | Optimizes for depth |
+| "Good enough" for dev teams | Purpose-built for dev teams |
 
 ### Differentiation Pillars
 
@@ -463,6 +658,7 @@ flowchart TB
 | **Agencies/Small Teams** | Lando | "Lando for local dev + AI governance + production" |
 | **Enterprise AI Teams** | Nexos.ai | "AI gateway that actually understands your code" |
 | **Regulated Industries** | Zenity.io | "Security + developer velocity, not security OR velocity" |
+| **Enterprise AI Governance** | Airia | "Airia for agents, unyform.ai for developers—the coding assistant governance layer" |
 | **Platform Engineering** | Backstage/Port.io | "Service catalog that generates, not just catalogs" |
 
 ### Battle Cards
@@ -491,6 +687,16 @@ flowchart TB
 | "They're strong in public sector" | "We serve all regulated industries with self-hosted options" |
 | "They focus on AI agents" | "We cover AI agents AND AI coding assistants—the bigger use case" |
 
+#### vs. Airia (Note: Not a direct competitor—different market)
+
+| Objection | Response |
+|-----------|----------|
+| "We're evaluating Airia" | "Great—use Airia for HR, sales, and ops AI. Use unyform.ai for engineering. They're complementary, not competing." |
+| "Airia has $100M in funding" | "They're building an AI platform for the entire company. We're building the best AI platform for software development. Different goals." |
+| "They have 2,500+ agents" | "Sales bots, HR agents, support chatbots—awesome. We have recipes for infrastructure patterns and code generation. Different outputs." |
+| "Why not just use Airia for dev too?" | "Would you use a general-purpose tool or a specialized one? We go deep: IDE integration, codebase learning, conformance rewriting. Airia goes wide." |
+| "Single point of integration" | "For the whole business, yes. For engineering specifically? We're the single integration that understands code, repos, and developer workflows." |
+
 ---
 
 ## Roadmap Implications
@@ -499,13 +705,34 @@ flowchart TB
 
 | Priority | Feature | Competitive Gap Addressed |
 |----------|---------|---------------------------|
-| **P0** | LLM Gateway with policy enforcement | Match Nexos.ai security + add conformance |
-| **P0** | Pattern learning from repos | Unique differentiator |
-| **P1** | Conformance rewriting | Unique differentiator |
+| **P0** | LLM Gateway with policy enforcement | Match Nexos.ai/Airia security + add conformance |
+| **P0** | Pattern learning from repos | Unique differentiator vs ALL competitors |
+| **P0** | IDE integration (VS Code) | Key differentiator vs Airia (they only have browser) |
+| **P1** | Conformance rewriting | Unique differentiator vs ALL |
 | **P1** | BYOS adapter (Lando support) | Capture Lando users |
-| **P2** | Security scanning integration | Match Zenity.io |
-| **P2** | Compliance reporting | Match Zenity.io |
+| **P1** | Agent/Model registry | Match Airia governance maturity |
+| **P2** | Security scanning integration | Match Zenity.io/Airia |
+| **P2** | Compliance reporting | Match Zenity.io/Airia |
 | **P3** | Public sector certifications | Compete with Zenity.io |
+
+### Lessons From Horizontal Platforms (Airia, etc.)
+
+| What They Do Well | How We Apply It (Vertically) |
+|-------------------|------------------------------|
+| Pre-built agent library (2,500+) | Build deep recipe library for **infrastructure patterns** (not generic agents) |
+| Browser extension for embedded workflows | Ensure **IDE extension** is equally seamless (where devs actually work) |
+| "Single integration" messaging | Position as single integration **for engineering** (not for everything) |
+| Governance as a dedicated pillar | Position governance for **code generation** specifically |
+| Enterprise-wide deployment story | Engineering-specific deployment story (dev → prod lifecycle) |
+
+### Why Vertical Focus Is Our Moat
+
+Horizontal platforms like Airia must optimize for breadth—serving 100+ use cases means no single domain gets deep attention. Our vertical focus means:
+
+1. **Every feature is dev-specific**: IDE integration, codebase learning, conformance rewriting
+2. **Every policy is code-aware**: Not generic filtering, but code pattern enforcement
+3. **Every integration is dev-native**: VS Code, JetBrains, CLI, CI/CD—not browser-based
+4. **Faster iteration**: We only solve development pain points, so we solve them faster
 
 ### Competitive Moats to Build
 
@@ -542,15 +769,48 @@ flowchart TB
 | **Proactive** | Generation-time enforcement, not just monitoring |
 | **Developer Velocity** | Security that helps teams build faster |
 
+### Positioning vs. Horizontal Platforms (Airia, etc.)
+
+| Strategy | Tactic |
+|----------|--------|
+| **Complementary, Not Competitive** | "Use Airia for business AI, use unyform.ai for engineering AI" |
+| **Specialization Wins** | "Generalists serve everyone adequately; we serve developers exceptionally" |
+| **Depth Over Breadth** | IDE integration, codebase learning, conformance rewriting—features horizontal platforms can't prioritize |
+| **Developer Credibility** | Built by developers, for developers—not a business tool adapted for engineering |
+| **Faster Time to Value** | Purpose-built means no configuration overhead for dev use cases |
+
 ### Our Unique Position
 
-**unyform.ai is the only platform that:**
+**unyform.ai is the purpose-built platform for AI-assisted software development:**
 
-1. Learns your organization's patterns and conventions
-2. Enforces policies at AI generation time (not after)
-3. Auto-rewrites output to match your standards
-4. Covers the full lifecycle from local dev to production
-5. Integrates into developer workflows, not on top of them
+1. **Singular focus**: Ship secure, compliant software faster—that's our only job
+2. **Codebase intelligence**: Learn your patterns, inject your context, match your standards
+3. **Generation-time governance**: Enforce policies BEFORE code is written, not after
+4. **Conformance rewriting**: Auto-transform AI output to match YOUR conventions
+5. **Full developer lifecycle**: Local dev → AI context → infrastructure → production
+6. **Native developer experience**: IDE, CLI, CI/CD—not browser-based generics
+7. **Infrastructure included**: Recipes, Docker, cloud deployment—code to production
+
+### The "Rippling for AI-Assisted Development" Position
+
+| What Rippling Did | What unyform.ai Does |
+|-------------------|---------------------|
+| Unified HR tools (payroll, benefits, IT) | Unifies AI dev tools (assistants, context, governance) |
+| One integration, all HR data flows | One integration, all AI code governed |
+| Admin sets up, employees just work | Admin sets up, developers just code |
+| Compliance built into workflow | Security + conformance built into coding workflow |
+
+### Why Vertical Beats Horizontal for Engineering
+
+**Horizontal platforms (Airia, etc.):** "AI for everything in your business"
+- Pros: Wide applicability, one vendor for many use cases
+- Cons: Jack of all trades, master of none for specific domains
+
+**Vertical platform (unyform.ai):** "AI for software development, done right"
+- Pros: Deep expertise, purpose-built features, faster time to value
+- Cons: Only solves one problem (but solves it completely)
+
+**For engineering leaders:** Would you rather have a platform that's "good enough" for development alongside 99 other use cases, or one that's purpose-built to help your team ship secure software faster?
 
 ---
 
@@ -577,11 +837,24 @@ flowchart TB
 - **Pricing**: Enterprise (custom)
 - **Key Markets**: Public sector, regulated industries
 
+### Airia (Not a Direct Competitor)
+
+- **Website**: https://airia.com
+- **Funding**: $100M Series B (September 2025)
+- **Pricing**: Enterprise (custom)
+- **Positioning**: Horizontal AI platform for the entire business
+- **Key Features**: Agent orchestration, governance, 2,500+ pre-built agents for HR/sales/ops/support
+- **Key Markets**: Enterprise-wide AI deployment across all functions
+- **Key Strength**: Comprehensive platform for any AI use case
+- **Relationship to unyform.ai**: Complementary—they go wide (all business functions), we go deep (engineering only)
+- **Co-existence**: Enterprises may use Airia for business AI + unyform.ai for development
+
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** January 2025  
-**Next Review:** Q2 2025
+**Document Version:** 2.0  
+**Last Updated:** January 2026  
+**Next Review:** Q2 2026  
+**Competitors Analyzed:** Lando, Nexos.ai, Zenity.io, Airia
 
 ---
 
