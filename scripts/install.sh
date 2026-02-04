@@ -24,6 +24,7 @@ PREFIX="${PREFIX:-/usr/local}"
 INSTALL_DIR=""
 SKIP_BUILD=false
 SKIP_INIT=false
+FORCE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -44,6 +45,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_INIT=true
             shift
             ;;
+        --force|-f)
+            FORCE=true
+            shift
+            ;;
         --help|-h)
             echo "MechCrate Install Script"
             echo ""
@@ -54,6 +59,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --local         Install to ~/.local/bin"
             echo "  --skip-build    Skip cargo build (use existing binaries)"
             echo "  --skip-init     Skip mx init (don't copy templates)"
+            echo "  --force, -f     Override existing installation without prompting"
             echo "  --help          Show this help"
             echo ""
             echo "Examples:"
@@ -86,6 +92,68 @@ echo -e "${NC}"
 echo -e "  ${BOLD}Install Directory:${NC} ${INSTALL_DIR}"
 echo -e "  ${BOLD}MechCrate Root:${NC} ${MECH_CRATE_ROOT}"
 echo ""
+
+# Check for existing mx installation
+detect_existing_mx() {
+    local mx_path="$1"
+    
+    if [[ ! -f "$mx_path" ]]; then
+        echo "none"
+        return
+    fi
+    
+    # Check if it's a shell script (bash version) or binary (Rust version)
+    local file_type
+    file_type=$(file "$mx_path" 2>/dev/null || echo "unknown")
+    
+    if echo "$file_type" | grep -qiE "shell script|bash|text"; then
+        echo "bash"
+    elif echo "$file_type" | grep -qiE "mach-o|elf|executable"; then
+        # Check if it's our Rust binary by trying --version
+        if "$mx_path" --version 2>/dev/null | grep -q "^mx [0-9]"; then
+            echo "rust"
+        else
+            echo "binary"
+        fi
+    else
+        echo "unknown"
+    fi
+}
+
+EXISTING_MX="$INSTALL_DIR/mx"
+EXISTING_TYPE=$(detect_existing_mx "$EXISTING_MX")
+
+if [[ "$EXISTING_TYPE" != "none" && "$FORCE" == "false" ]]; then
+    echo -e "${YELLOW}⚠${NC}  Existing mx installation detected!"
+    echo ""
+    
+    case "$EXISTING_TYPE" in
+        bash)
+            echo -e "  ${BOLD}Type:${NC} Bash script (legacy version)"
+            echo -e "  ${BOLD}Path:${NC} $EXISTING_MX"
+            ;;
+        rust)
+            EXISTING_VERSION=$("$EXISTING_MX" --version 2>/dev/null || echo "unknown")
+            echo -e "  ${BOLD}Type:${NC} Rust binary (current version)"
+            echo -e "  ${BOLD}Version:${NC} $EXISTING_VERSION"
+            echo -e "  ${BOLD}Path:${NC} $EXISTING_MX"
+            ;;
+        *)
+            echo -e "  ${BOLD}Type:${NC} Unknown binary"
+            echo -e "  ${BOLD}Path:${NC} $EXISTING_MX"
+            ;;
+    esac
+    
+    echo ""
+    read -r -p "Replace existing installation? [y/N]: " response
+    if [[ ! "$response" =~ ^[Yy] ]]; then
+        echo ""
+        echo -e "${YELLOW}Installation cancelled.${NC}"
+        echo "Use --force to skip this prompt."
+        exit 0
+    fi
+    echo ""
+fi
 
 # Check for cargo
 if ! command -v cargo &>/dev/null; then
