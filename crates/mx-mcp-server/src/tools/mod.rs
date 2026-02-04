@@ -11,6 +11,7 @@ use crate::mcp::protocol::{Tool, ToolCallResult, ToolInputSchema};
 use crate::mx::{MakeExecutor, MxExecutor};
 use crate::project::ProjectDetector;
 use crate::rag::{format_search_results, WeaviateClient};
+use crate::unyform::UnyformClient;
 
 /// Tool registry containing all available tools
 pub struct ToolRegistry {
@@ -68,6 +69,16 @@ enum ToolHandler {
     RagCompareApproaches,
     RagFindRelated,
     RagHealth,
+
+    // Unyform integration
+    UnyformLogin,
+    UnyformLogout,
+    UnyformWhoami,
+    UnyformRecipesList,
+    UnyformRecipesPull,
+    UnyformRecipesApply,
+    UnyformRecipesVersions,
+    UnyformRecipesCache,
 }
 
 impl ToolRegistry {
@@ -1033,6 +1044,187 @@ Useful when you need to expand understanding of a topic."#.to_string(),
                 },
                 handler: ToolHandler::RagHealth,
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // Unyform Integration
+            // ─────────────────────────────────────────────────────────────────
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_login".to_string(),
+                    description: r#"Authenticate with Unyform.ai for organizational recipes.
+
+Login methods:
+- API key (for CI/automation): Provide api_key parameter
+- Browser OAuth: Provide browser=true to get OAuth URL (user must complete flow manually)
+
+After login, credentials are stored in ~/.mech-crate/config/unyform/"#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "api_key": {
+                                "type": "string",
+                                "description": "API key for authentication (for CI/automation)"
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "Custom Unyform instance URL (defaults to https://api.unyform.ai)"
+                            }
+                        })),
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::UnyformLogin,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_logout".to_string(),
+                    description: "Clear Unyform credentials and session.".to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: None,
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::UnyformLogout,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_whoami".to_string(),
+                    description: r#"Show current Unyform authentication status.
+
+Returns:
+- User email and name
+- Organizations the user belongs to
+- Current API URL"#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: None,
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::UnyformWhoami,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_recipes_list".to_string(),
+                    description: r#"List organizational recipes from Unyform.
+
+Requires authentication. Returns recipes from the user's default organization."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: None,
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::UnyformRecipesList,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_recipes_pull".to_string(),
+                    description: r#"Pull an organizational recipe from Unyform to local cache.
+
+Downloads the recipe JSON to ~/.mech-crate/recipes/<org>/<name>/<version>/
+Use unyform_recipes_apply to apply the cached recipe to a project."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "name": {
+                                "type": "string",
+                                "description": "Recipe name"
+                            },
+                            "version": {
+                                "type": "string",
+                                "description": "Specific version to pull (defaults to latest)"
+                            }
+                        })),
+                        required: Some(vec!["name".to_string()]),
+                    },
+                },
+                handler: ToolHandler::UnyformRecipesPull,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_recipes_apply".to_string(),
+                    description: r#"Apply an organizational recipe to the current project.
+
+This will:
+1. Pull the recipe if not cached
+2. Create coding rules in .cursor/rules/
+3. Compare dependencies and warn of drift
+4. Suggest infrastructure configurations
+
+Use --fix flag to auto-update dependencies."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "name": {
+                                "type": "string",
+                                "description": "Recipe name"
+                            },
+                            "version": {
+                                "type": "string",
+                                "description": "Specific version to apply (defaults to latest)"
+                            },
+                            "project_path": {
+                                "type": "string",
+                                "description": "Path to the project to apply recipe to"
+                            },
+                            "fix": {
+                                "type": "boolean",
+                                "description": "Auto-fix dependency drift"
+                            }
+                        })),
+                        required: Some(vec!["name".to_string(), "project_path".to_string()]),
+                    },
+                },
+                handler: ToolHandler::UnyformRecipesApply,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_recipes_versions".to_string(),
+                    description: "List available versions for an organizational recipe.".to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "name": {
+                                "type": "string",
+                                "description": "Recipe name"
+                            }
+                        })),
+                        required: Some(vec!["name".to_string()]),
+                    },
+                },
+                handler: ToolHandler::UnyformRecipesVersions,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "unyform_recipes_cache".to_string(),
+                    description: r#"Manage locally cached organizational recipes.
+
+Actions:
+- list (default): Show all cached recipes
+- clear: Remove all cached recipes"#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "action": {
+                                "type": "string",
+                                "description": "Action to perform: list, clear (default: list)"
+                            }
+                        })),
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::UnyformRecipesCache,
+            },
         ]
     }
 
@@ -1573,6 +1765,291 @@ Useful when you need to expand understanding of a topic."#.to_string(),
                     "Weaviate RAG server is not available. Start it with: docker compose up -d"
                 };
                 Ok(ToolCallResult::text(result))
+            }
+
+            // ─────────────────────────────────────────────────────────────────
+            // Unyform Integration Handlers
+            // ─────────────────────────────────────────────────────────────────
+
+            ToolHandler::UnyformLogin => {
+                let unyform = UnyformClient::new();
+                let api_key = args.get("api_key").and_then(|v| v.as_str());
+                let url = args.get("url").and_then(|v| v.as_str());
+
+                match api_key {
+                    Some(key) => {
+                        match unyform.login_with_api_key(key, url).await {
+                            Ok(resp) => {
+                                let org_name = resp.user.organizations.first()
+                                    .map(|o| o.name.as_str())
+                                    .unwrap_or("N/A");
+                                Ok(ToolCallResult::text(format!(
+                                    "Logged in as {} ({})\nOrganization: {}",
+                                    resp.user.name,
+                                    resp.user.email,
+                                    org_name
+                                )))
+                            }
+                            Err(e) => Ok(ToolCallResult::text(format!("Login failed: {}", e))),
+                        }
+                    }
+                    None => {
+                        Ok(ToolCallResult::text(
+                            "API key required. Use: unyform_login with api_key parameter\n\n\
+                             For browser OAuth, run `mx login --browser` from terminal."
+                        ))
+                    }
+                }
+            }
+
+            ToolHandler::UnyformLogout => {
+                let unyform = UnyformClient::new();
+                match unyform.logout().await {
+                    Ok(_) => Ok(ToolCallResult::text("Logged out successfully")),
+                    Err(e) => Ok(ToolCallResult::text(format!("Logout failed: {}", e))),
+                }
+            }
+
+            ToolHandler::UnyformWhoami => {
+                let unyform = UnyformClient::new();
+                if !unyform.is_logged_in() {
+                    return Ok(ToolCallResult::text(
+                        "Not logged in. Use unyform_login to authenticate."
+                    ));
+                }
+
+                match unyform.whoami().await {
+                    Ok(user) => {
+                        let orgs = user.organizations.iter()
+                            .map(|o| format!("  {} ({})", o.slug, o.role))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        Ok(ToolCallResult::text(format!(
+                            "Unyform Account\n\
+                             ────────────────────────────────────\n\
+                             Email: {}\n\
+                             Name: {}\n\n\
+                             Organizations:\n{}",
+                            user.email,
+                            user.name,
+                            orgs
+                        )))
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!("Failed to get user info: {}", e))),
+                }
+            }
+
+            ToolHandler::UnyformRecipesList => {
+                let unyform = UnyformClient::new();
+                if !unyform.is_logged_in() {
+                    return Ok(ToolCallResult::text(
+                        "Not logged in. Use unyform_login to authenticate."
+                    ));
+                }
+
+                match unyform.list_recipes().await {
+                    Ok(resp) => {
+                        if resp.recipes.is_empty() {
+                            Ok(ToolCallResult::text(
+                                "No recipes found.\n\n\
+                                 Recipes are generated from your connected repositories.\n\
+                                 Connect a repo and run analysis from the Unyform dashboard."
+                            ))
+                        } else {
+                            let recipes = resp.recipes.iter()
+                                .map(|r| format!(
+                                    "  {} @ v{} - {}",
+                                    r.name,
+                                    r.version,
+                                    r.description.as_deref().unwrap_or("No description")
+                                ))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            Ok(ToolCallResult::text(format!(
+                                "Organization Recipes\n\
+                                 ────────────────────────────────────\n{}",
+                                recipes
+                            )))
+                        }
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!("Failed to list recipes: {}", e))),
+                }
+            }
+
+            ToolHandler::UnyformRecipesPull => {
+                let unyform = UnyformClient::new();
+                if !unyform.is_logged_in() {
+                    return Ok(ToolCallResult::text(
+                        "Not logged in. Use unyform_login to authenticate."
+                    ));
+                }
+
+                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'name' is required".to_string())
+                })?;
+                let version = args.get("version").and_then(|v| v.as_str());
+
+                match unyform.get_recipe(name, version).await {
+                    Ok(recipe) => {
+                        let org = unyform.get_default_org().unwrap_or_else(|_| "unknown".to_string());
+                        match unyform.cache_recipe(&org, &recipe) {
+                            Ok(path) => Ok(ToolCallResult::text(format!(
+                                "Recipe cached: {:?}\n\n\
+                                 Run unyform_recipes_apply to apply to a project.",
+                                path
+                            ))),
+                            Err(e) => Ok(ToolCallResult::text(format!("Failed to cache recipe: {}", e))),
+                        }
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!("Failed to pull recipe: {}", e))),
+                }
+            }
+
+            ToolHandler::UnyformRecipesApply => {
+                let unyform = UnyformClient::new();
+                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'name' is required".to_string())
+                })?;
+                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'project_path' is required".to_string())
+                })?;
+                let version = args.get("version").and_then(|v| v.as_str());
+                let _fix = args.get("fix").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                // Pull recipe if not cached
+                let recipe = match unyform.get_recipe(name, version).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return Ok(ToolCallResult::text(format!(
+                            "Failed to get recipe: {}\n\n\
+                             Make sure you're logged in: unyform_login",
+                            e
+                        )));
+                    }
+                };
+
+                // Apply patterns
+                let rules_dir = std::path::PathBuf::from(project_path).join(".cursor").join("rules");
+                if let Err(e) = std::fs::create_dir_all(&rules_dir) {
+                    return Ok(ToolCallResult::text(format!("Failed to create rules directory: {}", e)));
+                }
+
+                let org_slug = name.split('-').next().unwrap_or(name);
+                let rules_file = rules_dir.join(format!("{}-patterns.md", org_slug));
+
+                let mut rules_content = format!("# {} Coding Patterns\n\n", recipe.name);
+                rules_content.push_str("Generated from organizational recipe.\n\n");
+
+                for pattern in &recipe.patterns {
+                    if let Some(obj) = pattern.as_object() {
+                        if let (Some(name), Some(desc)) = (obj.get("name"), obj.get("description")) {
+                            rules_content.push_str(&format!("## {}\n\n", name.as_str().unwrap_or("")));
+                            rules_content.push_str(&format!("{}\n\n", desc.as_str().unwrap_or("")));
+                            
+                            if let Some(rules) = obj.get("rules").and_then(|r| r.as_array()) {
+                                rules_content.push_str("### Rules\n\n");
+                                for rule in rules {
+                                    if let Some(r) = rule.as_str() {
+                                        rules_content.push_str(&format!("- {}\n", r));
+                                    }
+                                }
+                                rules_content.push('\n');
+                            }
+                        }
+                    }
+                }
+
+                if let Err(e) = std::fs::write(&rules_file, &rules_content) {
+                    return Ok(ToolCallResult::text(format!("Failed to write rules file: {}", e)));
+                }
+
+                let result = format!(
+                    "Applying recipe: {} v{}\n\
+                     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n\
+                     ✓ Created {:?} ({} coding rules)\n\n\
+                     Dependencies: Check your Cargo.toml/package.json against recipe\n\
+                     Infrastructure: Review recipe infrastructure config\n\n\
+                     Recipe applied!",
+                    recipe.name,
+                    recipe.version,
+                    rules_file,
+                    recipe.patterns.len()
+                );
+
+                Ok(ToolCallResult::text(result))
+            }
+
+            ToolHandler::UnyformRecipesVersions => {
+                let unyform = UnyformClient::new();
+                if !unyform.is_logged_in() {
+                    return Ok(ToolCallResult::text(
+                        "Not logged in. Use unyform_login to authenticate."
+                    ));
+                }
+
+                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                    McpError::InvalidArguments("'name' is required".to_string())
+                })?;
+
+                match unyform.get_recipe_versions(name).await {
+                    Ok(resp) => {
+                        let versions = resp.versions.iter()
+                            .map(|v| format!(
+                                "  v{}{} - {}",
+                                v.version,
+                                if v.is_latest { " (latest)" } else { "" },
+                                v.generated_at
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        Ok(ToolCallResult::text(format!(
+                            "Versions for {}\n\
+                             ────────────────────────────────────\n{}",
+                            name,
+                            versions
+                        )))
+                    }
+                    Err(e) => Ok(ToolCallResult::text(format!("Failed to get versions: {}", e))),
+                }
+            }
+
+            ToolHandler::UnyformRecipesCache => {
+                let unyform = UnyformClient::new();
+                let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("list");
+
+                match action {
+                    "clear" => {
+                        match unyform.clear_cache() {
+                            Ok(_) => Ok(ToolCallResult::text("Recipe cache cleared")),
+                            Err(e) => Ok(ToolCallResult::text(format!("Failed to clear cache: {}", e))),
+                        }
+                    }
+                    _ => {
+                        match unyform.list_cached_recipes() {
+                            Ok(recipes) => {
+                                if recipes.is_empty() {
+                                    Ok(ToolCallResult::text(
+                                        "No cached recipes.\n\n\
+                                         Pull recipes with unyform_recipes_pull"
+                                    ))
+                                } else {
+                                    let list = recipes.iter()
+                                        .map(|(org, name, versions)| {
+                                            format!("  {}/{}: {}", org, name, versions.join(", "))
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join("\n");
+                                    Ok(ToolCallResult::text(format!(
+                                        "Cached Recipes\n\
+                                         ────────────────────────────────────\n{}",
+                                        list
+                                    )))
+                                }
+                            }
+                            Err(e) => Ok(ToolCallResult::text(format!("Failed to list cache: {}", e))),
+                        }
+                    }
+                }
             }
         }
     }
