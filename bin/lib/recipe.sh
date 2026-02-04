@@ -192,6 +192,37 @@ get_recipe_description() {
 # Template Processing
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Resolve template source path, supporting namespace references (e.g., common://path/to/file)
+_resolve_template_source() {
+    local from_path="$1"
+    local current_recipe_dir="$2"
+    
+    # Check for namespace syntax: namespace://path
+    if [[ "$from_path" =~ ^([a-zA-Z0-9_-]+)://(.+)$ ]]; then
+        local namespace="${BASH_REMATCH[1]}"
+        local rel_path="${BASH_REMATCH[2]}"
+        local resolved="$RECIPES_DIR/$namespace/$rel_path"
+        
+        # Validate namespace exists
+        if [[ ! -d "$RECIPES_DIR/$namespace" ]]; then
+            error "Namespace '$namespace' not found. No folder at: $RECIPES_DIR/$namespace"
+        fi
+        
+        # Validate file/directory exists
+        if [[ ! -e "$resolved" ]]; then
+            error "Namespaced path not found: $from_path
+  Resolved to: $resolved
+  Available in '$namespace':
+$(find "$RECIPES_DIR/$namespace" -type f | sed 's|'"$RECIPES_DIR/$namespace/"'|    |')"
+        fi
+        
+        echo "$resolved"
+    else
+        # Standard path: relative to current recipe
+        echo "$current_recipe_dir/$from_path"
+    fi
+}
+
 _process_template_file() {
     local src="$1"
     local dest="$2"
@@ -433,7 +464,9 @@ install_recipe() {
         while IFS='|' read -r from_path to_path; do
             [[ -z "$from_path" ]] && continue
             
-            local src="$recipe_dir/$from_path"
+            # Resolve source path (supports namespace references like common://path)
+            local src
+            src=$(_resolve_template_source "$from_path" "$recipe_dir")
             local dest=$(_interpolate "$to_path" "${placeholder_args[@]}")
             
             if [[ -d "$src" ]]; then
@@ -611,6 +644,427 @@ show_all_recipes() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Remote Recipe Management (Unyform Integration)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Parse recipe name and version from NAME[@VERSION] format
+_parse_recipe_ref() {
+    local ref="$1"
+    local name version
+    
+    if [[ "$ref" == *@* ]]; then
+        name="${ref%%@*}"
+        version="${ref#*@}"
+    else
+        name="$ref"
+        version=""
+    fi
+    
+    echo "$name|$version"
+}
+
+# List remote recipes from Unyform
+recipes_list_remote() {
+    if ! is_logged_in; then
+        error "Not logged in. Run 'mx login' first."
+    fi
+    
+    local url=$(get_unyform_url)
+    local auth_header=$(get_auth_header)
+    
+    # Get default org from credentials
+    local org_slug=""
+    if [[ -f "$UNYFORM_SESSION_FILE" ]]; then
+        org_slug=$(jq -r '.user.organizations[0].slug // empty' "$UNYFORM_SESSION_FILE" 2>/dev/null)
+    fi
+    
+    if [[ -z "$org_slug" ]]; then
+        error "No organization found. Please ensure your account has an organization."
+    fi
+    
+    info "Fetching recipes from $org_slug..."
+    
+    local response
+    response=$(curl -s -X GET "${url}/v1/orgs/${org_slug}/recipes" \
+        -H "$auth_header" 2>/dev/null)
+    
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+        local error_msg=$(echo "$response" | jq -r '.error.message')
+        error "Failed to list recipes: $error_msg"
+    fi
+    
+    echo ""
+    echo -e "${BOLD}Organization Recipes (${org_slug})${NC}"
+    echo "────────────────────────────────────"
+    
+    local recipe_count=$(echo "$response" | jq -r '.recipes | length')
+    
+    if [[ "$recipe_count" == "0" ]]; then
+        echo "  No recipes found."
+        echo ""
+        info "Recipes are generated from your connected repositories."
+        info "Connect a repo and run analysis from the Unyform dashboard."
+    else
+        echo "$response" | jq -r '.recipes[] | "  \(.name) @ v\(.version) - \(.description // "No description")"'
+    fi
+    echo ""
+}
+
+# Pull a recipe from Unyform to local cache
+recipes_pull() {
+    local ref="$1"
+    
+    if [[ -z "$ref" ]]; then
+        error "Recipe name required. Usage: mx recipes pull NAME[@VERSION]"
+    fi
+    
+    if ! is_logged_in; then
+        error "Not logged in. Run 'mx login' first."
+    fi
+    
+    local parsed=$(_parse_recipe_ref "$ref")
+    local recipe_name="${parsed%%|*}"
+    local version="${parsed#*|}"
+    
+    local url=$(get_unyform_url)
+    local auth_header=$(get_auth_header)
+    
+    # Get default org
+    local org_slug=""
+    if [[ -f "$UNYFORM_SESSION_FILE" ]]; then
+        org_slug=$(jq -r '.user.organizations[0].slug // empty' "$UNYFORM_SESSION_FILE" 2>/dev/null)
+    fi
+    
+    if [[ -z "$org_slug" ]]; then
+        error "No organization found."
+    fi
+    
+    # Build endpoint
+    local endpoint="${url}/v1/orgs/${org_slug}/recipes/${recipe_name}"
+    if [[ -n "$version" ]]; then
+        endpoint="${endpoint}/versions/${version}"
+    else
+        # Get latest version first
+        local versions_response
+        versions_response=$(curl -s -X GET "${endpoint}/versions" \
+            -H "$auth_header" 2>/dev/null)
+        
+        if echo "$versions_response" | jq -e '.error' >/dev/null 2>&1; then
+            local error_msg=$(echo "$versions_response" | jq -r '.error.message')
+            error "Recipe not found: $error_msg"
+        fi
+        
+        version=$(echo "$versions_response" | jq -r '.versions[] | select(.is_latest) | .version')
+        if [[ -z "$version" ]]; then
+            version=$(echo "$versions_response" | jq -r '.versions[0].version')
+        fi
+        endpoint="${endpoint}/versions/${version}"
+    fi
+    
+    info "Pulling $recipe_name@$version from $org_slug..."
+    
+    local response
+    response=$(curl -s -X GET "$endpoint" \
+        -H "$auth_header" 2>/dev/null)
+    
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+        local error_msg=$(echo "$response" | jq -r '.error.message')
+        error "Failed to pull recipe: $error_msg"
+    fi
+    
+    # Create cache directory
+    local cache_dir="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/${version}"
+    mkdir -p "$cache_dir"
+    
+    # Save recipe
+    echo "$response" > "${cache_dir}/recipe.json"
+    
+    # Save manifest
+    cat > "${cache_dir}/manifest.json" << EOF
+{
+    "pulled_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+    "sha256": "$(echo "$response" | shasum -a 256 | cut -d' ' -f1)",
+    "org": "$org_slug",
+    "name": "$recipe_name",
+    "version": "$version"
+}
+EOF
+    
+    # Update latest symlink
+    local latest_link="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/latest"
+    rm -f "$latest_link"
+    ln -s "$version" "$latest_link"
+    
+    success "Recipe cached: $cache_dir"
+    info "Run 'mx recipes apply $recipe_name' to apply to current project"
+}
+
+# List available versions for a recipe
+recipes_versions() {
+    local recipe_name="$1"
+    
+    if [[ -z "$recipe_name" ]]; then
+        error "Recipe name required. Usage: mx recipes versions NAME"
+    fi
+    
+    if ! is_logged_in; then
+        error "Not logged in. Run 'mx login' first."
+    fi
+    
+    local url=$(get_unyform_url)
+    local auth_header=$(get_auth_header)
+    
+    local org_slug=""
+    if [[ -f "$UNYFORM_SESSION_FILE" ]]; then
+        org_slug=$(jq -r '.user.organizations[0].slug // empty' "$UNYFORM_SESSION_FILE" 2>/dev/null)
+    fi
+    
+    if [[ -z "$org_slug" ]]; then
+        error "No organization found."
+    fi
+    
+    local response
+    response=$(curl -s -X GET "${url}/v1/orgs/${org_slug}/recipes/${recipe_name}/versions" \
+        -H "$auth_header" 2>/dev/null)
+    
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+        local error_msg=$(echo "$response" | jq -r '.error.message')
+        error "Failed to get versions: $error_msg"
+    fi
+    
+    echo ""
+    echo -e "${BOLD}Versions for ${recipe_name}${NC}"
+    echo "────────────────────────────────────"
+    echo "$response" | jq -r '.versions[] | "  v\(.version) \(if .is_latest then "(latest)" else "" end) - \(.generated_at)"'
+    echo ""
+}
+
+# Show cached recipes
+recipes_cache() {
+    local subcommand="${1:-list}"
+    
+    case "$subcommand" in
+        list|"")
+            echo ""
+            echo -e "${BOLD}Cached Recipes${NC}"
+            echo "────────────────────────────────────"
+            
+            if [[ ! -d "$UNYFORM_RECIPES_DIR" ]] || [[ -z "$(ls -A "$UNYFORM_RECIPES_DIR" 2>/dev/null)" ]]; then
+                echo "  No cached recipes."
+                echo ""
+                info "Pull recipes with 'mx recipes pull NAME'"
+            else
+                for org_dir in "$UNYFORM_RECIPES_DIR"/*/; do
+                    [[ -d "$org_dir" ]] || continue
+                    local org=$(basename "$org_dir")
+                    
+                    for recipe_dir in "$org_dir"*/; do
+                        [[ -d "$recipe_dir" ]] || continue
+                        local recipe=$(basename "$recipe_dir")
+                        
+                        # List versions
+                        local versions=""
+                        for ver_dir in "$recipe_dir"*/; do
+                            [[ -d "$ver_dir" ]] || continue
+                            local ver=$(basename "$ver_dir")
+                            [[ "$ver" == "latest" ]] && continue
+                            [[ -n "$versions" ]] && versions+=", "
+                            versions+="$ver"
+                        done
+                        
+                        echo "  ${org}/${recipe}: $versions"
+                    done
+                done
+            fi
+            echo ""
+            ;;
+        clear)
+            if [[ -d "$UNYFORM_RECIPES_DIR" ]]; then
+                rm -rf "$UNYFORM_RECIPES_DIR"/*
+                success "Recipe cache cleared"
+            else
+                info "Cache already empty"
+            fi
+            ;;
+        *)
+            error "Unknown cache command: $subcommand"
+            ;;
+    esac
+}
+
+# Apply a recipe to the current project
+recipes_apply() {
+    local ref="$1"
+    shift 2>/dev/null || true
+    local extra_args=("$@")
+    
+    if [[ -z "$ref" ]]; then
+        error "Recipe name required. Usage: mx recipes apply NAME[@VERSION]"
+    fi
+    
+    local parsed=$(_parse_recipe_ref "$ref")
+    local recipe_name="${parsed%%|*}"
+    local version="${parsed#*|}"
+    
+    # Get org from credentials
+    local org_slug=""
+    if [[ -f "$UNYFORM_SESSION_FILE" ]]; then
+        org_slug=$(jq -r '.user.organizations[0].slug // empty' "$UNYFORM_SESSION_FILE" 2>/dev/null)
+    fi
+    
+    # Find cached recipe
+    local recipe_path=""
+    
+    if [[ -n "$version" ]]; then
+        recipe_path="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/${version}/recipe.json"
+    else
+        # Try latest symlink
+        local latest_dir="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/latest"
+        if [[ -L "$latest_dir" ]]; then
+            recipe_path="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/$(readlink "$latest_dir")/recipe.json"
+        fi
+    fi
+    
+    # If not cached, pull first
+    if [[ ! -f "$recipe_path" ]]; then
+        warn "Recipe not in cache, pulling..."
+        recipes_pull "$ref"
+        
+        # Re-resolve path
+        if [[ -n "$version" ]]; then
+            recipe_path="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/${version}/recipe.json"
+        else
+            local latest_dir="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/latest"
+            recipe_path="${UNYFORM_RECIPES_DIR}/${org_slug}/${recipe_name}/$(readlink "$latest_dir")/recipe.json"
+        fi
+    fi
+    
+    if [[ ! -f "$recipe_path" ]]; then
+        error "Recipe not found in cache: $recipe_path"
+    fi
+    
+    # Read recipe
+    local recipe_json
+    recipe_json=$(cat "$recipe_path")
+    
+    local recipe_version=$(echo "$recipe_json" | jq -r '.version')
+    local recipe_desc=$(echo "$recipe_json" | jq -r '.description // "No description"')
+    
+    echo ""
+    echo -e "Applying recipe: ${BOLD}${recipe_name}${NC} v${recipe_version}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    # Apply patterns
+    local patterns_count=$(echo "$recipe_json" | jq -r '.patterns | length')
+    if [[ "$patterns_count" -gt 0 ]]; then
+        _apply_patterns "$recipe_json" "${extra_args[@]}"
+    fi
+    
+    # Check dependencies
+    _check_dependencies "$recipe_json"
+    
+    # Check infrastructure
+    _check_infrastructure "$recipe_json"
+    
+    echo ""
+    success "Recipe applied!"
+    echo ""
+    info "Run 'mx recipes apply --fix' to auto-update dependencies."
+}
+
+# Apply patterns from recipe to project
+_apply_patterns() {
+    local recipe_json="$1"
+    shift
+    local extra_args=("$@")
+    
+    local rules_dir=".cursor/rules"
+    mkdir -p "$rules_dir"
+    
+    # Get org name from recipe
+    local org_name=$(echo "$recipe_json" | jq -r '.name' | sed 's/ Engineering Standards$//' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+    local rules_file="${rules_dir}/${org_name}-patterns.md"
+    
+    # Generate rules file from patterns
+    {
+        echo "# ${org_name} Coding Patterns"
+        echo ""
+        echo "Generated from organizational recipe."
+        echo ""
+        
+        echo "$recipe_json" | jq -r '.patterns[] | "## \(.name)\n\n\(.description)\n\n### Rules\n\n\(.rules[] | "- \(.)")\n"'
+    } > "$rules_file"
+    
+    local patterns_count=$(echo "$recipe_json" | jq -r '.patterns | length')
+    success "Created ${rules_file} (${patterns_count} coding rules)"
+}
+
+# Check project dependencies against recipe
+_check_dependencies() {
+    local recipe_json="$1"
+    
+    echo -e "${BOLD}Dependencies:${NC}"
+    
+    # Check Rust dependencies
+    local rust_deps=$(echo "$recipe_json" | jq -r '.dependencies.rust[]?')
+    if [[ -n "$rust_deps" ]] && [[ -f "Cargo.toml" ]]; then
+        echo "$recipe_json" | jq -r '.dependencies.rust[]? | "  \(.name): \(.version // "any")"' | while read -r line; do
+            local dep_name=$(echo "$line" | cut -d: -f1 | tr -d ' ')
+            if grep -q "^$dep_name" Cargo.toml 2>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} $line"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Missing: $dep_name (recommended by recipe)"
+            fi
+        done
+    fi
+    
+    # Check Node dependencies
+    local node_deps=$(echo "$recipe_json" | jq -r '.dependencies.node[]?')
+    if [[ -n "$node_deps" ]] && [[ -f "package.json" ]]; then
+        echo "$recipe_json" | jq -r '.dependencies.node[]? | "  \(.name): \(.version // "any")"' | while read -r line; do
+            local dep_name=$(echo "$line" | cut -d: -f1 | tr -d ' ')
+            if grep -q "\"$dep_name\"" package.json 2>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} $line"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Missing: $dep_name (recommended by recipe)"
+            fi
+        done
+    fi
+    
+    echo ""
+}
+
+# Check project infrastructure against recipe
+_check_infrastructure() {
+    local recipe_json="$1"
+    
+    echo -e "${BOLD}Infrastructure:${NC}"
+    
+    # Check Docker
+    local has_docker=$(echo "$recipe_json" | jq -r '.infrastructure.docker.enabled // false')
+    if [[ "$has_docker" == "true" ]]; then
+        if [[ -f "Dockerfile" ]] || [[ -f "docker/Dockerfile" ]]; then
+            echo -e "  ${GREEN}✓${NC} Dockerfile matches recipe patterns"
+        else
+            echo -e "  ${YELLOW}⚠${NC} Missing: Dockerfile (run 'mx add' to create)"
+        fi
+    fi
+    
+    # Check CI/CD
+    local has_cicd=$(echo "$recipe_json" | jq -r '.infrastructure.ci_cd.enabled // false')
+    if [[ "$has_cicd" == "true" ]]; then
+        if [[ -f ".github/workflows/ci.yml" ]] || [[ -d ".github/workflows" ]]; then
+            echo -e "  ${GREEN}✓${NC} CI/CD workflow present"
+        else
+            echo -e "  ${YELLOW}⚠${NC} Missing: .github/workflows/ci.yml (run 'mx recipes apply --with-ci')"
+        fi
+    fi
+    
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Recipe CLI Command
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -620,6 +1074,12 @@ recipes_cmd() {
     
     case "$subcommand" in
         list|ls)
+            # Check if we want remote recipes
+            if [[ "$1" == "--remote" ]] || is_logged_in 2>/dev/null; then
+                if is_logged_in 2>/dev/null; then
+                    recipes_list_remote
+                fi
+            fi
             show_all_recipes
             ;;
         info)
@@ -627,6 +1087,18 @@ recipes_cmd() {
                 error "Recipe name required. Usage: mx recipes info <recipe>"
             fi
             show_recipe_info "$1"
+            ;;
+        pull)
+            recipes_pull "$@"
+            ;;
+        apply)
+            recipes_apply "$@"
+            ;;
+        versions)
+            recipes_versions "$@"
+            ;;
+        cache)
+            recipes_cache "$@"
             ;;
         *)
             if recipe_exists "$subcommand"; then
@@ -638,14 +1110,26 @@ recipes_cmd() {
                 echo -e "${BOLD}USAGE:${NC}"
                 echo "    mx recipes [command]"
                 echo ""
-                echo -e "${BOLD}COMMANDS:${NC}"
-                echo "    list              List all available recipes"
+                echo -e "${BOLD}LOCAL RECIPES:${NC}"
+                echo "    list              List all available local recipes"
                 echo "    info <recipe>     Show detailed info about a recipe"
                 echo ""
+                echo -e "${BOLD}REMOTE RECIPES (requires login):${NC}"
+                echo "    pull NAME[@VER]   Pull recipe from Unyform to cache"
+                echo "    apply NAME[@VER]  Apply recipe to current project"
+                echo "    versions NAME     List available versions"
+                echo "    cache [clear]     Show or clear cached recipes"
+                echo ""
                 echo -e "${BOLD}EXAMPLES:${NC}"
-                echo "    mx recipes                    # List all recipes"
-                echo "    mx recipes info laravel       # Show Laravel recipe details"
-                echo "    mx add myapp --recipe=nuxt    # Add service using recipe"
+                echo "    mx recipes                         # List all recipes"
+                echo "    mx recipes info laravel            # Show Laravel recipe details"
+                echo "    mx add myapp --recipe=nuxt         # Add service using recipe"
+                echo ""
+                echo "    mx login                           # Authenticate with Unyform"
+                echo "    mx recipes pull engineering-standards      # Pull org recipe"
+                echo "    mx recipes pull engineering-standards@1.0  # Pull specific version"
+                echo "    mx recipes apply engineering-standards     # Apply to project"
+                echo "    mx recipes cache                           # Show cached recipes"
                 echo ""
             fi
             ;;
