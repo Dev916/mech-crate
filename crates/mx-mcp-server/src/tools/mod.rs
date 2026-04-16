@@ -70,6 +70,10 @@ enum ToolHandler {
     RagFindRelated,
     RagHealth,
 
+    // Document compilation
+    MxDocsCompile,
+    MxDocsList,
+
     // Unyform integration
     UnyformLogin,
     UnyformLogout,
@@ -1046,6 +1050,137 @@ Useful when you need to expand understanding of a topic."#.to_string(),
             },
 
             // ─────────────────────────────────────────────────────────────────
+            // Document Compilation
+            // ─────────────────────────────────────────────────────────────────
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "mx_docs_compile".to_string(),
+                    description: r#"Compile Markdown documents to professional PDF and HTML.
+
+Converts markdown files to beautifully formatted PDF and HTML documents with:
+- Mermaid diagram rendering (auto-converted to PNG images)
+- Syntax-highlighted code blocks
+- Table of contents generation
+- Cover page with optional logo and company name
+- YAML frontmatter support for metadata (title, subtitle, author, date, abstract)
+
+Modes of operation:
+1. Single file: Provide 'input' pointing to a .md file
+2. Directory: Provide 'input' pointing to a folder (compiles all .md files)
+3. Config-based (specific doc): Provide 'config' path and 'doc' name
+4. Config-based (all docs): Provide 'config' path and set 'all' to true
+
+The config mode uses a docs.json file that defines document collections:
+```json
+{
+  "name": "My Docs",
+  "logo": "path/to/logo.png",
+  "companyName": "My Company",
+  "outputDir": "artifacts/docs",
+  "defaults": { "author": "Team", "theme": "light" },
+  "documents": {
+    "readme": { "file": "README.md", "title": "Overview" },
+    "guide": { "file": "guide.md", "title": "User Guide" }
+  }
+}
+```
+
+Output: Creates a directory with PDF, HTML, processed Markdown, and diagram images.
+
+Requirements: Node.js 18+ (dependencies auto-installed on first run)."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "input": {
+                                "type": "string",
+                                "description": "Path to a markdown file (.md) or directory containing markdown files"
+                            },
+                            "output": {
+                                "type": "string",
+                                "description": "Output directory for generated files (PDF, HTML, Markdown, diagrams)"
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Document title (overrides frontmatter)"
+                            },
+                            "subtitle": {
+                                "type": "string",
+                                "description": "Document subtitle (overrides frontmatter)"
+                            },
+                            "author": {
+                                "type": "string",
+                                "description": "Document author (overrides frontmatter)"
+                            },
+                            "theme": {
+                                "type": "string",
+                                "description": "Mermaid diagram theme: dark, light, forest, neutral (default: light)",
+                                "enum": ["dark", "light", "forest", "neutral"]
+                            },
+                            "logo": {
+                                "type": "string",
+                                "description": "Path to logo image for cover page (PNG, JPG, or SVG)"
+                            },
+                            "company_name": {
+                                "type": "string",
+                                "description": "Company name to display on the cover page"
+                            },
+                            "no_logo": {
+                                "type": "boolean",
+                                "description": "Set to true to disable the logo on the cover page"
+                            },
+                            "config": {
+                                "type": "string",
+                                "description": "Path to docs.json config file or directory containing it"
+                            },
+                            "doc": {
+                                "type": "string",
+                                "description": "Compile a specific document by key name from docs.json config"
+                            },
+                            "all": {
+                                "type": "boolean",
+                                "description": "Set to true to compile all documents defined in docs.json config"
+                            },
+                            "format": {
+                                "type": "string",
+                                "description": "Output format: pdf (default, generates all formats), html (HTML only, no PDF), markdown (processed markdown only)",
+                                "enum": ["pdf", "html", "markdown"]
+                            },
+                            "no_toc": {
+                                "type": "boolean",
+                                "description": "Disable table of contents generation"
+                            }
+                        })),
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::MxDocsCompile,
+            },
+
+            ToolDefinition {
+                tool: Tool {
+                    name: "mx_docs_list".to_string(),
+                    description: r#"List available documents from a docs.json configuration.
+
+Shows all documents defined in a docs.json config file, including their key names,
+titles, descriptions, and whether the source files exist.
+
+Use this to discover what documents are available before compiling with mx_docs_compile."#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "config": {
+                                "type": "string",
+                                "description": "Path to docs.json config file or directory containing it. If not specified, searches common locations (docs/docs.json, ./docs.json)"
+                            }
+                        })),
+                        required: None,
+                    },
+                },
+                handler: ToolHandler::MxDocsList,
+            },
+
+            // ─────────────────────────────────────────────────────────────────
             // Unyform Integration
             // ─────────────────────────────────────────────────────────────────
 
@@ -1765,6 +1900,90 @@ Actions:
                     "Weaviate RAG server is not available. Start it with: docker compose up -d"
                 };
                 Ok(ToolCallResult::text(result))
+            }
+
+            // ─────────────────────────────────────────────────────────────────
+            // Document Compilation Handlers
+            // ─────────────────────────────────────────────────────────────────
+
+            ToolHandler::MxDocsCompile => {
+                let mut cmd_args: Vec<String> = vec!["docs".to_string()];
+
+                // Determine mode: input file/dir, --doc, or --all
+                if let Some(doc) = args.get("doc").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--doc={}", doc));
+                } else if args.get("all").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    cmd_args.push("--all".to_string());
+                } else if let Some(input) = args.get("input").and_then(|v| v.as_str()) {
+                    cmd_args.push(input.to_string());
+                } else {
+                    return Err(McpError::InvalidArguments(
+                        "One of 'input', 'doc', or 'all' is required. Provide a markdown file/directory path, a doc name from config, or set all=true.".to_string()
+                    ));
+                }
+
+                // Config path
+                if let Some(config) = args.get("config").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--config={}", config));
+                }
+
+                // Output directory
+                if let Some(output) = args.get("output").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--output={}", output));
+                }
+
+                // Metadata overrides
+                if let Some(title) = args.get("title").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--title={}", title));
+                }
+                if let Some(subtitle) = args.get("subtitle").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--subtitle={}", subtitle));
+                }
+                if let Some(author) = args.get("author").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--author={}", author));
+                }
+                if let Some(theme) = args.get("theme").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--theme={}", theme));
+                }
+
+                // Branding
+                if let Some(logo) = args.get("logo").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--logo={}", logo));
+                }
+                if let Some(company_name) = args.get("company_name").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--company-name={}", company_name));
+                }
+                if args.get("no_logo").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    cmd_args.push("--no-logo".to_string());
+                }
+
+                // Format
+                match args.get("format").and_then(|v| v.as_str()) {
+                    Some("html") => cmd_args.push("--html-only".to_string()),
+                    Some("markdown") => cmd_args.push("--markdown-only".to_string()),
+                    _ => {} // pdf is default (generates all)
+                }
+
+                // Table of contents
+                if args.get("no_toc").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    cmd_args.push("--no-toc".to_string());
+                }
+
+                let arg_refs: Vec<&str> = cmd_args.iter().map(|s| s.as_str()).collect();
+                let output = mx.execute(&arg_refs, None).await?;
+                Ok(ToolCallResult::text(output.format()))
+            }
+
+            ToolHandler::MxDocsList => {
+                let mut cmd_args: Vec<String> = vec!["docs".to_string(), "--list".to_string()];
+
+                if let Some(config) = args.get("config").and_then(|v| v.as_str()) {
+                    cmd_args.push(format!("--config={}", config));
+                }
+
+                let arg_refs: Vec<&str> = cmd_args.iter().map(|s| s.as_str()).collect();
+                let output = mx.execute(&arg_refs, None).await?;
+                Ok(ToolCallResult::text(output.format()))
             }
 
             // ─────────────────────────────────────────────────────────────────

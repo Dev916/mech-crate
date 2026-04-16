@@ -39,6 +39,15 @@ install: build-release
 install-local: build-release
 	@./scripts/install.sh --local --skip-build
 
+## Rebuild and install to bin/ (symlinks in /usr/local/bin pick it up)
+upgrade: build-release
+	@echo "Installing to bin/..."
+	@cp target/release/mx bin/mx && chmod +x bin/mx && echo "  ✓ bin/mx"
+	@test -f target/release/mx-mcp && cp target/release/mx-mcp bin/mx-mcp && chmod +x bin/mx-mcp && echo "  ✓ bin/mx-mcp" || true
+	@test -f target/release/mx-ingest && cp target/release/mx-ingest bin/mx-ingest && chmod +x bin/mx-ingest && echo "  ✓ bin/mx-ingest" || true
+	@echo ""
+	@echo "🦝 mx upgraded! Run 'mx --version' to verify."
+
 ## Uninstall mx from $(PREFIX)/bin
 uninstall:
 	@echo "Removing mx binaries..."
@@ -132,6 +141,7 @@ help:
 	@echo "Install:"
 	@echo "  make install        Install to /usr/local/bin (may need sudo)"
 	@echo "  make install-local  Install to ~/.local/bin"
+	@echo "  make upgrade        Rebuild and reinstall to ~/.local/bin"
 	@echo "  make uninstall      Remove installed binaries"
 	@echo "  make init           Initialize templates (~/.mech-crate)"
 	@echo ""

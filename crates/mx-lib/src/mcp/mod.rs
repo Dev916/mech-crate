@@ -8,7 +8,6 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::config::MechCrateConfig;
-use crate::docker::Compose;
 use crate::error::{Error, Result};
 use crate::paths;
 
@@ -399,7 +398,6 @@ impl McpManager {
     /// Generate MCP client configuration
     pub fn generate_config(&self) -> Result<String> {
         let mcp_binary = self.mcp_binary()?;
-        let weaviate_url = self.weaviate_url();
         let mech_root = paths::source_templates_dir()?
             .parent()
             .map(|p| p.to_path_buf())

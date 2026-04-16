@@ -13,6 +13,7 @@ use commands::{
     add::AddCommand,
     build::BuildCommand,
     dev::DevCommand,
+    docs::DocsCommand,
     doctor::DoctorCommand,
     infra::InfraCommand,
     init::InitCommand,
@@ -20,6 +21,7 @@ use commands::{
     new::NewCommand,
     recipes::RecipesCommand,
     router::RouterCommand,
+    self_update::SelfUpdateCommand,
     unyform::UnyformCommand,
 };
 
@@ -75,6 +77,9 @@ enum Commands {
     /// Build service images
     Build(BuildCommand),
 
+    /// Compile Markdown documents to PDF/HTML
+    Docs(DocsCommand),
+
     /// Manage global Traefik router
     Router(RouterCommand),
 
@@ -101,6 +106,10 @@ enum Commands {
 
     /// Upgrade project scaffolding
     Upgrade(commands::upgrade::UpgradeCommand),
+
+    /// Update the mx CLI itself
+    #[command(name = "self-update")]
+    SelfUpdate(SelfUpdateCommand),
 }
 
 fn setup_logging(verbose: bool) {
@@ -139,6 +148,7 @@ async fn main() -> Result<()> {
         Commands::Sh(cmd) => cmd.run_sh().await,
         Commands::Ps(cmd) => cmd.run_ps().await,
         Commands::Build(cmd) => cmd.run().await,
+        Commands::Docs(cmd) => cmd.run().await,
         Commands::Router(cmd) => cmd.run().await,
         Commands::Infra(cmd) => cmd.run().await,
         Commands::Mcp(cmd) => cmd.run().await,
@@ -148,6 +158,7 @@ async fn main() -> Result<()> {
         Commands::Logout(cmd) => cmd.run().await,
         Commands::Whoami(cmd) => cmd.run().await,
         Commands::Upgrade(cmd) => cmd.run().await,
+        Commands::SelfUpdate(cmd) => cmd.run().await,
     };
 
     if let Err(e) = result {

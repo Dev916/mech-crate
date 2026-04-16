@@ -6,7 +6,7 @@
 //! 2. ~/.mech-crate/ (standard installation location)
 //! 3. Relative to the executable (for portable/dev builds)
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::error::{Error, Result};
 
@@ -102,6 +102,37 @@ pub fn source_templates_dir() -> Result<PathBuf> {
 
     Err(Error::Config(
         "Source templates not found. Cannot initialize.".into()
+    ))
+}
+
+/// Get the MechCrate root directory (source repo or install location)
+///
+/// Resolution order:
+/// 1. MECH_CRATE_ROOT environment variable
+/// 2. Walk up from executable to find a directory containing `scripts/`
+pub fn mech_crate_root() -> Result<PathBuf> {
+    // 1. Check MECH_CRATE_ROOT env var
+    if let Ok(root) = std::env::var("MECH_CRATE_ROOT") {
+        let root = PathBuf::from(&root);
+        if root.exists() {
+            return Ok(root);
+        }
+    }
+
+    // 2. Walk up from executable (resolve symlinks first)
+    if let Ok(exe) = std::env::current_exe() {
+        let exe = exe.canonicalize().unwrap_or(exe);
+        let mut current = exe.parent();
+        while let Some(dir) = current {
+            if dir.join("scripts").is_dir() {
+                return Ok(dir.to_path_buf());
+            }
+            current = dir.parent();
+        }
+    }
+
+    Err(Error::Config(
+        "MechCrate root not found. Set MECH_CRATE_ROOT or run from a MechCrate installation.".into(),
     ))
 }
 

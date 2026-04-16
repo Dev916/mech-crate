@@ -22,7 +22,7 @@
  *   The compiler looks for a docs.json file in:
  *   1. The --config directory (if specified)
  *   2. The input directory (if compiling a folder)
- *   3. Common locations (docs/unyform/, docs/, etc.)
+ *   3. Common locations (docs/, etc.)
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, rmSync } from 'fs';
@@ -48,6 +48,8 @@ interface DocsConfig {
   name: string;
   description?: string;
   outputDir?: string;
+  logo?: string;
+  companyName?: string;
   defaults?: {
     author?: string;
     theme?: string;
@@ -80,6 +82,9 @@ interface Options {
   all: boolean;
   doc?: string;
   config?: string;  // Path to docs.json or directory containing it
+  logo?: string;         // Path to logo image file
+  companyName?: string;  // Company name to display on cover
+  noLogo: boolean;       // Disable logo entirely
 }
 
 interface DiagramInfo {
@@ -120,6 +125,9 @@ function parseArguments(): Options {
       theme: { type: 'string', default: 'light' },
       order: { type: 'string' },
       config: { type: 'string', short: 'c' },
+      logo: { type: 'string' },
+      'company-name': { type: 'string' },
+      'no-logo': { type: 'boolean', default: false },
       'markdown-only': { type: 'boolean', default: false },
       'html-only': { type: 'boolean', default: false },
       verbose: { type: 'boolean', short: 'v', default: false },
@@ -151,6 +159,9 @@ function parseArguments(): Options {
     all: values.all ?? false,
     doc: values.doc,
     config: values.config,
+    logo: values.logo,
+    companyName: values['company-name'],
+    noLogo: values['no-logo'] ?? false,
   };
 }
 
@@ -174,6 +185,9 @@ Options:
   --prefix <string>       Add prefix to output filenames
   --theme <theme>         Mermaid theme: dark, light, forest, neutral
   --order <files>         Comma-separated file order for directories
+  --logo <path>           Logo image for cover page (PNG, JPG, SVG)
+  --company-name <name>   Company name for cover page
+  --no-logo               Disable logo on cover page
   --markdown-only         Only generate processed markdown
   --html-only             Only generate HTML, no PDF
   --no-toc                Disable table of contents
@@ -190,7 +204,7 @@ Config Detection:
   The compiler looks for docs.json in:
   1. Directory specified by --config
   2. Input directory (if compiling folder)
-  3. Common locations: docs/unyform/, docs/, ./
+  3. Common locations: docs/, ./
 
 docs.json Format:
   {
@@ -219,17 +233,17 @@ const MERMAID_THEMES: Record<string, object> = {
   dark: {
     theme: 'dark',
     themeVariables: {
-      primaryColor: '#8b5cf6',
+      primaryColor: '#334155',
       primaryTextColor: '#f1f5f9',
-      primaryBorderColor: '#7c3aed',
+      primaryBorderColor: '#475569',
       lineColor: '#94a3b8',
       secondaryColor: '#1e293b',
       tertiaryColor: '#0f172a',
       background: '#020617',
       mainBkg: '#0f172a',
-      nodeBorder: '#7c3aed',
+      nodeBorder: '#475569',
       clusterBkg: '#1e293b',
-      clusterBorder: '#7c3aed',
+      clusterBorder: '#475569',
       titleColor: '#f1f5f9',
       edgeLabelBackground: '#0f172a',
       textColor: '#f1f5f9',
@@ -239,17 +253,17 @@ const MERMAID_THEMES: Record<string, object> = {
   light: {
     theme: 'default',
     themeVariables: {
-      primaryColor: '#7c3aed',
+      primaryColor: '#334155',
       primaryTextColor: '#1e293b',
-      primaryBorderColor: '#8b5cf6',
+      primaryBorderColor: '#475569',
       lineColor: '#64748b',
       secondaryColor: '#f1f5f9',
       tertiaryColor: '#e2e8f0',
       background: '#ffffff',
       mainBkg: '#f8fafc',
-      nodeBorder: '#8b5cf6',
+      nodeBorder: '#475569',
       clusterBkg: '#f1f5f9',
-      clusterBorder: '#8b5cf6',
+      clusterBorder: '#475569',
       titleColor: '#0f172a',
       edgeLabelBackground: '#ffffff',
       textColor: '#1e293b',
@@ -295,9 +309,9 @@ function detectConfig(options: Options): { config: DocsConfig; configDir: string
   
   // 3. Common locations relative to workspace
   searchPaths.push(
-    join(WORKSPACE_ROOT, 'docs/unyform/docs.json'),
     join(WORKSPACE_ROOT, 'docs/docs.json'),
     join(WORKSPACE_ROOT, 'docs.json'),
+    join(process.cwd(), 'docs/docs.json'),
     join(process.cwd(), 'docs.json'),
   );
   
@@ -332,7 +346,6 @@ function requireConfig(options: Options): { config: DocsConfig; configDir: strin
     if (options.config) {
       console.error(`   • ${resolve(options.config)}`);
     }
-    console.error(`   • docs/unyform/docs.json`);
     console.error(`   • docs/docs.json`);
     console.error(`   • ./docs.json`);
     console.error('');
@@ -437,8 +450,10 @@ async function compileAllConfigDocs(options: Options): Promise<void> {
     ...options,
     author: options.author || config.defaults?.author,
     theme: options.theme || (config.defaults?.theme as Options['theme']) || 'dark',
+    logo: options.logo || config.logo,
+    companyName: options.companyName || config.companyName,
   };
-  
+
   let compiled = 0;
   let skipped = 0;
   
@@ -482,8 +497,10 @@ async function compileConfigDoc(name: string, options: Options): Promise<void> {
     ...options,
     author: options.author || config.defaults?.author,
     theme: options.theme || (config.defaults?.theme as Options['theme']) || 'dark',
+    logo: options.logo || config.logo,
+    companyName: options.companyName || config.companyName,
     output: options.output || (
-      config.outputDir 
+      config.outputDir
         ? join(WORKSPACE_ROOT, config.outputDir)
         : undefined
     ),
@@ -506,10 +523,9 @@ async function compileFile(filePath: string, options: Options): Promise<void> {
   
   const fileName = basename(absolutePath, '.md');
   const fileDir = dirname(absolutePath);
-  const parentFolderName = basename(fileDir); // e.g., "unyform" from docs/unyform/
-  
+  const parentFolderName = basename(fileDir);
+
   // Determine output directory: artifacts/<parent-folder>/<filename>/
-  // e.g., docs/unyform/WHITEPAPER.md -> artifacts/unyform/WHITEPAPER/
   const outputDir = options.output 
     ? resolve(options.output)
     : join(WORKSPACE_ROOT, 'artifacts', parentFolderName, fileName);
@@ -524,7 +540,7 @@ async function compileFile(filePath: string, options: Options): Promise<void> {
   mkdirSync(diagramsDir, { recursive: true });
   
   console.log('');
-  console.log('unyform.ai docs - Markdown to PDF Compiler');
+  console.log('mx docs - Markdown to PDF Compiler');
   console.log('════════════════════════════════════════════════════════════════');
   console.log(`   📥 Input:  ${absolutePath}`);
   console.log(`   📤 Output: ${outputDir}`);
@@ -539,7 +555,7 @@ async function compileFile(filePath: string, options: Options): Promise<void> {
   const meta: DocumentMeta = {
     title: options.title || frontmatter.title || extractTitle(markdownBody) || fileName,
     subtitle: options.subtitle || frontmatter.subtitle,
-    author: options.author || frontmatter.author || 'MechCrate',
+    author: options.author || frontmatter.author || '',
     date: frontmatter.date || new Date().toLocaleDateString('en-US', { 
       year: 'numeric', month: 'long', day: 'numeric' 
     }),
@@ -600,7 +616,7 @@ async function compileFile(filePath: string, options: Options): Promise<void> {
   });
   
   const htmlBody = await marked.parse(processedMarkdown);
-  const fullHtml = generateHtmlDocument(htmlBody, meta, outputDir);
+  const fullHtml = generateHtmlDocument(htmlBody, meta, outputDir, options);
   
   // Write HTML
   const outputPrefix = options.prefix ? `${options.prefix}-` : '';
@@ -654,7 +670,7 @@ async function compileFolder(folderPath: string, options: Options): Promise<void
   }
   
   console.log('');
-  console.log('unyform.ai docs - Compiling folder');
+  console.log('mx docs - Compiling folder');
   console.log('════════════════════════════════════════════════════════════════');
   console.log(`   📁 Folder: ${absolutePath}`);
   
@@ -852,37 +868,41 @@ documentclass: report
 // HTML GENERATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function generateHtmlDocument(body: string, meta: DocumentMeta, outputDir: string): string {
+function loadLogoHtml(options: Options): string {
+  if (options.noLogo) return '';
+
+  const logoPath = options.logo;
+  if (logoPath) {
+    const absPath = resolve(logoPath);
+    if (existsSync(absPath)) {
+      const ext = extname(absPath).toLowerCase();
+      if (ext === '.svg') {
+        return readFileSync(absPath, 'utf-8');
+      } else {
+        const data = readFileSync(absPath);
+        const base64 = data.toString('base64');
+        const mime = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+        return `<img src="data:${mime};base64,${base64}" alt="Logo" />`;
+      }
+    }
+  }
+
+  // Try default logo from assets directory
+  const defaultLogoPath = join(__dirname, 'assets', 'logo.png');
+  if (existsSync(defaultLogoPath)) {
+    const data = readFileSync(defaultLogoPath);
+    const base64 = data.toString('base64');
+    return `<img src="data:image/png;base64,${base64}" alt="Logo" />`;
+  }
+
+  return '';
+}
+
+function generateHtmlDocument(body: string, meta: DocumentMeta, outputDir: string, options: Options): string {
   const toc = meta.toc ? generateToc(body) : '';
-  
-  // Unyform logo SVG (corner variant) embedded inline
-  const unyformLogoSvg = `
-    <svg width="180" height="180" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-      <g transform="translate(96, 72)">
-        <!-- TOP BAR - RIGHT HALF (navy) -->
-        <line x1="160" y1="0" x2="320" y2="0" stroke="#1e1b4b" stroke-width="24" stroke-linecap="round"/>
-        <!-- TOP BAR - LEFT HALF (accent) -->
-        <line x1="0" y1="0" x2="160" y2="0" stroke="#6366f1" stroke-width="24" stroke-linecap="round"/>
-        <!-- RIGHT SIDE + BOTTOM CURVE (navy) -->
-        <path 
-          d="M 320 0 L 320 240 Q 320 368 160 368 Q 0 368 0 240"
-          fill="none"
-          stroke="#1e1b4b"
-          stroke-width="24"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <!-- LEFT VERTICAL (accent) -->
-        <line x1="0" y1="0" x2="0" y2="240" stroke="#6366f1" stroke-width="24" stroke-linecap="round"/>
-        <!-- HORIZONTAL CROSSBAR (accent) -->
-        <line x1="0" y1="120" x2="112" y2="120" stroke="#6366f1" stroke-width="16" stroke-linecap="round"/>
-        <!-- CORNER REINFORCEMENT -->
-        <line x1="296" y1="24" x2="296" y2="48" stroke="#1e1b4b" stroke-width="5" stroke-linecap="round"/>
-        <line x1="280" y1="24" x2="296" y2="24" stroke="#1e1b4b" stroke-width="5" stroke-linecap="round"/>
-      </g>
-    </svg>
-  `;
-  
+  const logoHtml = loadLogoHtml(options);
+  const companyName = options.companyName || '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -895,17 +915,17 @@ ${getStyles()}
 </head>
 <body>
   <div class="cover-page">
-    <div class="logo">${unyformLogoSvg}</div>
-    <p class="company-name">unyform.ai</p>
+    ${logoHtml ? `<div class="logo">${logoHtml}</div>` : ''}
+    ${companyName ? `<p class="company-name">${escapeHtml(companyName)}</p>` : ''}
     <h1 class="title">${escapeHtml(meta.title)}</h1>
     ${meta.subtitle ? `<p class="subtitle">${escapeHtml(meta.subtitle)}</p>` : ''}
-    <p class="author">${escapeHtml(meta.author || '')}</p>
+    ${meta.author ? `<p class="author">${escapeHtml(meta.author)}</p>` : ''}
     <p class="date">${escapeHtml(meta.date || '')}</p>
     ${meta.abstract ? `<div class="abstract"><p>${escapeHtml(meta.abstract)}</p></div>` : ''}
   </div>
-  
+
   ${toc ? `<div class="toc-page"><h2>Table of Contents</h2>${toc}</div>` : ''}
-  
+
   <div class="content">
 ${body}
   </div>
@@ -1058,14 +1078,15 @@ function getStyles(): string {
     }
     
     :root {
-      --mx-primary: #8b5cf6;
-      --mx-primary-dark: #7c3aed;
-      --mx-green: #22c55e;
+      --mx-primary: #1e293b;
+      --mx-primary-dark: #0f172a;
+      --mx-accent: #2563eb;
+      --mx-green: #16a34a;
       --mx-dark: #0f172a;
       --mx-gray: #64748b;
       --mx-light-gray: #f1f5f9;
       --code-bg: #1e293b;
-      --link-blue: #3b82f6;
+      --link-blue: #2563eb;
     }
     
     body {
@@ -1100,11 +1121,11 @@ function getStyles(): string {
     .company-name {
       font-size: 28pt;
       font-weight: 700;
-      color: #1e1b4b;
+      color: var(--mx-primary);
       margin: 0 0 0.5rem 0;
       letter-spacing: -0.02em;
     }
-    
+
     .title {
       font-size: 32pt;
       font-weight: 700;
@@ -1146,7 +1167,7 @@ function getStyles(): string {
     
     .toc-page h2 {
       color: var(--mx-primary);
-      border-bottom: 2px solid var(--mx-primary);
+      border-bottom: 2px solid var(--mx-accent);
       padding-bottom: 0.5rem;
     }
     
@@ -1169,7 +1190,7 @@ function getStyles(): string {
     }
     
     .toc a:hover {
-      color: var(--mx-primary);
+      color: var(--mx-accent);
     }
     
     .content {
@@ -1177,13 +1198,13 @@ function getStyles(): string {
     }
     
     h1, h2, h3, h4, h5, h6 {
-      color: var(--mx-primary-dark);
+      color: var(--mx-primary);
       margin-top: 2rem;
       margin-bottom: 1rem;
       page-break-after: avoid;
     }
-    
-    h1 { font-size: 24pt; border-bottom: 2px solid var(--mx-primary); padding-bottom: 0.5rem; }
+
+    h1 { font-size: 24pt; border-bottom: 2px solid var(--mx-accent); padding-bottom: 0.5rem; }
     h2 { font-size: 18pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
     h3 { font-size: 14pt; }
     h4 { font-size: 12pt; }
@@ -1238,7 +1259,7 @@ function getStyles(): string {
     }
     
     th {
-      background: var(--mx-primary);
+      background: #334155;
       color: white;
       font-weight: 600;
     }
@@ -1248,7 +1269,7 @@ function getStyles(): string {
     }
     
     blockquote {
-      border-left: 4px solid var(--mx-primary);
+      border-left: 4px solid var(--mx-accent);
       margin: 1rem 0;
       padding: 0.5rem 1rem;
       background: #f3f4f6;
@@ -1270,7 +1291,7 @@ function getStyles(): string {
     
     hr {
       border: none;
-      border-top: 2px solid var(--mx-primary);
+      border-top: 2px solid #e5e7eb;
       margin: 2rem 0;
     }
     

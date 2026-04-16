@@ -26,13 +26,61 @@ pub struct JsonRpcResponse {
     pub error: Option<JsonRpcError>,
 }
 
-/// JSON-RPC Notification (no id)
+/// JSON-RPC Notification (no id, no response expected)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcNotification {
     pub jsonrpc: String,
     pub method: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<Value>,
+}
+
+#[allow(dead_code)]
+impl JsonRpcNotification {
+    /// Create a new notification
+    pub fn new(method: impl Into<String>, params: Option<Value>) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: method.into(),
+            params,
+        }
+    }
+
+    /// Create a progress notification
+    pub fn progress(token: impl Into<String>, progress: f64, message: Option<String>) -> Self {
+        let params = serde_json::json!({
+            "progressToken": token.into(),
+            "progress": progress,
+            "total": 100.0,
+            "message": message,
+        });
+        Self::new("notifications/progress", Some(params))
+    }
+
+    /// Create a tools/list_changed notification
+    pub fn tools_list_changed() -> Self {
+        Self::new("notifications/tools/list_changed", None)
+    }
+
+    /// Create a resources/list_changed notification
+    pub fn resources_list_changed() -> Self {
+        Self::new("notifications/resources/list_changed", None)
+    }
+
+    /// Create a log notification
+    pub fn log(level: &str, message: impl Into<String>, logger: Option<&str>) -> Self {
+        let params = serde_json::json!({
+            "level": level,
+            "message": message.into(),
+            "logger": logger,
+        });
+        Self::new("notifications/message", Some(params))
+    }
+
+    /// Serialize to JSON string for sending
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
 }
 
 /// JSON-RPC Error

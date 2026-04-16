@@ -69,7 +69,7 @@ impl RecipeInstaller {
 
     /// Install a recipe into a project
     pub fn install(
-        &self,
+        &mut self,
         recipe: &Recipe,
         project_root: &Path,
         service_name: &str,
@@ -123,13 +123,13 @@ impl RecipeInstaller {
     }
 
     /// Interpolate template variables
-    fn interpolate(&self, template: &str, vars: &HashMap<String, String>) -> Result<String> {
+    fn interpolate(&mut self, template: &str, vars: &HashMap<String, String>) -> Result<String> {
         self.engine.render_string(template, vars)
     }
 
     /// Run the init_app command
     fn run_init_app(
-        &self,
+        &mut self,
         init_app: &super::InitApp,
         project_root: &Path,
         placeholders: &HashMap<String, String>,
@@ -178,7 +178,7 @@ impl RecipeInstaller {
 
     /// Process a single template mapping
     fn process_template(
-        &self,
+        &mut self,
         recipe_dir: &Path,
         project_root: &Path,
         mapping: &FileMapping,
@@ -214,7 +214,7 @@ impl RecipeInstaller {
 
     /// Copy a directory recursively
     fn copy_directory(
-        &self,
+        &mut self,
         from: &Path,
         to: &Path,
         placeholders: &HashMap<String, String>,
@@ -247,7 +247,7 @@ impl RecipeInstaller {
 
     /// Copy a single file, optionally processing as template
     fn copy_file(
-        &self,
+        &mut self,
         from: &Path,
         to: &Path,
         placeholders: &HashMap<String, String>,
@@ -284,7 +284,7 @@ impl RecipeInstaller {
 
     /// Run post-install actions
     fn run_post_install(
-        &self,
+        &mut self,
         post_install: &PostInstall,
         project_root: &Path,
         placeholders: &HashMap<String, String>,
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn test_interpolate() {
         let temp = TempDir::new().unwrap();
-        let installer = RecipeInstaller::new(temp.path()).unwrap();
+        let mut installer = RecipeInstaller::new(temp.path()).unwrap();
 
         let mut vars = HashMap::new();
         vars.insert("SERVICE_NAME".to_string(), "my-app".to_string());

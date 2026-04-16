@@ -51,7 +51,7 @@ impl AddCommand {
 
         // Get templates directory
         let templates_root = templates_dir()?;
-        let installer = RecipeInstaller::new(&templates_root)?;
+        let mut installer = RecipeInstaller::new(&templates_root)?;
 
         // Get recipe
         let recipe_name = match &self.recipe {

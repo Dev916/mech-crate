@@ -28,13 +28,16 @@ impl TemplateEngine {
     }
 
     /// Render a template string with the given variables
-    pub fn render_string(&self, template: &str, vars: &HashMap<String, String>) -> Result<String> {
+    /// 
+    /// Uses the engine's Tera instance which has custom filters registered.
+    pub fn render_string(&mut self, template: &str, vars: &HashMap<String, String>) -> Result<String> {
         let mut context = Context::new();
         for (key, value) in vars {
             context.insert(key, value);
         }
 
-        let result = Tera::one_off(template, &context, false)?;
+        // Use render_str to leverage custom filters registered on self.tera
+        let result = self.tera.render_str(template, &context)?;
         Ok(result)
     }
 
@@ -143,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_render_string() {
-        let engine = TemplateEngine::new().unwrap();
+        let mut engine = TemplateEngine::new().unwrap();
         let mut vars = HashMap::new();
         vars.insert("name".to_string(), "my-project".to_string());
 
@@ -151,6 +154,31 @@ mod tests {
             .render_string("Hello {{ name }}!", &vars)
             .unwrap();
         assert_eq!(result, "Hello my-project!");
+    }
+
+    #[test]
+    fn test_custom_filters() {
+        let mut engine = TemplateEngine::new().unwrap();
+        let mut vars = HashMap::new();
+        vars.insert("name".to_string(), "My Project".to_string());
+
+        // Test slug filter
+        let result = engine
+            .render_string("{{ name | slug }}", &vars)
+            .unwrap();
+        assert_eq!(result, "my-project");
+
+        // Test upper_snake filter
+        let result = engine
+            .render_string("{{ name | upper_snake }}", &vars)
+            .unwrap();
+        assert_eq!(result, "MY_PROJECT");
+
+        // Test rust_crate filter
+        let result = engine
+            .render_string("{{ name | rust_crate }}", &vars)
+            .unwrap();
+        assert_eq!(result, "my_project");
     }
 
     #[test]

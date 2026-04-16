@@ -210,11 +210,12 @@ impl UnyformClient {
             .ok_or_else(|| Error::Config("No default organization set".into()))
     }
 
-    /// Get the API URL (from credentials or default)
+    /// Get the API URL (from credentials, instance base_url, or default)
     pub fn get_url(&self) -> String {
+        // Priority: credentials file > instance base_url > default
         self.load_credentials()
             .map(|c| c.url)
-            .unwrap_or_else(|_| Self::DEFAULT_URL.to_string())
+            .unwrap_or_else(|_| self.base_url.clone())
     }
 
     /// Get authentication header value

@@ -17,6 +17,10 @@ use crate::paths;
 const DASHBOARD_PORT_FILE: &str = ".dashboard-port";
 const NETWORK_NAME: &str = "devmesh-traefik";
 
+/// Dashboard port allocation range (matches shell implementation and docker-compose template)
+const DASHBOARD_PORT_START: u16 = 7680;
+const DASHBOARD_PORT_END: u16 = 7799;
+
 /// Router manager
 #[derive(Debug)]
 pub struct Router {
@@ -73,12 +77,20 @@ impl Router {
         if port_file.exists() {
             let content = std::fs::read_to_string(&port_file)?;
             if let Ok(port) = content.trim().parse::<u16>() {
-                return Ok(port);
+                // Validate cached port is within the expected range
+                if port >= DASHBOARD_PORT_START && port <= DASHBOARD_PORT_END {
+                    return Ok(port);
+                }
+                // Stale port outside expected range -- re-allocate
+                tracing::warn!(
+                    "Cached dashboard port {} is outside range {}-{}, re-allocating",
+                    port, DASHBOARD_PORT_START, DASHBOARD_PORT_END
+                );
             }
         }
 
-        // Allocate a new port
-        let port = self.find_free_port(8180, 8280)?;
+        // Allocate a new port in the correct range
+        let port = self.find_free_port(DASHBOARD_PORT_START, DASHBOARD_PORT_END)?;
         std::fs::write(&port_file, port.to_string())?;
         Ok(port)
     }
@@ -171,7 +183,9 @@ impl Router {
         let port = self.dashboard_port()?;
 
         let compose = Compose::new(self.install_dir())
-            .with_file("docker-compose.yml");
+            .with_file("docker-compose.yml")
+            .with_project_name("mx-router")
+            .with_env("MX_ROUTER_DASHBOARD_PORT", port.to_string());
 
         let output = compose.run(&["up", "-d"])?;
 
@@ -191,7 +205,8 @@ impl Router {
         }
 
         let compose = Compose::new(self.install_dir())
-            .with_file("docker-compose.yml");
+            .with_file("docker-compose.yml")
+            .with_project_name("mx-router");
 
         let output = compose.run(&["down"])?;
 
@@ -221,7 +236,8 @@ impl Router {
         }
 
         let compose = Compose::new(self.install_dir())
-            .with_file("docker-compose.yml");
+            .with_file("docker-compose.yml")
+            .with_project_name("mx-router");
 
         compose.logs(None, follow)
     }

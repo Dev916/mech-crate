@@ -81,6 +81,8 @@ pub struct Compose {
     pub files: Vec<std::path::PathBuf>,
     /// Project name
     pub project_name: Option<String>,
+    /// Environment variables to pass to docker compose
+    pub envs: Vec<(String, String)>,
 }
 
 impl Compose {
@@ -90,6 +92,7 @@ impl Compose {
             working_dir: working_dir.as_ref().to_path_buf(),
             files: Vec::new(),
             project_name: None,
+            envs: Vec::new(),
         }
     }
 
@@ -105,11 +108,22 @@ impl Compose {
         self
     }
 
+    /// Add an environment variable to pass to docker compose
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.envs.push((key.into(), value.into()));
+        self
+    }
+
     /// Run docker compose with the given arguments
     pub fn run(&self, args: &[&str]) -> Result<std::process::Output> {
         let mut cmd = Command::new("docker");
         cmd.arg("compose");
         cmd.current_dir(&self.working_dir);
+
+        // Pass environment variables
+        for (key, value) in &self.envs {
+            cmd.env(key, value);
+        }
 
         for file in &self.files {
             cmd.args(["-f", file.to_str().unwrap_or_default()]);
