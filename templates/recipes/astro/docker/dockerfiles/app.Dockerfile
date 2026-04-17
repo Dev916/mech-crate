@@ -51,7 +51,7 @@ RUN npm run build
 # ========================================
 # Production stage - Minimal runtime
 # ========================================
-FROM base AS runner
+FROM base AS production
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0

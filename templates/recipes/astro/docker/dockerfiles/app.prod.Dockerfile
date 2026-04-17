@@ -58,7 +58,7 @@ RUN npm run build
 # ========================================
 # Production stage - Ultra minimal
 # ========================================
-FROM node:${NODE_VERSION}-alpine AS runner
+FROM node:${NODE_VERSION}-alpine AS production
 
 WORKDIR /app
 

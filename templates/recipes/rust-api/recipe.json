@@ -15,7 +15,8 @@
   
   "services": [
     { "name": "<name>", "description": "Rust API service" },
-    { "name": "db", "description": "PostgreSQL (shared)" }
+    { "name": "db", "description": "PostgreSQL (shared)" },
+    { "name": "redis", "description": "Redis (shared)" }
   ],
   
   "options": {
@@ -60,8 +61,8 @@
   "templates": [
     { "from": "docker/compose/db.yml", "to": "docker/compose/db.yml" },
     { "from": "docker/compose/db.dev.yml", "to": "docker/compose/db.dev.yml" },
-    { "from": "docker/compose/redis.yml", "to": "docker/compose/redis.yml" },
-    { "from": "docker/compose/redis.dev.yml", "to": "docker/compose/redis.dev.yml" },
+    { "from": "common://docker/compose/redis.yml", "to": "docker/compose/redis.yml" },
+    { "from": "common://docker/compose/redis.dev.yml", "to": "docker/compose/redis.dev.yml" },
 
     { "from": "app", "to": "apps/{{SERVICE_NAME}}" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
@@ -74,7 +75,8 @@
 
     { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" },
     { "from": "config/env.secrets", "to": "docker/.config/.env.secrets" },
-    { "from": "config/env.shared", "to": "docker/.config/.env.shared" }
+    { "from": "config/env.shared", "to": "docker/.config/.env.shared" },
+    { "from": "common://docker/config/env.redis", "to": "docker/.config/.env.redis" }
   ],
   
   "next_steps": [

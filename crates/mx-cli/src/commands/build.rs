@@ -90,25 +90,12 @@ impl BuildCommand {
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
         
-        // Try _build first, fall back to build
-        cmd.arg("build");
-        cmd.arg(format!("s={}", self.service));
-
-        if self.prod {
-            cmd.arg("mode=prod");
-        }
-
-        if let Some(ref tag) = self.tag {
-            cmd.arg(format!("t={}", tag));
-        }
-
-        if self.push {
-            cmd.arg("push=1");
-        }
-
-        if self.no_cache {
-            cmd.arg("no_cache=1");
-        }
+        cmd.arg("_build");
+        cmd.arg(format!("service={}", self.service));
+        cmd.arg(format!("tag={}", self.tag.as_deref().unwrap_or("latest")));
+        cmd.arg(format!("mode={}", mode));
+        cmd.arg(format!("push={}", if self.push { "1" } else { "0" }));
+        cmd.arg(format!("nocache={}", if self.no_cache { "1" } else { "0" }));
 
         if let Some(ref platform) = self.platform {
             cmd.arg(format!("platform={}", platform));
@@ -125,7 +112,7 @@ impl BuildCommand {
 
         let status = cmd
             .status()
-            .with_context(|| format!("Failed to run 'make build' in {}", project_root.display()))?;
+            .with_context(|| format!("Failed to run 'make _build' in {}", project_root.display()))?;
 
         if !status.success() {
             anyhow::bail!("Build failed");

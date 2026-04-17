@@ -47,7 +47,7 @@ impl TemplateEngine {
             "png", "jpg", "jpeg", "gif", "ico", "webp", "svg", "woff", "woff2", "ttf", "eot",
             "otf", "mp3", "mp4", "wav", "avi", "mov", "zip", "tar", "gz", "rar", "7z", "pdf",
             "doc", "docx", "xls", "xlsx", "ppt", "pptx", "exe", "dll", "so", "dylib", "bin",
-            "lock",
+            "lock", "sqlite", "sqlite3", "db",
         ];
 
         path.extension()

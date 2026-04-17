@@ -261,10 +261,20 @@ impl RecipeInstaller {
         if TemplateEngine::is_binary_file(from) {
             std::fs::copy(from, to)?;
         } else {
-            // Process as template
-            let content = std::fs::read_to_string(from)?;
-            let processed = self.interpolate(&content, placeholders)?;
-            std::fs::write(to, processed)?;
+            // Read as bytes first, then check if valid UTF-8
+            let bytes = std::fs::read(from)?;
+            match std::str::from_utf8(&bytes) {
+                Ok(content) => {
+                    // Process as template
+                    let processed = self.interpolate(content, placeholders)?;
+                    std::fs::write(to, processed)?;
+                }
+                Err(_) => {
+                    // Not valid UTF-8 — treat as binary, copy as-is
+                    tracing::debug!("Binary content detected (not UTF-8), copying as-is: {}", from.display());
+                    std::fs::write(to, bytes)?;
+                }
+            }
         }
 
         // Preserve executable permission
