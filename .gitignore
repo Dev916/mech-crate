@@ -1,4 +1,5 @@
 CODING_RULES.md
+.worktrees/
 .cursor/config.json
 reference/
 test-*
