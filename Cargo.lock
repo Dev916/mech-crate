@@ -1028,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "mx-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1049,7 +1049,7 @@ dependencies = [
 
 [[package]]
 name = "mx-lib"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "mx-mcp-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",

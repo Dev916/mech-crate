@@ -4,7 +4,6 @@
 
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use walkdir::WalkDir;
 
@@ -162,11 +161,14 @@ impl Router {
             return false;
         }
 
-        let output = Command::new("docker")
-            .args(["compose", "-f"])
-            .arg(self.install_dir().join("docker-compose.yml"))
-            .args(["ps", "-q"])
-            .output();
+        // Important: we must query the same compose *project* name we use for `up`/`down`.
+        // Otherwise `docker compose ps` may look at a different project (derived from CWD),
+        // and incorrectly report the router as stopped even when it's running.
+        let compose = Compose::new(self.install_dir())
+            .with_file("docker-compose.yml")
+            .with_project_name("mx-router");
+
+        let output = compose.run(&["ps", "-q"]);
 
         output
             .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
