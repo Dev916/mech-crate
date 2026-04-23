@@ -132,7 +132,7 @@ mx router status
 **Output:**
 ```
 NAME         IMAGE          STATUS         PORTS
-mx-router    traefik:v3.0   Up 2 hours     0.0.0.0:80->80/tcp, ...
+mx-router    traefik:v3.6.1   Up 2 hours     0.0.0.0:80->80/tcp, ...
 ```
 
 ### `mx router logs`

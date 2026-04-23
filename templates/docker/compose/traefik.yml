@@ -3,7 +3,7 @@
 
 services:
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.6.1
     container_name: traefik
     command:
       - --api.dashboard=true
@@ -18,7 +18,7 @@ services:
       - "443:443"
       - "8080:8080"  # Dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:rw
     networks:
       - traefik
     restart: unless-stopped
