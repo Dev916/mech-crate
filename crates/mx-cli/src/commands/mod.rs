@@ -2,6 +2,7 @@
 
 pub mod add;
 pub mod build;
+pub mod cc_plugin;
 pub mod dev;
 pub mod docs;
 pub mod doctor;
