@@ -10,19 +10,10 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 mod commands;
 
 use commands::{
-    add::AddCommand,
-    build::BuildCommand,
-    dev::DevCommand,
-    docs::DocsCommand,
-    doctor::DoctorCommand,
-    infra::InfraCommand,
-    init::InitCommand,
-    mcp::McpCommand,
-    new::NewCommand,
-    recipes::RecipesCommand,
-    router::RouterCommand,
-    self_update::SelfUpdateCommand,
-    unyform::UnyformCommand,
+    add::AddCommand, build::BuildCommand, cc_plugin::CcPluginCommand, dev::DevCommand,
+    docs::DocsCommand, doctor::DoctorCommand, infra::InfraCommand, init::InitCommand,
+    mcp::McpCommand, new::NewCommand, recipes::RecipesCommand, router::RouterCommand,
+    self_update::SelfUpdateCommand, unyform::UnyformCommand,
 };
 
 /// MechCrate CLI - Project scaffolding and infrastructure automation
@@ -95,6 +86,10 @@ enum Commands {
     /// Unyform integration
     Unyform(UnyformCommand),
 
+    /// Manage the Unyform Claude Code plugin (install / uninstall hooks)
+    #[command(name = "cc-plugin")]
+    CcPlugin(CcPluginCommand),
+
     /// Login to Unyform
     Login(commands::unyform::LoginCommand),
 
@@ -154,6 +149,7 @@ async fn main() -> Result<()> {
         Commands::Mcp(cmd) => cmd.run().await,
         Commands::Doctor(cmd) => cmd.run().await,
         Commands::Unyform(cmd) => cmd.run().await,
+        Commands::CcPlugin(cmd) => cmd.run().await,
         Commands::Login(cmd) => cmd.run().await,
         Commands::Logout(cmd) => cmd.run().await,
         Commands::Whoami(cmd) => cmd.run().await,

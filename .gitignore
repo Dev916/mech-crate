@@ -5,6 +5,7 @@ reference/
 test-*
 workbench/
 target/
+dist/
 node_modules/
 vendor/
 .cursor/
