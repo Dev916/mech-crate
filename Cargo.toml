@@ -70,6 +70,9 @@ dirs = "5.0"
 # Regex
 regex = "1.10"
 
+# HTTP mocking for tests
+wiremock = "0.6"
+
 [profile.release]
 lto = true
 codegen-units = 1

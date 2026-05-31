@@ -46,6 +46,14 @@ dirs = { workspace = true }
 # Directory walking
 walkdir = "2.5"
 
+# HTTP client (used by cc-plugin session handler)
+reqwest = { workspace = true }
+
+[dev-dependencies]
+# HTTP mocking for cc-plugin session integration tests
+wiremock = { workspace = true }
+tokio = { workspace = true }
+
 [[bin]]
 name = "mx"
 path = "src/main.rs"
