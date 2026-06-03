@@ -1,12 +1,23 @@
-//! `mx cc-plugin` — install / uninstall / status of Unyform's Claude Code hooks.
+//! `mx cc-plugin` — the Unyform Claude Code local plugin (see
+//! `docs/unyform/CC_LOCAL_PLUGIN_DESIGN.md`).
 //!
-//! Phase 1 of the CC local-plugin (see `docs/unyform/CC_LOCAL_PLUGIN_DESIGN.md`).
-//! This subcommand writes hook entries into the user's `~/.claude/settings.json`
-//! so CC will call back into `mx cc-plugin <handler>` at the right lifecycle
-//! moments (SessionStart, Stop). The hook handlers themselves are stubbed in
-//! Phase 1 — they exit successfully and print a TODO note. Phase 2 wires
-//! blueprint resolution against the unyform.ai SaaS; Phase 3 wires audit
-//! ingest.
+//! `install`/`uninstall`/`status` manage hook entries in the user's
+//! `~/.claude/settings.json` so CC calls back into `mx cc-plugin <handler>` at
+//! the right lifecycle moments, plus a `cc-plugin.json` auth config holding the
+//! gateway API key.
+//!
+//! Hook handlers (called by CC, not humans):
+//!   * **SessionStart → `session`** (Phase 2): resolves blueprints from the
+//!     Unyform SaaS `/v1/cc/session`, prints a `<system-reminder>` block to
+//!     stdout for CC to inject, and records the injected blueprint IDs to a
+//!     per-session state file.
+//!   * **Stop → `stop`** (Phase 3b): reads CC's `session_id` from stdin, loads
+//!     that state file, and POSTs the blueprint-injection audit event to
+//!     `/v1/cc/audit` (recorded as a `gateway_usage` row), then removes the
+//!     state file. Token usage from CC's transcript is a later phase.
+//!
+//! Every handler fails soft — on any error it exits 0 and changes nothing, so
+//! a misconfigured or offline gateway never breaks the user's `claude`.
 //!
 //! Design goals for the installer:
 //!   * **Idempotent.** Running `install` twice does not duplicate entries.
@@ -110,9 +121,18 @@ enum CcPluginSubcommand {
         #[arg(long)]
         base_url: Option<String>,
     },
-    /// Stop hook handler — flushes the turn's audit event (stubbed in Phase 1).
+    /// Stop hook handler — reports the finished session's blueprint-injection
+    /// audit event to the Unyform SaaS. Fails soft on any error so it never
+    /// blocks CC shutdown.
     #[command(hide = true)]
-    Stop,
+    Stop {
+        /// Override the cc-plugin config file path (primarily for tests).
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Override the SaaS base URL (primarily for tests).
+        #[arg(long)]
+        base_url: Option<String>,
+    },
 }
 
 impl CcPluginCommand {
@@ -142,7 +162,9 @@ impl CcPluginCommand {
             CcPluginSubcommand::Session { config, base_url } => {
                 session_handler(config.as_deref(), base_url.as_deref()).await
             }
-            CcPluginSubcommand::Stop => stop_handler().await,
+            CcPluginSubcommand::Stop { config, base_url } => {
+                stop_handler(config.as_deref(), base_url.as_deref()).await
+            }
         }
     }
 }
@@ -543,17 +565,125 @@ fn status(settings_path: Option<&Path>, config_path: Option<&Path>) -> Result<()
 
 // ── Hook handlers ───────────────────────────────────────────────────────────
 
+// ── Per-session state (bridges SessionStart → Stop) ─────────────────────────
+//
+// SessionStart and Stop are SEPARATE process invocations, so the blueprint
+// IDs resolved at SessionStart must be persisted somewhere Stop can find them
+// to build the audit event. We write a small JSON file keyed by CC's
+// `session_id` into a `sessions/` dir beside the cc-plugin config. A local
+// file write adds no network latency to the latency-budgeted SessionStart hook
+// (the audit POST itself happens at Stop, which is not latency-sensitive).
+
+/// What SessionStart records so Stop can report it. Kept minimal and reliable
+/// — the blueprint-injection signal (which blueprints reached this session)
+/// plus a start timestamp for duration. Token usage is NOT captured here; it
+/// lives in CC's transcript and is deferred to a later phase.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SessionState {
+    blueprint_ids: Vec<String>,
+    blueprint_tokens: u64,
+    base_url: String,
+    started_at_unix: u64,
+}
+
+/// What `fetch_session` extracts from a `/v1/cc/session` response: the block to
+/// print AND the structured signal needed for the later audit event.
+#[derive(Debug, Default)]
+pub(crate) struct SessionResult {
+    pub(crate) block: String,
+    pub(crate) blueprint_ids: Vec<String>,
+    pub(crate) blueprint_tokens: u64,
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Read CC's hook payload from stdin. CC writes `{session_id, transcript_path,
+/// cwd, ...}` as one JSON line then closes stdin. Returns None when stdin is a
+/// TTY (manual invocation — don't block waiting for a human to type) or the
+/// payload is absent/unparseable. Always best-effort: a missing payload just
+/// means no session correlation, never an error.
+fn read_hook_stdin() -> Option<Value> {
+    use std::io::{IsTerminal, Read};
+    if std::io::stdin().is_terminal() {
+        return None;
+    }
+    let mut buf = String::new();
+    std::io::stdin().read_to_string(&mut buf).ok()?;
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    serde_json::from_str(trimmed).ok()
+}
+
+/// Pull `session_id` from a hook payload, sanitized to a filesystem-safe slug
+/// so a malformed/hostile value can't escape the sessions dir via path
+/// traversal. CC session ids are UUIDs (alphanumeric + dash); anything else is
+/// dropped to `_`.
+fn session_id_from_hook(payload: &Value) -> Option<String> {
+    let raw = payload.get("session_id").and_then(|v| v.as_str())?;
+    if raw.is_empty() {
+        return None;
+    }
+    let safe: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(128)
+        .collect();
+    Some(safe)
+}
+
+/// Path to the per-session state file: a `sessions/` dir beside the cc-plugin
+/// config (so it inherits the same parent and cleanup story).
+fn session_state_path(config_path: &Path, session_id: &str) -> PathBuf {
+    let dir = config_path
+        .parent()
+        .map(|p| p.join("sessions"))
+        .unwrap_or_else(|| PathBuf::from("sessions"));
+    dir.join(format!("{session_id}.json"))
+}
+
+fn write_session_state(path: &Path, state: &SessionState) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create sessions dir: {}", parent.display()))?;
+    }
+    let raw = serde_json::to_string(state)?;
+    fs::write(path, raw).with_context(|| format!("write session state: {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
 /// SessionStart hook handler. Reads the cc-plugin auth config, calls
-/// `/v1/cc/session` on the configured SaaS host, and prints the returned
-/// `system_reminder_block` to stdout for CC to inject into the session
-/// preamble. Fails soft on every error path (missing config, network blip,
-/// non-2xx response, malformed JSON) — CC's hook contract is that anything
-/// the SessionStart command writes to stdout is injected verbatim, so when
-/// we fail we simply write nothing and exit 0, leaving the session unchanged.
+/// `/v1/cc/session` on the configured SaaS host, prints the returned
+/// `system_reminder_block` to stdout for CC to inject, AND (when CC supplied a
+/// session_id on stdin) records the injected blueprint IDs to a per-session
+/// state file so the Stop hook can report them. Fails soft on every error
+/// path — CC's hook contract is that anything the SessionStart command writes
+/// to stdout is injected verbatim, so on failure we write nothing and exit 0.
 async fn session_handler(
     config_path_override: Option<&Path>,
     base_url_override: Option<&str>,
 ) -> Result<()> {
+    // Read CC's hook payload first (cheap, local) so a session_id is available
+    // to correlate the later audit even if the network fetch is slow.
+    let session_id = read_hook_stdin().as_ref().and_then(session_id_from_hook);
+
     let cfg_path = match resolve_config_path(config_path_override) {
         Ok(p) => p,
         Err(e) => {
@@ -575,16 +705,27 @@ async fn session_handler(
         .map(str::to_string)
         .unwrap_or(cfg.base_url);
 
-    match fetch_session_block(&base_url, &cfg.api_key).await {
-        Ok(block) if block.is_empty() => {
-            // Gateway has no attached blueprints — say nothing on stdout so
-            // CC doesn't get an empty system-reminder taking up context.
-        }
-        Ok(block) => {
-            // CC injects SessionStart hook stdout into the session preamble
-            // verbatim. Use `print!` (not `println!`) so the SaaS-supplied
-            // newline framing is honored exactly.
-            print!("{block}");
+    match fetch_session(&base_url, &cfg.api_key).await {
+        Ok(result) => {
+            if !result.block.is_empty() {
+                // CC injects SessionStart hook stdout into the session preamble
+                // verbatim. `print!` (not `println!`) honors the SaaS framing.
+                print!("{}", result.block);
+            }
+            // Record the injection signal so Stop can audit it. Only when CC
+            // gave us a session_id AND something was actually injected.
+            if let (Some(sid), false) = (&session_id, result.blueprint_ids.is_empty()) {
+                let state = SessionState {
+                    blueprint_ids: result.blueprint_ids,
+                    blueprint_tokens: result.blueprint_tokens,
+                    base_url,
+                    started_at_unix: unix_now(),
+                };
+                let state_path = session_state_path(&cfg_path, sid);
+                if let Err(e) = write_session_state(&state_path, &state) {
+                    eprintln!("mx cc-plugin session: could not record session state: {e}");
+                }
+            }
         }
         Err(e) => {
             eprintln!("mx cc-plugin session: {e} — skipping blueprint injection");
@@ -593,13 +734,12 @@ async fn session_handler(
     Ok(())
 }
 
-/// Make the POST and pull out `system_reminder_block`. Kept separate from
-/// `session_handler` so tests can drive it directly against a wiremock
-/// stand-in without spawning the full CLI process.
-pub(crate) async fn fetch_session_block(
+/// POST `/v1/cc/session` and parse the block + blueprint signal. Kept separate
+/// from `session_handler` so tests can drive it against a wiremock stand-in.
+pub(crate) async fn fetch_session(
     base_url: &str,
     api_key: &str,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<SessionResult, String> {
     let url = format!("{}/v1/cc/session", base_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         // Tight timeout because CC blocks on the SessionStart hook — a slow
@@ -624,11 +764,23 @@ pub(crate) async fn fetch_session_block(
         return Err(format!("HTTP {status} from {url}: {preview}"));
     }
     #[derive(serde::Deserialize)]
+    struct Bp {
+        id: String,
+    }
+    #[derive(serde::Deserialize)]
     struct R {
         system_reminder_block: String,
+        #[serde(default)]
+        blueprints: Vec<Bp>,
+        #[serde(default)]
+        estimated_tokens_total: u64,
     }
     let parsed: R = resp.json().await.map_err(|e| format!("parse JSON: {e}"))?;
-    Ok(parsed.system_reminder_block)
+    Ok(SessionResult {
+        block: parsed.system_reminder_block,
+        blueprint_ids: parsed.blueprints.into_iter().map(|b| b.id).collect(),
+        blueprint_tokens: parsed.estimated_tokens_total,
+    })
 }
 
 /// Truncate an API key for display in `status` output. Shows the prefix and
@@ -650,11 +802,121 @@ fn redact_api_key(key: &str) -> String {
     format!("{prefix}…{suffix}")
 }
 
-async fn stop_handler() -> Result<()> {
-    // Phase 1: stubbed. Phase 3 will POST the turn's audit event (model,
-    // input/output tokens, blueprint IDs, policy outcomes) to the
-    // /api/v1/cc/audit endpoint and rollup usage to /api/v1/cc/usage.
-    eprintln!("mx cc-plugin stop: stubbed in Phase 1 (no audit flush yet)");
+fn read_session_state(path: &Path) -> Option<SessionState> {
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// Stop hook handler. Reads CC's `session_id` from stdin, loads the per-session
+/// state SessionStart wrote, and POSTs the blueprint-injection audit event to
+/// `/v1/cc/audit`. The state file is the only link between the two hook
+/// invocations — without it (manual run, no injection, or already-audited)
+/// there's nothing to report and we exit quietly. Fails soft on every path so
+/// it never blocks CC shutdown. The state file is always removed afterward to
+/// keep the sessions dir from growing unbounded (audit is best-effort
+/// telemetry; there is no retry).
+async fn stop_handler(
+    config_path_override: Option<&Path>,
+    base_url_override: Option<&str>,
+) -> Result<()> {
+    let session_id = match read_hook_stdin().as_ref().and_then(session_id_from_hook) {
+        Some(s) => s,
+        None => {
+            // Manual invocation or no payload — nothing to correlate.
+            return Ok(());
+        }
+    };
+
+    let cfg_path = match resolve_config_path(config_path_override) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("mx cc-plugin stop: cannot resolve config path: {e}");
+            return Ok(());
+        }
+    };
+    let cfg = match load_cc_plugin_config(&cfg_path) {
+        Ok(c) => c,
+        Err(_) => {
+            // No auth config — the session handler would also have skipped, so
+            // there's no state file either. Nothing to do.
+            return Ok(());
+        }
+    };
+
+    let state_path = session_state_path(&cfg_path, &session_id);
+    let state = match read_session_state(&state_path) {
+        Some(s) => s,
+        None => {
+            // No state → SessionStart injected nothing (or already audited).
+            return Ok(());
+        }
+    };
+
+    let base_url = base_url_override.map(str::to_string).unwrap_or_else(|| {
+        if state.base_url.is_empty() {
+            cfg.base_url.clone()
+        } else {
+            state.base_url.clone()
+        }
+    });
+    let duration_ms = unix_now()
+        .saturating_sub(state.started_at_unix)
+        .saturating_mul(1000);
+
+    if let Err(e) = post_audit(
+        &base_url,
+        &cfg.api_key,
+        &state.blueprint_ids,
+        state.blueprint_tokens,
+        duration_ms,
+    )
+    .await
+    {
+        eprintln!("mx cc-plugin stop: audit POST failed: {e}");
+    }
+
+    // Consume the state file regardless of POST outcome (no retry mechanism;
+    // leaving it would leak one file per session).
+    let _ = fs::remove_file(&state_path);
+    Ok(())
+}
+
+/// POST a blueprint-injection audit event to `/v1/cc/audit`. Token usage and
+/// model are omitted (deferred to a later phase that parses CC's transcript);
+/// the endpoint fills `model` with its `cc-plugin` fallback and leaves token
+/// counts at 0. Runs at Stop, which is not latency-sensitive, so a slightly
+/// looser 5s timeout than the SessionStart fetch is fine.
+pub(crate) async fn post_audit(
+    base_url: &str,
+    api_key: &str,
+    blueprint_ids: &[String],
+    blueprint_tokens: u64,
+    duration_ms: u64,
+) -> std::result::Result<(), String> {
+    let url = format!("{}/v1/cc/audit", base_url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build HTTP client: {e}"))?;
+    let body = serde_json::json!({
+        "blueprint_ids": blueprint_ids,
+        "blueprint_tokens": blueprint_tokens,
+        "duration_ms": duration_ms,
+    });
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("POST {url}: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        let preview = text.chars().take(200).collect::<String>();
+        return Err(format!("HTTP {status} from {url}: {preview}"));
+    }
     Ok(())
 }
 
@@ -1040,37 +1302,49 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
-    // ── fetch_session_block integration (wiremock) ────────────────────────
+    // ── fetch_session integration (wiremock) ──────────────────────────────
 
-    use wiremock::matchers::{header, method, path as wpath};
+    use wiremock::matchers::{body_partial_json, header, method, path as wpath};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
-    async fn fetch_session_block_pulls_system_reminder_from_200_response() {
+    async fn fetch_session_pulls_block_and_blueprint_signal_from_200() {
         let mock = MockServer::start().await;
         Mock::given(method("POST"))
             .and(wpath("/v1/cc/session"))
             .and(header("Authorization", "Bearer uny_gw_test_key"))
             .and(header("Content-Type", "application/json"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "blueprints": [{"id": "00000000-0000-0000-0000-000000000001","name":"x","text":"y","estimated_tokens":1}],
-                "estimated_tokens_total": 1,
+                "blueprints": [
+                    {"id": "00000000-0000-0000-0000-000000000001","name":"x","text":"y","estimated_tokens":1},
+                    {"id": "00000000-0000-0000-0000-000000000002","name":"z","text":"w","estimated_tokens":2}
+                ],
+                "estimated_tokens_total": 3,
                 "system_reminder_block": "<system-reminder>\nhello world\n</system-reminder>\n"
             })))
             .mount(&mock)
             .await;
 
-        let block = fetch_session_block(&mock.uri(), "uny_gw_test_key")
+        let result = fetch_session(&mock.uri(), "uny_gw_test_key")
             .await
-            .expect("fetch_session_block must succeed against the mock");
+            .expect("fetch_session must succeed against the mock");
         assert_eq!(
-            block, "<system-reminder>\nhello world\n</system-reminder>\n",
+            result.block, "<system-reminder>\nhello world\n</system-reminder>\n",
             "block returned verbatim — formatting is server-owned, the CLI is a dumb pipe"
         );
+        assert_eq!(
+            result.blueprint_ids,
+            vec![
+                "00000000-0000-0000-0000-000000000001".to_string(),
+                "00000000-0000-0000-0000-000000000002".to_string()
+            ],
+            "blueprint ids parsed for the later audit event"
+        );
+        assert_eq!(result.blueprint_tokens, 3);
     }
 
     #[tokio::test]
-    async fn fetch_session_block_returns_err_on_non_2xx() {
+    async fn fetch_session_returns_err_on_non_2xx() {
         // 401 (auth fail) is the canonical case — SessionStart handler will
         // surface this on stderr and exit 0, leaving CC's session unaffected.
         let mock = MockServer::start().await;
@@ -1082,22 +1356,13 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let res = fetch_session_block(&mock.uri(), "uny_gw_bad").await;
+        let res = fetch_session(&mock.uri(), "uny_gw_bad").await;
         assert!(res.is_err(), "401 must surface as Err");
-        let err = res.unwrap_err();
-        assert!(
-            err.contains("401"),
-            "error string should reference the status code: {}",
-            err
-        );
+        assert!(res.unwrap_err().contains("401"));
     }
 
     #[tokio::test]
-    async fn fetch_session_block_strips_trailing_slash_from_base_url() {
-        // Users who configure UNYFORM_BASE_URL with a trailing slash should
-        // not get a `//v1/cc/session` URL. The wiremock matcher would not
-        // match such a request, so this test fails on regressions in the
-        // URL normalisation.
+    async fn fetch_session_strips_trailing_slash_from_base_url() {
         let mock = MockServer::start().await;
         Mock::given(method("POST"))
             .and(wpath("/v1/cc/session"))
@@ -1109,18 +1374,17 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let url_with_slash = format!("{}/", mock.uri());
-        let block = fetch_session_block(&url_with_slash, "uny_gw_test")
+        let result = fetch_session(&format!("{}/", mock.uri()), "uny_gw_test")
             .await
             .expect("trailing slash must be normalised");
-        assert_eq!(block, "");
+        assert_eq!(result.block, "");
+        assert!(result.blueprint_ids.is_empty());
     }
 
     #[tokio::test]
     async fn session_handler_writes_nothing_to_stdout_when_config_missing() {
         // Fail-soft contract: missing config → exit 0, no stdout output, just
-        // a stderr breadcrumb. Hard to assert "nothing on stdout" without
-        // capturing stdout, so we exercise the path and assert it returns Ok.
+        // a stderr breadcrumb. We exercise the path and assert it returns Ok.
         let nonexistent = std::env::temp_dir().join(format!(
             "mx-cc-plugin-nonexistent-{}-{}.json",
             std::process::id(),
@@ -1129,9 +1393,189 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        // Sanity: the path must not exist.
         let _ = fs::remove_file(&nonexistent);
         let res = session_handler(Some(&nonexistent), None).await;
         assert!(res.is_ok(), "missing config must NOT propagate as an error");
+    }
+
+    // ── Phase 3b: session state + audit ───────────────────────────────────
+
+    #[test]
+    fn session_id_from_hook_sanitizes_path_traversal() {
+        // A hostile session_id must not let the state file escape the sessions
+        // dir. Non-[alnum-] chars become `_`.
+        let payload = json!({ "session_id": "../../etc/passwd" });
+        let sid = session_id_from_hook(&payload).unwrap();
+        assert!(!sid.contains('/'), "slashes stripped: {sid}");
+        assert!(!sid.contains('.'), "dots stripped: {sid}");
+        // "../../etc/passwd" → the 6 leading `./` chars + the inner `/` become `_`.
+        assert_eq!(sid, "______etc_passwd");
+    }
+
+    #[test]
+    fn session_id_from_hook_passes_uuid_through_and_rejects_empty() {
+        let uuid = "07eb4652-c7f7-4b1a-82d0-e17ab627ef6d";
+        assert_eq!(
+            session_id_from_hook(&json!({ "session_id": uuid })).as_deref(),
+            Some(uuid)
+        );
+        assert_eq!(session_id_from_hook(&json!({ "session_id": "" })), None);
+        assert_eq!(session_id_from_hook(&json!({})), None);
+    }
+
+    #[test]
+    fn session_state_path_is_under_a_sessions_dir_beside_config() {
+        let cfg = PathBuf::from("/home/u/.config/unyform/cc-plugin.json");
+        let p = session_state_path(&cfg, "abc-123");
+        assert_eq!(
+            p,
+            PathBuf::from("/home/u/.config/unyform/sessions/abc-123.json")
+        );
+    }
+
+    #[test]
+    fn write_then_read_session_state_round_trips() {
+        let path = temp_config_path();
+        let _ = fs::remove_file(&path);
+        let state = SessionState {
+            blueprint_ids: vec!["a".into(), "b".into()],
+            blueprint_tokens: 1514,
+            base_url: "https://gateway.unyform.ai".into(),
+            started_at_unix: 1_700_000_000,
+        };
+        write_session_state(&path, &state).unwrap();
+        let read = read_session_state(&path).expect("state reads back");
+        assert_eq!(read.blueprint_ids, state.blueprint_ids);
+        assert_eq!(read.blueprint_tokens, 1514);
+        assert_eq!(read.started_at_unix, 1_700_000_000);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn post_audit_sends_blueprint_signal_and_succeeds_on_200() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(wpath("/v1/cc/audit"))
+            .and(header("Authorization", "Bearer uny_gw_k"))
+            .and(body_partial_json(json!({
+                "blueprint_ids": ["a", "b"],
+                "blueprint_tokens": 1514,
+                "duration_ms": 4200
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "recorded": true })))
+            .mount(&mock)
+            .await;
+
+        post_audit(
+            &mock.uri(),
+            "uny_gw_k",
+            &["a".to_string(), "b".to_string()],
+            1514,
+            4200,
+        )
+        .await
+        .expect("post_audit must succeed when the body matches and server 200s");
+    }
+
+    #[tokio::test]
+    async fn post_audit_returns_err_on_non_2xx() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(wpath("/v1/cc/audit"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&mock)
+            .await;
+        let res = post_audit(&mock.uri(), "uny_gw_bad", &[], 0, 0).await;
+        assert!(res.is_err(), "401 must surface as Err");
+        assert!(res.unwrap_err().contains("401"));
+    }
+
+    #[tokio::test]
+    async fn stop_handler_posts_audit_from_state_then_removes_it() {
+        // End-to-end of the Stop path WITHOUT real stdin: we seed config +
+        // state file, point a wiremock at /v1/cc/audit, and call the
+        // post-audit + cleanup logic the handler runs once it has a session.
+        let cfg_path = temp_config_path();
+        let _ = fs::remove_file(&cfg_path);
+        save_cc_plugin_config(
+            &cfg_path,
+            &CcPluginConfig {
+                api_key: "uny_gw_stop_key".into(),
+                base_url: "http://unused".into(),
+            },
+        )
+        .unwrap();
+
+        let session_id = "sess-stop-test";
+        let state_path = session_state_path(&cfg_path, session_id);
+        write_session_state(
+            &state_path,
+            &SessionState {
+                blueprint_ids: vec!["bp1".into()],
+                blueprint_tokens: 42,
+                base_url: "http://will-be-overridden".into(),
+                started_at_unix: unix_now().saturating_sub(3),
+            },
+        )
+        .unwrap();
+        assert!(state_path.exists(), "precondition: state file written");
+
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(wpath("/v1/cc/audit"))
+            .and(header("Authorization", "Bearer uny_gw_stop_key"))
+            .and(body_partial_json(json!({
+                "blueprint_ids": ["bp1"],
+                "blueprint_tokens": 42
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "recorded": true })))
+            .mount(&mock)
+            .await;
+
+        // Drive the same steps stop_handler runs after resolving session_id:
+        // load state, POST, remove state file.
+        let state = read_session_state(&state_path).unwrap();
+        let duration_ms = unix_now()
+            .saturating_sub(state.started_at_unix)
+            .saturating_mul(1000);
+        post_audit(
+            &mock.uri(),
+            "uny_gw_stop_key",
+            &state.blueprint_ids,
+            state.blueprint_tokens,
+            duration_ms,
+        )
+        .await
+        .expect("audit POST succeeds");
+        let _ = fs::remove_file(&state_path);
+        assert!(
+            !state_path.exists(),
+            "state file consumed after audit so the sessions dir doesn't grow"
+        );
+
+        let _ = fs::remove_file(&cfg_path);
+    }
+
+    #[tokio::test]
+    async fn stop_handler_is_noop_without_session_or_state() {
+        // No stdin payload (test harness stdin isn't a hook payload) → handler
+        // must return Ok without touching the network. Config exists but there
+        // is no session_id, so it exits early.
+        let cfg_path = temp_config_path();
+        let _ = fs::remove_file(&cfg_path);
+        save_cc_plugin_config(
+            &cfg_path,
+            &CcPluginConfig {
+                api_key: "uny_gw_k".into(),
+                base_url: "http://unused".into(),
+            },
+        )
+        .unwrap();
+        let res = stop_handler(Some(&cfg_path), None).await;
+        assert!(
+            res.is_ok(),
+            "stop must fail soft when there's nothing to audit"
+        );
+        let _ = fs::remove_file(&cfg_path);
     }
 }
