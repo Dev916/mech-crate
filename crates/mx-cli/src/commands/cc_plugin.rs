@@ -807,19 +807,91 @@ fn read_session_state(path: &Path) -> Option<SessionState> {
     serde_json::from_str(&raw).ok()
 }
 
-/// Stop hook handler. Reads CC's `session_id` from stdin, loads the per-session
-/// state SessionStart wrote, and POSTs the blueprint-injection audit event to
-/// `/v1/cc/audit`. The state file is the only link between the two hook
-/// invocations — without it (manual run, no injection, or already-audited)
-/// there's nothing to report and we exit quietly. Fails soft on every path so
-/// it never blocks CC shutdown. The state file is always removed afterward to
-/// keep the sessions dir from growing unbounded (audit is best-effort
-/// telemetry; there is no retry).
+/// Token usage + model parsed from CC's session transcript.
+#[derive(Debug, Default)]
+struct TranscriptUsage {
+    /// The session's model (last assistant turn — a session uses one primary
+    /// model). None when no assistant turn carried a model.
+    model: Option<String>,
+    /// Sum over all assistant turns of `input_tokens + cache_creation_input_tokens`
+    /// — the NEW input tokens the model processed this session. `cache_read` is
+    /// deliberately EXCLUDED: it re-reads the same cached prefix every turn, so
+    /// summing it multiplies one context by the turn count (verified on a real
+    /// 627-turn transcript: including cache_read inflates ~12M → ~294M).
+    /// Excluding it gives a sane "new input" figure comparable in scale to
+    /// completion_tokens.
+    prompt_tokens: u64,
+    /// Sum of output_tokens across all assistant turns.
+    completion_tokens: u64,
+}
+
+/// Parse CC's session transcript (JSONL) for token usage + model. Best-effort:
+/// an unreadable / missing / garbled transcript yields zeroes + no model, which
+/// the audit endpoint backfills with its `cc-plugin` / 0 defaults. Each
+/// assistant line looks like `{type:"assistant", message:{model, usage:{
+/// input_tokens, cache_creation_input_tokens, cache_read_input_tokens,
+/// output_tokens}}}`. prompt_tokens sums input + cache_creation (the new
+/// tokens), EXCLUDING cache_read (re-reads of already-counted context — see
+/// the `TranscriptUsage::prompt_tokens` note); the model is the last turn's.
+fn parse_transcript_usage(path: &Path) -> TranscriptUsage {
+    let mut out = TranscriptUsage::default();
+    let Ok(content) = fs::read_to_string(path) else {
+        return out;
+    };
+    for line in content.lines() {
+        let Ok(rec) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if rec.get("type").and_then(|v| v.as_str()) != Some("assistant") {
+            continue;
+        }
+        let Some(msg) = rec.get("message") else {
+            continue;
+        };
+        if let Some(m) = msg.get("model").and_then(|v| v.as_str()) {
+            if !m.is_empty() {
+                out.model = Some(m.to_string());
+            }
+        }
+        if let Some(u) = msg.get("usage") {
+            let g = |k: &str| u.get(k).and_then(|v| v.as_u64()).unwrap_or(0);
+            // NEW input tokens only — cache_read excluded (see field doc).
+            out.prompt_tokens = out
+                .prompt_tokens
+                .saturating_add(g("input_tokens").saturating_add(g("cache_creation_input_tokens")));
+            out.completion_tokens = out.completion_tokens.saturating_add(g("output_tokens"));
+        }
+    }
+    out
+}
+
+/// One audit event for the `/v1/cc/audit` POST. `model` + token counts are
+/// `None`/0 when the transcript couldn't be parsed (the endpoint backfills the
+/// `cc-plugin` model and leaves counts at 0).
+#[derive(Debug, Default)]
+pub(crate) struct AuditEvent {
+    pub(crate) model: Option<String>,
+    pub(crate) prompt_tokens: u64,
+    pub(crate) completion_tokens: u64,
+    pub(crate) blueprint_ids: Vec<String>,
+    pub(crate) blueprint_tokens: u64,
+    pub(crate) duration_ms: u64,
+}
+
+/// Stop hook handler. Reads CC's `{session_id, transcript_path}` from stdin,
+/// loads the per-session state SessionStart wrote, parses the transcript for
+/// real token usage + model, and POSTs the audit event to `/v1/cc/audit`. The
+/// state file is the only link between the two hook invocations — without it
+/// (manual run, no injection, or already-audited) there's nothing to report and
+/// we exit quietly. Fails soft on every path so it never blocks CC shutdown.
+/// The state file is always removed afterward to keep the sessions dir from
+/// growing unbounded (audit is best-effort telemetry; there is no retry).
 async fn stop_handler(
     config_path_override: Option<&Path>,
     base_url_override: Option<&str>,
 ) -> Result<()> {
-    let session_id = match read_hook_stdin().as_ref().and_then(session_id_from_hook) {
+    let payload = read_hook_stdin();
+    let session_id = match payload.as_ref().and_then(session_id_from_hook) {
         Some(s) => s,
         None => {
             // Manual invocation or no payload — nothing to correlate.
@@ -863,15 +935,24 @@ async fn stop_handler(
         .saturating_sub(state.started_at_unix)
         .saturating_mul(1000);
 
-    if let Err(e) = post_audit(
-        &base_url,
-        &cfg.api_key,
-        &state.blueprint_ids,
-        state.blueprint_tokens,
+    // Best-effort token usage + model from CC's transcript (Phase 3c).
+    let usage = payload
+        .as_ref()
+        .and_then(|p| p.get("transcript_path"))
+        .and_then(|v| v.as_str())
+        .map(|p| parse_transcript_usage(Path::new(p)))
+        .unwrap_or_default();
+
+    let event = AuditEvent {
+        model: usage.model,
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        blueprint_ids: state.blueprint_ids,
+        blueprint_tokens: state.blueprint_tokens,
         duration_ms,
-    )
-    .await
-    {
+    };
+
+    if let Err(e) = post_audit(&base_url, &cfg.api_key, &event).await {
         eprintln!("mx cc-plugin stop: audit POST failed: {e}");
     }
 
@@ -881,17 +962,14 @@ async fn stop_handler(
     Ok(())
 }
 
-/// POST a blueprint-injection audit event to `/v1/cc/audit`. Token usage and
-/// model are omitted (deferred to a later phase that parses CC's transcript);
-/// the endpoint fills `model` with its `cc-plugin` fallback and leaves token
-/// counts at 0. Runs at Stop, which is not latency-sensitive, so a slightly
-/// looser 5s timeout than the SessionStart fetch is fine.
+/// POST an audit event to `/v1/cc/audit`. Runs at Stop, which is not
+/// latency-sensitive, so a slightly looser 5s timeout than the SessionStart
+/// fetch is fine. `model` is sent as null when unknown; the endpoint fills its
+/// `cc-plugin` fallback.
 pub(crate) async fn post_audit(
     base_url: &str,
     api_key: &str,
-    blueprint_ids: &[String],
-    blueprint_tokens: u64,
-    duration_ms: u64,
+    event: &AuditEvent,
 ) -> std::result::Result<(), String> {
     let url = format!("{}/v1/cc/audit", base_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
@@ -899,9 +977,12 @@ pub(crate) async fn post_audit(
         .build()
         .map_err(|e| format!("build HTTP client: {e}"))?;
     let body = serde_json::json!({
-        "blueprint_ids": blueprint_ids,
-        "blueprint_tokens": blueprint_tokens,
-        "duration_ms": duration_ms,
+        "model": event.model,
+        "prompt_tokens": event.prompt_tokens,
+        "completion_tokens": event.completion_tokens,
+        "blueprint_ids": event.blueprint_ids,
+        "blueprint_tokens": event.blueprint_tokens,
+        "duration_ms": event.duration_ms,
     });
     let resp = client
         .post(&url)
@@ -1451,6 +1532,55 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
+    #[test]
+    fn parse_transcript_usage_sums_tokens_and_takes_last_model() {
+        // Mirror CC's real transcript JSONL: assistant lines carry
+        // message.{model, usage}; user/other lines are skipped. Two assistant
+        // turns + one user line + one garbage line (must be tolerated).
+        let path = temp_config_path();
+        let _ = fs::remove_file(&path);
+        let jsonl = [
+            json!({"type":"user","message":{"role":"user","content":"hi"}}).to_string(),
+            json!({"type":"assistant","message":{"model":"claude-sonnet-4-5","usage":{
+                "input_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000,"output_tokens":50
+            }}}).to_string(),
+            "not json at all".to_string(),
+            json!({"type":"assistant","message":{"model":"claude-opus-4-7","usage":{
+                "input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":2000,"output_tokens":300
+            }}}).to_string(),
+        ]
+        .join("\n");
+        fs::write(&path, jsonl).unwrap();
+
+        let usage = parse_transcript_usage(&path);
+        // prompt = (10+100) + (5+0) = 115 — input + cache_creation; cache_read
+        // (1000, 2000) EXCLUDED to avoid the multiplicative re-read inflation.
+        assert_eq!(
+            usage.prompt_tokens, 115,
+            "sums input + cache_creation across turns, excluding cache_read"
+        );
+        // completion = 50 + 300
+        assert_eq!(usage.completion_tokens, 350);
+        // last assistant turn's model wins
+        assert_eq!(usage.model.as_deref(), Some("claude-opus-4-7"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn parse_transcript_usage_is_zero_for_missing_or_empty_transcript() {
+        // Missing file → all-zero, no model (the audit endpoint backfills).
+        let missing = std::env::temp_dir().join(format!(
+            "mx-cc-no-transcript-{}-{}.jsonl",
+            std::process::id(),
+            unix_now()
+        ));
+        let _ = fs::remove_file(&missing);
+        let usage = parse_transcript_usage(&missing);
+        assert_eq!(usage.prompt_tokens, 0);
+        assert_eq!(usage.completion_tokens, 0);
+        assert!(usage.model.is_none());
+    }
+
     #[tokio::test]
     async fn post_audit_sends_blueprint_signal_and_succeeds_on_200() {
         let mock = MockServer::start().await;
@@ -1458,6 +1588,9 @@ mod tests {
             .and(wpath("/v1/cc/audit"))
             .and(header("Authorization", "Bearer uny_gw_k"))
             .and(body_partial_json(json!({
+                "model": "claude-opus-4-7",
+                "prompt_tokens": 5000,
+                "completion_tokens": 800,
                 "blueprint_ids": ["a", "b"],
                 "blueprint_tokens": 1514,
                 "duration_ms": 4200
@@ -1466,15 +1599,17 @@ mod tests {
             .mount(&mock)
             .await;
 
-        post_audit(
-            &mock.uri(),
-            "uny_gw_k",
-            &["a".to_string(), "b".to_string()],
-            1514,
-            4200,
-        )
-        .await
-        .expect("post_audit must succeed when the body matches and server 200s");
+        let event = AuditEvent {
+            model: Some("claude-opus-4-7".into()),
+            prompt_tokens: 5000,
+            completion_tokens: 800,
+            blueprint_ids: vec!["a".into(), "b".into()],
+            blueprint_tokens: 1514,
+            duration_ms: 4200,
+        };
+        post_audit(&mock.uri(), "uny_gw_k", &event)
+            .await
+            .expect("post_audit must succeed when the body matches and server 200s");
     }
 
     #[tokio::test]
@@ -1485,7 +1620,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(401))
             .mount(&mock)
             .await;
-        let res = post_audit(&mock.uri(), "uny_gw_bad", &[], 0, 0).await;
+        let res = post_audit(&mock.uri(), "uny_gw_bad", &AuditEvent::default()).await;
         assert!(res.is_err(), "401 must surface as Err");
         assert!(res.unwrap_err().contains("401"));
     }
@@ -1538,15 +1673,15 @@ mod tests {
         let duration_ms = unix_now()
             .saturating_sub(state.started_at_unix)
             .saturating_mul(1000);
-        post_audit(
-            &mock.uri(),
-            "uny_gw_stop_key",
-            &state.blueprint_ids,
-            state.blueprint_tokens,
+        let event = AuditEvent {
+            blueprint_ids: state.blueprint_ids,
+            blueprint_tokens: state.blueprint_tokens,
             duration_ms,
-        )
-        .await
-        .expect("audit POST succeeds");
+            ..Default::default()
+        };
+        post_audit(&mock.uri(), "uny_gw_stop_key", &event)
+            .await
+            .expect("audit POST succeeds");
         let _ = fs::remove_file(&state_path);
         assert!(
             !state_path.exists(),
