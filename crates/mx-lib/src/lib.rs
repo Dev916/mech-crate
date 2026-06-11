@@ -23,8 +23,11 @@ pub mod unyform;
 pub mod upgrade;
 
 pub use config::MechCrateConfig;
-pub use env::{ensure_path, ensure_full_path};
+pub use env::{ensure_full_path, ensure_path};
 pub use error::{Error, Result};
 pub use mcp::McpManager;
-pub use paths::{home_dir, mech_crate_root, templates_dir, recipes_dir, is_initialized, source_templates_dir};
+pub use paths::{
+    home_dir, is_initialized, mech_crate_root, recipes_dir, recorded_source_root, save_source_root,
+    source_templates_dir, templates_dir,
+};
 pub use project::{Project, ProjectDetector};
