@@ -9,6 +9,7 @@
 //! - Unyform API client
 
 pub mod config;
+pub mod corpus;
 pub mod docker;
 pub mod env;
 pub mod error;

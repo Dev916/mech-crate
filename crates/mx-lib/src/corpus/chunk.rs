@@ -1,0 +1,1 @@
+//! Heading-aware markdown chunker.
