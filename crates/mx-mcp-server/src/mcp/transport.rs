@@ -4,6 +4,7 @@
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
 
 use crate::error::{McpError, McpResult};
@@ -20,6 +21,7 @@ pub enum OutgoingMessage {
 /// Stdio transport for MCP communication
 pub struct StdioTransport {
     tx: mpsc::Sender<OutgoingMessage>,
+    writer_handle: JoinHandle<()>,
 }
 
 impl StdioTransport {
@@ -76,7 +78,7 @@ impl StdioTransport {
         });
 
         // Spawn stdout writer task
-        tokio::spawn(async move {
+        let writer_handle = tokio::spawn(async move {
             let mut stdout = tokio::io::stdout();
 
             while let Some(message) = message_rx.recv().await {
@@ -108,7 +110,13 @@ impl StdioTransport {
             }
         });
 
-        (Self { tx: message_tx }, request_rx)
+        (
+            Self {
+                tx: message_tx,
+                writer_handle,
+            },
+            request_rx,
+        )
     }
 
     /// Send a response
@@ -117,6 +125,16 @@ impl StdioTransport {
             .send(OutgoingMessage::Response(response))
             .await
             .map_err(|_| McpError::Protocol("Message channel closed".to_string()))
+    }
+
+    /// Flush and shut down: drop the message sender so the writer task drains
+    /// any remaining queued responses, then wait for it to finish writing to
+    /// stdout. Without this, returning from the server loop lets the runtime
+    /// cancel the writer mid-write and truncate the final response.
+    pub async fn close(self) {
+        let StdioTransport { tx, writer_handle } = self;
+        drop(tx);
+        let _ = writer_handle.await;
     }
 
     /// Send a notification (no response expected)

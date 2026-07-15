@@ -4,26 +4,26 @@
 
 use serde_json::json;
 use std::path::PathBuf;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::error::{error_codes, McpError, McpResult};
 use crate::mcp::protocol::*;
 use crate::mcp::transport::StdioTransport;
 use crate::mx::MxExecutor;
 use crate::project::ProjectDetector;
-use crate::rag::WeaviateClient;
 use crate::tools::ToolRegistry;
+use mx_lib::corpus::{CorpusStore, RagConfig};
 
 /// MCP Server
 pub struct McpServer {
     mech_crate_root: PathBuf,
-    weaviate_url: String,
+    no_rag: bool,
     tools: ToolRegistry,
 }
 
 impl McpServer {
     /// Create a new MCP server
-    pub fn new(weaviate_url: String, mech_crate_root: Option<String>) -> McpResult<Self> {
+    pub fn new(mech_crate_root: Option<String>, no_rag: bool) -> McpResult<Self> {
         let root = match mech_crate_root {
             Some(path) => PathBuf::from(path),
             None => Self::detect_mech_crate_root()?,
@@ -31,12 +31,10 @@ impl McpServer {
 
         info!("MechCrate root: {:?}", root);
 
-        let tools = ToolRegistry::new();
-
         Ok(Self {
             mech_crate_root: root,
-            weaviate_url,
-            tools,
+            no_rag,
+            tools: ToolRegistry::new(),
         })
     }
 
@@ -45,8 +43,12 @@ impl McpServer {
         // Try common locations
         let candidates = [
             std::env::current_dir().ok(),
-            std::env::var("HOME").ok().map(|h| PathBuf::from(h).join("dev/mech-crate")),
-            std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".mech-crate")),
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join("dev/mech-crate")),
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".mech-crate")),
         ];
 
         for candidate in candidates.into_iter().flatten() {
@@ -74,12 +76,33 @@ impl McpServer {
 
         let mx = MxExecutor::new(self.mech_crate_root.clone());
         let project_detector = ProjectDetector::new();
-        let weaviate = WeaviateClient::new(&self.weaviate_url);
+
+        let corpus: Option<CorpusStore> = if self.no_rag {
+            info!("RAG disabled (--no-rag)");
+            None
+        } else {
+            match CorpusStore::connect(&RagConfig::load()).await {
+                Ok(s) => {
+                    info!(
+                        "Techniques corpus connected ({} backend)",
+                        s.backend().label()
+                    );
+                    Some(s)
+                }
+                Err(e) => {
+                    warn!("Techniques corpus unavailable: {e}. RAG tools will report offline.");
+                    None
+                }
+            }
+        };
 
         info!("MCP Server ready, waiting for requests...");
 
         while let Some(request) = request_rx.recv().await {
-            debug!("Handling request: {} (id: {:?})", request.method, request.id);
+            debug!(
+                "Handling request: {} (id: {:?})",
+                request.method, request.id
+            );
 
             let response = match request.method.as_str() {
                 "initialize" => self.handle_initialize(&request),
@@ -89,7 +112,7 @@ impl McpServer {
                 }
                 "tools/list" => self.handle_tools_list(&request),
                 "tools/call" => {
-                    self.handle_tool_call(&request, &mx, &project_detector, &weaviate)
+                    self.handle_tool_call(&request, &mx, &project_detector, corpus.as_ref())
                         .await
                 }
                 "resources/list" => self.handle_resources_list(&request),
@@ -114,6 +137,7 @@ impl McpServer {
         }
 
         info!("MCP Server shutting down");
+        transport.close().await;
         Ok(())
     }
 
@@ -137,10 +161,7 @@ impl McpServer {
             },
         };
 
-        JsonRpcResponse::success(
-            request.id.clone(),
-            serde_json::to_value(result).unwrap(),
-        )
+        JsonRpcResponse::success(request.id.clone(), serde_json::to_value(result).unwrap())
     }
 
     /// Handle tools/list request
@@ -149,10 +170,7 @@ impl McpServer {
             tools: self.tools.list_all(),
         };
 
-        JsonRpcResponse::success(
-            request.id.clone(),
-            serde_json::to_value(result).unwrap(),
-        )
+        JsonRpcResponse::success(request.id.clone(), serde_json::to_value(result).unwrap())
     }
 
     /// Handle tools/call request
@@ -161,7 +179,7 @@ impl McpServer {
         request: &JsonRpcRequest,
         mx: &MxExecutor,
         project_detector: &ProjectDetector,
-        weaviate: &WeaviateClient,
+        corpus: Option<&CorpusStore>,
     ) -> JsonRpcResponse {
         let params: ToolCallParams = match request.params.as_ref() {
             Some(p) => match serde_json::from_value(p.clone()) {
@@ -185,16 +203,20 @@ impl McpServer {
 
         let result = self
             .tools
-            .execute(&params.name, params.arguments, mx, project_detector, weaviate)
+            .execute(&params.name, params.arguments, mx, project_detector, corpus)
             .await;
 
         match result {
-            Ok(call_result) => {
-                JsonRpcResponse::success(request.id.clone(), serde_json::to_value(call_result).unwrap())
-            }
+            Ok(call_result) => JsonRpcResponse::success(
+                request.id.clone(),
+                serde_json::to_value(call_result).unwrap(),
+            ),
             Err(e) => {
                 let error_result = ToolCallResult::error(e.to_string());
-                JsonRpcResponse::success(request.id.clone(), serde_json::to_value(error_result).unwrap())
+                JsonRpcResponse::success(
+                    request.id.clone(),
+                    serde_json::to_value(error_result).unwrap(),
+                )
             }
         }
     }
@@ -289,7 +311,8 @@ Each recipe provides:
 - System files (supervisor, nginx/haproxy configs)
 - Environment templates
 - Traefik routing labels
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn get_commands_docs(&self) -> String {
@@ -342,7 +365,8 @@ Each recipe provides:
 | `--prod` | Build production-optimized image |
 | `-t <tag>` | Custom image tag |
 | `--push` | Push image after build |
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn get_structure_docs(&self) -> String {
@@ -390,6 +414,7 @@ project-name/
 2. **System Files**: `docker/system/<svc>/` mirrors container filesystem
 3. **Networking**: Services join `devmesh-traefik` network for routing
 4. **Labels**: Traefik labels define hostname routing rules
-"#.to_string()
+"#
+        .to_string()
     }
 }

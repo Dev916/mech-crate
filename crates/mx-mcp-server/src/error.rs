@@ -26,8 +26,8 @@ pub enum McpError {
     #[error("Service not found: {0}")]
     ServiceNotFound(String),
 
-    #[error("Weaviate error: {0}")]
-    Weaviate(String),
+    #[error("Corpus error: {0}")]
+    Corpus(String),
 
     #[error("MechCrate root not found")]
     MechCrateRootNotFound,

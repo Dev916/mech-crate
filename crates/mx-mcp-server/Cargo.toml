@@ -24,7 +24,7 @@ serde_json = { workspace = true }
 # MCP Protocol (JSON-RPC over stdio)
 async-trait = { workspace = true }
 
-# HTTP client for Weaviate
+# HTTP client
 reqwest = { workspace = true }
 
 # Logging
@@ -62,7 +62,3 @@ tokio-test = "0.4"
 [[bin]]
 name = "mx-mcp"
 path = "src/main.rs"
-
-[[bin]]
-name = "mx-ingest"
-path = "src/bin/ingest.rs"
