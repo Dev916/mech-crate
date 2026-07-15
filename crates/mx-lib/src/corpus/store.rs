@@ -389,18 +389,20 @@ impl CorpusStore {
     }
 }
 
+/// Serialize DB-touching tests across the whole test binary: they share one
+/// Postgres database and each `clear()`s global state then asserts exact
+/// counts, so they must not run concurrently. Shared (not per-module) so the
+/// `store` and `ingest` DB tests serialize against each other too.
+#[cfg(test)]
+pub(crate) fn db_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::corpus::chunk::Chunk;
-
-    /// Serialize DB-touching tests: they share one Postgres database and each
-    /// `clear()`s global state then asserts exact counts, so they must not run
-    /// concurrently within the same test binary.
-    fn db_lock() -> &'static tokio::sync::Mutex<()> {
-        static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
-        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
-    }
 
     fn test_cfg() -> Option<RagConfig> {
         let url = std::env::var("MX_RAG_TEST_DATABASE_URL").ok()?;
