@@ -10,3 +10,6 @@ pub mod embed;
 pub mod frontmatter;
 pub mod ingest;
 pub mod store;
+
+pub use config::RagConfig;
+pub use store::{BackendKind, CorpusStore, DocMeta, SearchMode, TechHit, TechQuery};
