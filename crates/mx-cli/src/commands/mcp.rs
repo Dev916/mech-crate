@@ -18,30 +18,10 @@ pub struct McpCommand {
 enum McpSubcommand {
     /// Build MCP server binaries
     Build,
-    /// Start Weaviate backend
-    Start,
-    /// Alias for start
-    Up,
-    /// Stop Weaviate backend
-    Stop,
-    /// Alias for stop
-    Down,
-    /// Show status
+    /// Show status (corpus backend + counts)
     Status,
     /// Alias for status
     Ps,
-    /// View logs
-    Logs {
-        /// Follow logs
-        #[arg(short, long)]
-        follow: bool,
-    },
-    /// Ingest documentation into Weaviate
-    Ingest {
-        /// Clear existing data first
-        #[arg(long)]
-        clear: bool,
-    },
     /// Show MCP client configuration
     Config,
     /// Run MCP server interactively
@@ -59,11 +39,7 @@ impl McpCommand {
 
         match &self.command {
             McpSubcommand::Build => self.build(&mcp).await,
-            McpSubcommand::Start | McpSubcommand::Up => self.start(&mcp).await,
-            McpSubcommand::Stop | McpSubcommand::Down => self.stop(&mcp).await,
             McpSubcommand::Status | McpSubcommand::Ps => self.status(&mcp).await,
-            McpSubcommand::Logs { follow } => self.logs(&mcp, *follow).await,
-            McpSubcommand::Ingest { clear } => self.ingest(&mcp, *clear).await,
             McpSubcommand::Config => self.config(&mcp).await,
             McpSubcommand::Run => self.run_server(&mcp).await,
             McpSubcommand::Info => self.info(&mcp).await,
@@ -76,108 +52,60 @@ impl McpCommand {
 
         mcp.build()?;
 
-        println!("{} MCP server built successfully!", style("✓").green().bold());
+        println!(
+            "{} MCP server built successfully!",
+            style("✓").green().bold()
+        );
         println!();
 
         if let Ok(bin) = mcp.mcp_binary() {
             println!("  Binaries:");
             println!("    {}", bin.display());
         }
-        if let Ok(bin) = mcp.ingest_binary() {
-            println!("    {}", bin.display());
-        }
 
         Ok(())
     }
 
-    async fn start(&self, mcp: &McpManager) -> Result<()> {
-        if mcp.is_weaviate_running() {
-            let url = mcp.weaviate_url();
-            println!(
-                "{} Weaviate already running at {}",
-                style("✓").green(),
-                url
-            );
-            return Ok(());
-        }
-
-        println!("{} Starting Weaviate...", style("→").cyan().bold());
-
-        mcp.start_weaviate()?;
-
-        let url = mcp.weaviate_url();
-        println!(
-            "{} Weaviate is ready at {}",
-            style("✓").green().bold(),
-            url
-        );
-
-        Ok(())
-    }
-
-    async fn stop(&self, mcp: &McpManager) -> Result<()> {
-        println!("{} Stopping Weaviate...", style("→").cyan().bold());
-
-        mcp.stop_weaviate()?;
-
-        println!("{} Weaviate stopped", style("✓").green().bold());
-        Ok(())
-    }
-
-    async fn status(&self, mcp: &McpManager) -> Result<()> {
-        let info = mcp.info();
-
-        println!("{}", style("Weaviate RAG Backend Status").bold());
-        println!("{}", style("─".repeat(40)).dim());
-        println!();
-        println!(
-            "  {} HTTP Port: {}",
-            style("•").dim(),
-            info.http_port.map(|p| p.to_string()).unwrap_or_else(|| "not allocated".to_string())
-        );
-        println!("  {} URL: {}", style("•").dim(), info.weaviate_url);
-        println!("  {} State Dir: {}", style("•").dim(), info.state_dir.display());
-        println!();
-
-        let status = if info.weaviate_running {
-            style("● Running").green()
-        } else {
-            style("○ Not running").red()
-        };
-        println!("  {}", status);
-        println!();
-
-        // Show docker ps output
-        if let Ok(output) = mcp.weaviate_status() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if !stdout.trim().is_empty() {
-                print!("{}", stdout);
+    async fn status(&self, _mcp: &McpManager) -> Result<()> {
+        let cfg = mx_lib::corpus::RagConfig::load();
+        match mx_lib::corpus::CorpusStore::connect(&cfg).await {
+            Ok(store) => {
+                let st = store.status().await?;
+                println!("{}", style("Techniques Corpus").bold());
+                println!(
+                    "  {} Backend: {}",
+                    style("•").dim(),
+                    st["backend"].as_str().unwrap_or("?")
+                );
+                println!(
+                    "  {} Docs: {} / Chunks: {}",
+                    style("•").dim(),
+                    st["docs"],
+                    st["chunks"]
+                );
+                println!(
+                    "  {} Model: {}",
+                    style("•").dim(),
+                    st["embedding_model"].as_str().unwrap_or("?")
+                );
+            }
+            Err(e) => {
+                println!("{} Corpus offline: {}", style("✗").red().bold(), e);
+                println!(
+                    "  Configure ~/.mech-crate/config/rag.toml or start local pgvector (see mx rag status)."
+                );
             }
         }
-
-        Ok(())
-    }
-
-    async fn logs(&self, mcp: &McpManager, follow: bool) -> Result<()> {
-        let output = mcp.weaviate_logs(follow)?;
-        print!("{}", String::from_utf8_lossy(&output.stdout));
-        eprint!("{}", String::from_utf8_lossy(&output.stderr));
-        Ok(())
-    }
-
-    async fn ingest(&self, mcp: &McpManager, clear: bool) -> Result<()> {
-        println!("{} Ingesting MechCrate documentation...", style("→").cyan().bold());
-
-        mcp.ingest(clear)?;
-
-        println!("{} Documentation ingested successfully!", style("✓").green().bold());
         Ok(())
     }
 
     async fn config(&self, mcp: &McpManager) -> Result<()> {
         // Ensure binary is built
         if mcp.needs_build() {
-            println!("{} MCP binary not built. Run 'mx mcp build' first.", style("!").yellow());
+            println!(
+                "{} MCP binary not built. Run 'mx mcp build' first.",
+                style("!").yellow()
+            );
             return Ok(());
         }
 
@@ -188,11 +116,17 @@ impl McpCommand {
         println!();
         println!("Add this to your MCP client configuration:");
         println!();
-        println!("{}", style("Claude Desktop (~/.claude/claude_desktop_config.json):").cyan());
+        println!(
+            "{}",
+            style("Claude Desktop (~/.claude/claude_desktop_config.json):").cyan()
+        );
         println!();
         println!("{}", config_json);
         println!();
-        println!("{}", style("Cursor IDE (mcp.json in workspace or ~/.cursor/mcp.json):").cyan());
+        println!(
+            "{}",
+            style("Cursor IDE (mcp.json in workspace or ~/.cursor/mcp.json):").cyan()
+        );
         println!();
         println!("{}", config_json);
         println!();
@@ -203,10 +137,6 @@ impl McpCommand {
             style("ℹ").blue(),
             wrapper_path.display()
         );
-        println!(
-            "{} The wrapper auto-starts Weaviate when the MCP server starts.",
-            style("ℹ").blue()
-        );
 
         Ok(())
     }
@@ -215,25 +145,12 @@ impl McpCommand {
         // Ensure binary is built
         mcp.ensure_binary()?;
 
-        // Ensure Weaviate is running
-        if !mcp.is_weaviate_running() {
-            println!("{} Auto-starting Weaviate...", style("→").cyan());
-            mcp.start_weaviate()?;
-        }
-
         let mcp_binary = mcp.mcp_binary()?;
-        let weaviate_url = mcp.weaviate_url();
 
-        println!(
-            "{} Starting MCP server with Weaviate at {}...",
-            style("→").cyan().bold(),
-            weaviate_url
-        );
+        println!("{} Starting MCP server...", style("→").cyan().bold());
 
         // Execute the MCP binary - this replaces the current process
-        let err = exec::Command::new(&mcp_binary)
-            .args(&["--weaviate-url", &weaviate_url])
-            .exec();
+        let err = exec::Command::new(&mcp_binary).exec();
 
         // If we get here, exec failed
         anyhow::bail!("Failed to execute MCP server: {}", err);
@@ -248,12 +165,9 @@ impl McpCommand {
         println!(
             "  {} MCP Binary: {}",
             style("•").dim(),
-            info.mcp_binary.map(|p| p.display().to_string()).unwrap_or_else(|| "not found".to_string())
-        );
-        println!(
-            "  {} Ingest Binary: {}",
-            style("•").dim(),
-            info.ingest_binary.map(|p| p.display().to_string()).unwrap_or_else(|| "not found".to_string())
+            info.mcp_binary
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "not found".to_string())
         );
         println!(
             "  {} State Dir: {}",
@@ -263,30 +177,9 @@ impl McpCommand {
         println!(
             "  {} Source Dir: {}",
             style("•").dim(),
-            info.source_dir.map(|p| p.display().to_string()).unwrap_or_else(|| "not found".to_string())
-        );
-        println!();
-        println!(
-            "  {} Weaviate URL: {}",
-            style("•").dim(),
-            info.weaviate_url
-        );
-        println!(
-            "  {} HTTP Port: {}",
-            style("•").dim(),
-            info.http_port.map(|p| p.to_string()).unwrap_or_else(|| "not allocated".to_string())
-        );
-        println!(
-            "  {} HTTP Range: {}-{}",
-            style("•").dim(),
-            info.http_port_range.0,
-            info.http_port_range.1
-        );
-        println!(
-            "  {} gRPC Range: {}-{}",
-            style("•").dim(),
-            info.grpc_port_range.0,
-            info.grpc_port_range.1
+            info.source_dir
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "not found".to_string())
         );
         println!();
 
@@ -296,13 +189,6 @@ impl McpCommand {
             style("○ MCP binary not built (run: mx mcp build)").yellow()
         };
         println!("  {}", binary_status);
-
-        let weaviate_status = if info.weaviate_running {
-            style("● Weaviate running").green()
-        } else {
-            style("○ Weaviate not running").red()
-        };
-        println!("  {}", weaviate_status);
         println!();
 
         Ok(())
@@ -312,28 +198,16 @@ impl McpCommand {
         // Ensure binary is built
         mcp.ensure_binary()?;
 
-        // Ensure Weaviate is running
-        if !mcp.is_weaviate_running() {
-            println!("{} Starting Weaviate first...", style("→").cyan());
-            mcp.start_weaviate()?;
-        }
-
         let mcp_binary = mcp.mcp_binary()?;
-        let weaviate_url = mcp.weaviate_url();
 
         println!();
-        println!(
-            "{} Testing MCP server with Weaviate at {}...",
-            style("→").cyan().bold(),
-            weaviate_url
-        );
+        println!("{} Testing MCP server...", style("→").cyan().bold());
         println!();
 
         // Send initialize request
         let init_request = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
 
         let output = std::process::Command::new(&mcp_binary)
-            .args(&["--weaviate-url", &weaviate_url])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -357,7 +231,10 @@ impl McpCommand {
         }
 
         println!();
-        println!("{} MCP server responds correctly!", style("✓").green().bold());
+        println!(
+            "{} MCP server responds correctly!",
+            style("✓").green().bold()
+        );
 
         Ok(())
     }
@@ -366,7 +243,7 @@ impl McpCommand {
 // Re-export exec for the run command
 mod exec {
     use std::ffi::OsStr;
-    
+
     pub struct Command {
         program: std::path::PathBuf,
         args: Vec<std::ffi::OsString>,
@@ -380,12 +257,14 @@ mod exec {
             }
         }
 
+        #[allow(dead_code)]
         pub fn args<I, S>(mut self, args: I) -> Self
         where
             I: IntoIterator<Item = S>,
             S: AsRef<OsStr>,
         {
-            self.args.extend(args.into_iter().map(|s| s.as_ref().to_os_string()));
+            self.args
+                .extend(args.into_iter().map(|s| s.as_ref().to_os_string()));
             self
         }
 
