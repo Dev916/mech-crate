@@ -27,20 +27,25 @@ The existing Weaviate-based RAG stack in `mx-mcp-server` is **replaced entirely*
 ## Architecture
 
 ```
-mx-mcp-server/src/
-  corpus/
+crates/mx-lib/src/corpus/      — shared by mx-cli AND mx-mcp-server
     mod.rs          — public API: CorpusStore
     store.rs        — sqlx pool, Neon→local fallback, migrations, upserts, hybrid search
     embed.rs        — EmbeddingProvider trait + OpenAiCompatEmbedder (hq llm/openai.rs port)
     chunk.rs        — heading-aware chunker
     frontmatter.rs  — YAML frontmatter parser
+    config.rs       — RagConfig (file + env)
+    ingest.rs       — scan/ingest pipeline
+crates/mx-lib/migrations/      — sqlx migrations
+
+mx-mcp-server/src/
   rag/       — DELETED (Weaviate GraphQL client)
   weaviate/  — DELETED (auto-start manager)
   docker-compose.yml — DELETED
 
 crates/mx-cli — new `mx rag ingest` / `mx rag status` subcommands
-                (replaces the mx-ingest binary; all Weaviate references in
-                 mx-cli/src/commands/mcp.rs removed)
+                (replaces the mx-ingest binary; `mx mcp` loses its Weaviate
+                 start/stop/logs/ingest subcommands and its status becomes
+                 corpus-backed)
 
 docs/development/*.md — frontmatter added to every doc
 
@@ -61,14 +66,14 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE technique_docs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    path TEXT NOT NULL,
+    path TEXT UNIQUE NOT NULL,   -- upsert keyed by path
     title TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'other',
     languages TEXT[] NOT NULL DEFAULT '{}',
     complexity TEXT NOT NULL DEFAULT 'intermediate',
     use_cases TEXT[] NOT NULL DEFAULT '{}',
     summary TEXT,
-    sha256 TEXT UNIQUE NOT NULL,
+    sha256 TEXT NOT NULL,        -- compared to skip unchanged files
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -155,10 +160,9 @@ Flags: `--path <dir>` (default `<repo>/docs/development`), `--clear`, `--reembed
 
 ## Configuration & connection fallback
 
-`[rag]` section in `~/.mech-crate/config.toml`, env-overridable:
+`~/.mech-crate/config/rag.toml` (matching the existing `~/.mech-crate/config/` layout), env-overridable:
 
 ```toml
-[rag]
 database_url = "postgres://...neon.tech/mx_rag"        # primary (Neon)
 fallback_database_url = "postgres://localhost:5432/mx_rag"  # local
 embedding_base_url = "https://api.openai.com/v1"
