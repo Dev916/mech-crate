@@ -1,3 +1,16 @@
+---
+title: "FRP in Rust"
+category: patterns
+languages: [rust]
+complexity: advanced
+use_cases:
+  - "building cancellable reactive graphs in Rust"
+  - "bounding channels for backpressure"
+  - "handling cancellation with take_until"
+  - "mapping external errors to domain enums"
+summary: "Building deterministic, cancellable FRP graphs in Rust with rxrust, futures::stream, and async runtimes."
+---
+
 # Appendix: FRP in Rust
 
 Purpose: build deterministic, cancellable FRP graphs in Rust with `rxrust`, `futures::stream`, and async runtimes.

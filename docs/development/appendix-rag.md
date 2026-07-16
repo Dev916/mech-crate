@@ -1,3 +1,16 @@
+---
+title: "RAG Quick Start with SQLite Vectors on Turso"
+category: ml
+languages: [python]
+complexity: advanced
+use_cases:
+  - "adding local RAG to a codebase"
+  - "storing embeddings as SQLite or Turso vectors"
+  - "exposing a retrieval MCP tool"
+  - "layering environment config for embeddings"
+summary: "Add small, fast RAG to any codebase with zero extra services using libSQL/Turso vectors and an MCP tool."
+---
+
 # RAG quick start with SQLite vectors using Turso SQL
 
 ## Purpose

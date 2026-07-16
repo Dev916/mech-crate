@@ -1,3 +1,16 @@
+---
+title: "Shell Scripting Guide: DevOps Excellence"
+category: shell
+languages: [bash]
+complexity: intermediate
+use_cases:
+  - "writing secure, portable shell scripts"
+  - "structuring scripts for modularity"
+  - "handling errors and validation"
+  - "integrating scripts into DevOps pipelines"
+summary: "A comprehensive guide to production-grade shell scripting for DevOps, emphasizing security, modularity, cross-platform compatibility, and maintainability."
+---
+
 # Shell Scripting Guide: DevOps Excellence
 
 **Version**: 1.0

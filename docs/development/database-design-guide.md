@@ -1,3 +1,16 @@
+---
+title: "Database Design Guide: Theory & Practice"
+category: database
+languages: [sql, redis, javascript, python]
+complexity: advanced
+use_cases:
+  - "designing normalized schemas"
+  - "choosing PostgreSQL, Redis, or MongoDB per workload"
+  - "implementing caching strategies"
+  - "building streaming and CDC pipelines"
+summary: "A comprehensive guide to database design theory, normalization, and practical patterns for PostgreSQL, Redis, and MongoDB with streaming architectures."
+---
+
 # Database Design Guide: Theory & Practice
 
 **Version**: 1.0

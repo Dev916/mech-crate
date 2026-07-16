@@ -1,3 +1,16 @@
+---
+title: "MX Rust CLI and MCP Server Development Guide"
+category: architecture
+languages: [rust]
+complexity: advanced
+use_cases:
+  - "understanding the mx workspace architecture"
+  - "adding CLI commands or MCP tools"
+  - "building and running mx-cli and mx-mcp"
+  - "learning the development workflow"
+summary: "A comprehensive guide for building, managing, and extending the MechCrate Rust CLI (mx) and MCP server."
+---
+
 # MX Rust CLI and MCP Server Development Guide
 
 This document provides a comprehensive guide for building, managing, and extending the MechCrate Rust CLI (`mx`) and MCP server (`mx-mcp`).

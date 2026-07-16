@@ -1,3 +1,16 @@
+---
+title: "Rust: Threading and Concurrency Deep Dive"
+category: concurrency
+languages: [rust]
+complexity: expert
+use_cases:
+  - "choosing between atomics, Mutex, and RwLock"
+  - "understanding memory ordering"
+  - "building lock-free data structures"
+  - "optimizing performance-critical concurrent code"
+summary: "A comprehensive guide to Rust's concurrency primitives, focused on atomics versus synchronization primitives with performance analysis."
+---
+
 # Rust: Threading and Concurrency Deep Dive
 
 Comprehensive guide to Rust's concurrency primitives with focus on atomics vs synchronization primitives.

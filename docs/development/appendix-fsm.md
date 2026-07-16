@@ -1,3 +1,16 @@
+---
+title: "Finite State Machines (FSM)"
+category: patterns
+languages: []
+complexity: advanced
+use_cases:
+  - "modeling workflows as state machines"
+  - "defining states, events, guards, and actions"
+  - "attaching side effects to transitions"
+  - "table-driven testing of transition functions"
+summary: "How to model application states and complex workflows as finite state machines and statecharts across stacks."
+---
+
 Appendix C: FSM (Finite State Machines)
 
 Purpose

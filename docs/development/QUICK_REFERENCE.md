@@ -1,3 +1,16 @@
+---
+title: "MechCrate CLI Quick Reference"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "looking up build and test commands"
+  - "recalling mx CLI usage"
+  - "quick daily command reference"
+  - "finding common cargo invocations"
+summary: "A quick-reference card for MechCrate CLI build, test, and development commands."
+---
+
 # MechCrate CLI Quick Reference
 
 ## Build Commands

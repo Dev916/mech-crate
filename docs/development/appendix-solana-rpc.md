@@ -1,3 +1,16 @@
+---
+title: "Solana RPC (LLM-safe)"
+category: blockchain
+languages: [rust, typescript]
+complexity: advanced
+use_cases:
+  - "building and sending Solana transactions safely"
+  - "controlling compute budget and priority fees"
+  - "choosing commitment levels"
+  - "handling blockhash expiry and transaction versions"
+summary: "Production-minded notes for using Solana JSON-RPC and websockets safely, focused on correctness, fee control, and avoiding footguns."
+---
+
 # Solana RPC appendix (LLM-safe)
 
 Concise, production-minded notes for using Solana JSON-RPC and websockets safely from code or an LLM agent. Focus on correctness, fee control, and avoiding common footguns.

@@ -1,3 +1,16 @@
+---
+title: "Docker Assembly Guide: Industry Best Practices"
+category: docker
+languages: []
+complexity: intermediate
+use_cases:
+  - "shrinking image size with multi-stage builds"
+  - "speeding builds with BuildKit and caching"
+  - "hardening containers with non-root users and scanning"
+  - "writing language-specific Dockerfiles"
+summary: "A comprehensive guide to building optimized, secure, and production-ready Docker containers using industry best practices."
+---
+
 # Docker Assembly Guide: Industry Best Practices
 
 **Version**: 1.0

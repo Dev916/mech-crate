@@ -1,3 +1,16 @@
+---
+title: "FRP in PHP"
+category: patterns
+languages: [php]
+complexity: advanced
+use_cases:
+  - "adding reactive streams to PHP services"
+  - "running async IO on ReactPHP or Amp loops"
+  - "managing backpressure with buffering and sampling"
+  - "wrapping stream errors as domain types"
+summary: "Bringing FRP semantics to PHP services with RxPHP, event loops (ReactPHP/Amp), and Munus for typed values."
+---
+
 # Appendix: FRP in PHP
 
 Purpose: bring FRP semantics to PHP services with RxPHP + event loops (ReactPHP/Amp) and Munus for typed values.

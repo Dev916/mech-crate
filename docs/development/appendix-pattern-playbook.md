@@ -1,3 +1,16 @@
+---
+title: "Living Pattern Playbook: Rust, Laravel, Nuxt"
+category: patterns
+languages: []
+complexity: intermediate
+use_cases:
+  - "choosing patterns for a new service"
+  - "modeling with statecharts and contracts"
+  - "applying the reliability toolkit"
+  - "planning observability and rollout"
+summary: "A practical, evolving guide to design patterns, reliability tactics, and modeling techniques you can drop into real services."
+---
+
 # **Living Pattern Playbook — Rust, Laravel, Nuxt** {#living-pattern-playbook-—-rust,-laravel,-nuxt}
 
 A practical, evolving guide to design patterns, reliability tactics, and modeling techniques you can drop into real services. Code is organized in appendices so the core narrative stays clean.

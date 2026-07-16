@@ -1,3 +1,16 @@
+---
+title: "Business Logic Placement & Model-Level Architecture"
+category: architecture
+languages: []
+complexity: advanced
+use_cases:
+  - "deciding where business logic belongs"
+  - "separating domain, application, and infrastructure layers"
+  - "placing reducers, command handlers, and sagas"
+  - "keeping ORM and DB concerns at the edge"
+summary: "A visual and narrative explanation of where business logic belongs across domain, application, and infrastructure layers."
+---
+
 # **Business Logic Placement & Model-Level Architecture**
 
 A visual \+ narrative explanation of where business logic belongs in the playbook.

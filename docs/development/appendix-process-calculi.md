@@ -1,3 +1,16 @@
+---
+title: "Process Calculi: Formal Models of Concurrent Communication"
+category: theory
+languages: []
+complexity: research
+use_cases:
+  - "modeling concurrent communication formally"
+  - "verifying protocol correctness with session types"
+  - "reasoning about process composition"
+  - "designing message-passing protocols"
+summary: "Mathematical frameworks (CSP, pi-calculus, session types, join calculus) for modeling and verifying concurrent communication."
+---
+
 # Process Calculi: Formal Models of Concurrent Communication
 
 **Purpose**: Mathematical frameworks for modeling, analyzing, and verifying concurrent systems through process composition and communication primitives.

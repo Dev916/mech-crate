@@ -1,3 +1,16 @@
+---
+title: "MechCrate Rust CLI Development Guide"
+category: patterns
+languages: [rust]
+complexity: advanced
+use_cases:
+  - "developing new mx CLI features"
+  - "understanding crate responsibilities"
+  - "building and testing the workspace"
+  - "extending the CLI and MCP server"
+summary: "How to develop, build, and extend the MechCrate CLI (mx) and MCP server within the Cargo workspace."
+---
+
 # MechCrate Rust CLI Development Guide
 
 This guide covers how to develop, build, and extend the MechCrate CLI (`mx`) and MCP server.

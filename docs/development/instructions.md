@@ -1,3 +1,16 @@
+---
+title: "Codex Execution Rules"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "knowing when to query the RAG tools"
+  - "consulting guidance before architectural decisions"
+  - "routing a query to the right RAG tool"
+  - "following codex execution conventions"
+summary: "Rules for using the MechCrate RAG tools to consult architectural guidance, patterns, and code examples before implementing."
+---
+
 🚫 NEVER DELETE THIS FILE 🚫
 
 # 📖 Codex Execution Rules

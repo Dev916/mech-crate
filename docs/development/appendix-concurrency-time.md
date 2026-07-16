@@ -1,4 +1,17 @@
 ---
+title: "Concurrency & Time"
+category: concurrency
+languages: []
+complexity: advanced
+use_cases:
+  - "modeling time as events such as TIMEOUT and EXPIRE"
+  - "enforcing one-writer-per-aggregate serialization"
+  - "making concurrency explicit and observable"
+  - "applying timeouts, retries, and backpressure"
+summary: "Standards for how services use time, parallelism, and scheduling so reducers, FSMs, and reliability patterns stay predictable under load."
+---
+
+---
 
 ## 2) Appendix: Concurrency & Time
 

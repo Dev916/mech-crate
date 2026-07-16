@@ -1,3 +1,16 @@
+---
+title: "Category Theory in Rust"
+category: theory
+languages: [rust]
+complexity: advanced
+use_cases:
+  - "implementing functional patterns in Rust"
+  - "composing error handling with Option and Result"
+  - "using lenses and prisms for updates"
+  - "building free monads and interpreters"
+summary: "Practical Rust implementations of categorical abstractions using traits and associated types."
+---
+
 # Category Theory in Rust
 
 Practical implementations of category theory concepts in Rust.

@@ -1,3 +1,16 @@
+---
+title: "Astro + Vue Frontend Build Scaffold"
+category: frontend
+languages: [typescript]
+complexity: intermediate
+use_cases:
+  - "scaffolding a new Astro + Vue frontend"
+  - "choosing between shadcn-vue and PrimeVue components"
+  - "enforcing a consistent component stack"
+  - "styling with Tailwind utilities"
+summary: "Required frontend stack and component conventions for building UIs with Astro, Vue 3, shadcn-vue, PrimeVue, and Tailwind."
+---
+
 # LLM Build Instructions
 
 ## Core Stack Requirements

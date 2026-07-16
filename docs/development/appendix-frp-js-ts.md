@@ -1,3 +1,16 @@
+---
+title: "FRP in JavaScript / TypeScript"
+category: patterns
+languages: [javascript, typescript]
+complexity: advanced
+use_cases:
+  - "building intent-reducer-state loops with RxJS"
+  - "choosing switchMap, exhaustMap, mergeMap, or concatMap"
+  - "managing backpressure in UI streams"
+  - "typing errors and async with fp-ts"
+summary: "High-leverage FRP stacks for browsers and Node, centered on RxJS plus fp-ts for typed effects and domain purity."
+---
+
 # Appendix: FRP in JavaScript / TypeScript
 
 Purpose: high-leverage FRP stacks for browsers and Node, centered on RxJS + fp-ts for typed effects and domain purity.

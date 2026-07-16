@@ -1,3 +1,16 @@
+---
+title: "Groundbreaking Patterns: Algebraic, Categorical, and Reactive Synthesis"
+category: patterns
+languages: [rust, typescript]
+complexity: expert
+use_cases:
+  - "designing enterprise-scale architectures"
+  - "building highly composable systems"
+  - "modeling domain boundaries as categories"
+  - "architecting event-driven systems with correctness guarantees"
+summary: "Novel architectural patterns synthesizing category theory, DDD, ports and adapters, FSM, FRP, and stream processing."
+---
+
 # Groundbreaking Patterns: Synthesis of Algebraic, Categorical, and Reactive Design
 
 **Purpose**: Derive novel architectural patterns by synthesizing category theory, algebra, domain-driven design, ports & adapters, finite state machines, functional reactive programming, and stream processing into groundbreaking designs that push the limits of elegant software architecture.

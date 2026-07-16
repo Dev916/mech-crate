@@ -1,3 +1,16 @@
+---
+title: "Algebraic Effects & Optics"
+category: theory
+languages: [typescript, rust]
+complexity: expert
+use_cases:
+  - "updating nested immutable state with lenses, prisms, and traversals"
+  - "describing side effects as small effect algebras"
+  - "keeping reducers and state machines pure"
+  - "separating domain logic from infrastructure"
+summary: "A uniform way for reducers, FSMs, and services to express fine-grained nested-state updates (optics) and real-world side effects (algebraic effects) without leaking IO into the domain core."
+---
+
 # Appendix K: Algebraic Effects & Optics
 
 Purpose  

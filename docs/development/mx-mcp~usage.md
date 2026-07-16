@@ -1,3 +1,16 @@
+---
+title: "MechCrate MCP Server Usage"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "understanding MCP server capabilities"
+  - "building and starting the MCP server"
+  - "accessing mx commands through MCP"
+  - "using RAG documentation retrieval"
+summary: "Overview of the MechCrate MCP server that lets LLMs manage projects, orchestrate services, configure infrastructure, and retrieve documentation."
+---
+
 # MechCrate MCP Server
 
 A Model Context Protocol (MCP) server that enables LLMs to interact with MechCrate projects, providing full operational capabilities for project management, service orchestration, infrastructure configuration, and intelligent documentation retrieval.

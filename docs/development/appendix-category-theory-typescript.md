@@ -1,3 +1,16 @@
+---
+title: "Category Theory in TypeScript"
+category: theory
+languages: [typescript]
+complexity: advanced
+use_cases:
+  - "implementing functional patterns in TypeScript"
+  - "composing async workflows"
+  - "type-safe state management with optics"
+  - "building free monads for effect handling"
+summary: "TypeScript implementations of categorical abstractions that leverage the type system for composable, type-safe code."
+---
+
 # Category Theory in TypeScript
 
 Practical implementations of category theory concepts in TypeScript.

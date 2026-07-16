@@ -1,3 +1,16 @@
+---
+title: "MX Rust CLI & MCP Server Quick Reference"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "looking up mx build commands"
+  - "finding compiled binary locations"
+  - "recalling common CLI invocations"
+  - "quick daily development reference"
+summary: "A quick-reference card for building and running the MechCrate mx CLI and MCP server."
+---
+
 # MX Rust CLI & MCP Server Quick Reference
 
 ## Build Commands

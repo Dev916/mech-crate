@@ -1,3 +1,16 @@
+---
+title: "Theory Map: Complete Integration Guide"
+category: theory
+languages: []
+complexity: intermediate
+use_cases:
+  - "navigating the theory appendices"
+  - "choosing the right paradigm for a problem"
+  - "seeing how concepts relate"
+  - "finding stack-specific implementations"
+summary: "A master index connecting all theoretical foundations, showing how concepts relate and when to use each paradigm."
+---
+
 # Theory Map: Complete Integration Guide
 
 Purpose: Master index connecting all theoretical foundations, showing how concepts relate, when to use each paradigm, and stack-specific implementations.

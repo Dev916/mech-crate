@@ -1,3 +1,16 @@
+---
+title: "Apple-Inspired UI/UX Design Guidelines"
+category: frontend
+languages: []
+complexity: intermediate
+use_cases:
+  - "applying Apple-style clarity, deference, and depth"
+  - "designing typography and generous whitespace"
+  - "building refined, high-performance web UI"
+  - "guiding LLM-generated UI toward Apple aesthetics"
+summary: "Comprehensive guidelines for implementing Apple's design principles (clarity, deference, depth) in web applications."
+---
+
 # Apple-Inspired UI/UX Design Guidelines for LLMs
 
 ## Core Philosophy
