@@ -9,7 +9,7 @@ use std::process::Command;
 use crate::error::{Error, Result};
 use crate::template::TemplateEngine;
 
-use super::{Recipe, FileMapping, PostInstall};
+use super::{FileMapping, PostInstall, Recipe};
 
 /// Recipe installer
 #[derive(Debug)]
@@ -167,10 +167,7 @@ impl RecipeInstaller {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::CommandFailed(format!(
-                "init_app failed: {}",
-                stderr
-            )));
+            return Err(Error::CommandFailed(format!("init_app failed: {}", stderr)));
         }
 
         Ok(())
@@ -205,7 +202,11 @@ impl RecipeInstaller {
     fn resolve_template_source(&self, recipe_dir: &Path, source: &str) -> Result<PathBuf> {
         // Handle namespace references like "common://path/to/file"
         if let Some(rest) = source.strip_prefix("common://") {
-            return Ok(self.templates_root.join("recipes").join("common").join(rest));
+            return Ok(self
+                .templates_root
+                .join("recipes")
+                .join("common")
+                .join(rest));
         }
 
         // Regular path relative to recipe directory
@@ -238,7 +239,9 @@ impl RecipeInstaller {
                     std::fs::create_dir_all(parent)?;
                 }
                 self.copy_file(entry.path(), &dest, placeholders)?;
-                result.files_created.push(dest.to_string_lossy().to_string());
+                result
+                    .files_created
+                    .push(dest.to_string_lossy().to_string());
             }
         }
 
@@ -271,7 +274,10 @@ impl RecipeInstaller {
                 }
                 Err(_) => {
                     // Not valid UTF-8 — treat as binary, copy as-is
-                    tracing::debug!("Binary content detected (not UTF-8), copying as-is: {}", from.display());
+                    tracing::debug!(
+                        "Binary content detected (not UTF-8), copying as-is: {}",
+                        from.display()
+                    );
                     std::fs::write(to, bytes)?;
                 }
             }

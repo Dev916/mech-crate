@@ -4,10 +4,10 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use console::style;
 
-use mx_lib::{templates_dir, is_initialized};
 use mx_lib::project::ProjectDetector;
 use mx_lib::recipe::RecipeInstaller;
 use mx_lib::unyform::UnyformClient;
+use mx_lib::{is_initialized, templates_dir};
 
 /// Manage recipes
 #[derive(Args, Debug)]
@@ -70,9 +70,7 @@ impl RecipesCommand {
 
     async fn list_recipes(&self) -> Result<()> {
         if !is_initialized() {
-            anyhow::bail!(
-                "MechCrate not initialized. Run 'mx init' first to install templates."
-            );
+            anyhow::bail!("MechCrate not initialized. Run 'mx init' first to install templates.");
         }
 
         let templates_root = templates_dir()?;
@@ -129,9 +127,7 @@ impl RecipesCommand {
 
     async fn show_info(&self, name: &str) -> Result<()> {
         if !is_initialized() {
-            anyhow::bail!(
-                "MechCrate not initialized. Run 'mx init' first to install templates."
-            );
+            anyhow::bail!("MechCrate not initialized. Run 'mx init' first to install templates.");
         }
 
         let templates_root = templates_dir()?;
@@ -259,11 +255,7 @@ impl RecipesCommand {
 
         std::fs::write(&rules_file, &rules_content)?;
 
-        println!(
-            "{} Created: {}",
-            style("✓").green(),
-            rules_file.display()
-        );
+        println!("{} Created: {}", style("✓").green(), rules_file.display());
         println!(
             "{} Applied {} coding patterns",
             style("✓").green().bold(),

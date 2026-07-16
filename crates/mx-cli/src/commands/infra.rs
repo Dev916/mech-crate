@@ -78,10 +78,7 @@ impl InfraCommand {
                 .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", name))?,
             None => {
                 // Prompt for provider selection
-                let providers: Vec<&str> = InfraProvider::all()
-                    .iter()
-                    .map(|p| p.name())
-                    .collect();
+                let providers: Vec<&str> = InfraProvider::all().iter().map(|p| p.name()).collect();
 
                 let selection = dialoguer::Select::new()
                     .with_prompt("Select provider to configure")
@@ -295,11 +292,12 @@ impl InfraCommand {
 
         for (key, value) in &config {
             // Mask sensitive values
-            let display_value = if key.contains("SECRET") || key.contains("TOKEN") || key.contains("KEY") {
-                "********".to_string()
-            } else {
-                value.clone()
-            };
+            let display_value =
+                if key.contains("SECRET") || key.contains("TOKEN") || key.contains("KEY") {
+                    "********".to_string()
+                } else {
+                    value.clone()
+                };
             println!("  {} = {}", style(key).cyan(), display_value);
         }
 
@@ -347,11 +345,7 @@ impl InfraCommand {
                 provider.name()
             );
         } else {
-            println!(
-                "{} {} not configured",
-                style("!").yellow(),
-                provider.name()
-            );
+            println!("{} {} not configured", style("!").yellow(), provider.name());
         }
 
         Ok(())

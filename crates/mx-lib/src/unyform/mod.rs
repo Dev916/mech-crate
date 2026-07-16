@@ -238,11 +238,7 @@ impl UnyformClient {
     }
 
     /// Login with API key
-    pub async fn login_with_api_key(
-        &self,
-        api_key: &str,
-        url: Option<&str>,
-    ) -> Result<UserInfo> {
+    pub async fn login_with_api_key(&self, api_key: &str, url: Option<&str>) -> Result<UserInfo> {
         let base_url = url.unwrap_or(Self::DEFAULT_URL);
 
         // Verify the API key by fetching user info

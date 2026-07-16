@@ -2,11 +2,11 @@
 //!
 //! Handles parsing, installation, and caching of MechCrate recipes.
 
-mod parser;
 mod installer;
+mod parser;
 
+pub use installer::{InstallResult, RecipeInstaller};
 pub use parser::{
-    Recipe, RecipeOption, RecipeService, FileMapping, PostInstall, PostInstallAction,
-    PlaceholderDef, InitApp, CreateFile, RenameAction, ChmodAction, RunAction,
+    ChmodAction, CreateFile, FileMapping, InitApp, PlaceholderDef, PostInstall, PostInstallAction,
+    Recipe, RecipeOption, RecipeService, RenameAction, RunAction,
 };
-pub use installer::{RecipeInstaller, InstallResult};

@@ -83,7 +83,9 @@ impl Router {
                 // Stale port outside expected range -- re-allocate
                 tracing::warn!(
                     "Cached dashboard port {} is outside range {}-{}, re-allocating",
-                    port, DASHBOARD_PORT_START, DASHBOARD_PORT_END
+                    port,
+                    DASHBOARD_PORT_START,
+                    DASHBOARD_PORT_END
                 );
             }
         }
@@ -127,7 +129,10 @@ impl Router {
 
         // Try to create the network (non-fatal if Docker isn't available)
         if let Err(e) = self.ensure_network() {
-            tracing::warn!("Could not create Docker network: {}. Will retry on start.", e);
+            tracing::warn!(
+                "Could not create Docker network: {}. Will retry on start.",
+                e
+            );
         }
 
         Ok(())
@@ -178,7 +183,9 @@ impl Router {
     /// Start the router
     pub fn start(&self) -> Result<()> {
         if !self.is_installed() {
-            return Err(Error::Other("Router not installed. Run 'mx router install' first.".into()));
+            return Err(Error::Other(
+                "Router not installed. Run 'mx router install' first.".into(),
+            ));
         }
 
         self.ensure_network()?;
@@ -193,7 +200,10 @@ impl Router {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::CommandFailed(format!("Failed to start router: {}", stderr)));
+            return Err(Error::CommandFailed(format!(
+                "Failed to start router: {}",
+                stderr
+            )));
         }
 
         tracing::info!("Router started. Dashboard: http://localhost:{}", port);
@@ -214,7 +224,10 @@ impl Router {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::CommandFailed(format!("Failed to stop router: {}", stderr)));
+            return Err(Error::CommandFailed(format!(
+                "Failed to stop router: {}",
+                stderr
+            )));
         }
 
         Ok(())

@@ -242,14 +242,18 @@ pub struct ToolCallResult {
 impl ToolCallResult {
     pub fn text(content: impl Into<String>) -> Self {
         Self {
-            content: vec![ToolResultContent::Text { text: content.into() }],
+            content: vec![ToolResultContent::Text {
+                text: content.into(),
+            }],
             is_error: None,
         }
     }
 
     pub fn error(message: impl Into<String>) -> Self {
         Self {
-            content: vec![ToolResultContent::Text { text: message.into() }],
+            content: vec![ToolResultContent::Text {
+                text: message.into(),
+            }],
             is_error: Some(true),
         }
     }

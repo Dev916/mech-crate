@@ -28,9 +28,13 @@ impl TemplateEngine {
     }
 
     /// Render a template string with the given variables
-    /// 
+    ///
     /// Uses the engine's Tera instance which has custom filters registered.
-    pub fn render_string(&mut self, template: &str, vars: &HashMap<String, String>) -> Result<String> {
+    pub fn render_string(
+        &mut self,
+        template: &str,
+        vars: &HashMap<String, String>,
+    ) -> Result<String> {
         let mut context = Context::new();
         for (key, value) in vars {
             context.insert(key, value);
@@ -150,9 +154,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("name".to_string(), "my-project".to_string());
 
-        let result = engine
-            .render_string("Hello {{ name }}!", &vars)
-            .unwrap();
+        let result = engine.render_string("Hello {{ name }}!", &vars).unwrap();
         assert_eq!(result, "Hello my-project!");
     }
 
@@ -163,9 +165,7 @@ mod tests {
         vars.insert("name".to_string(), "My Project".to_string());
 
         // Test slug filter
-        let result = engine
-            .render_string("{{ name | slug }}", &vars)
-            .unwrap();
+        let result = engine.render_string("{{ name | slug }}", &vars).unwrap();
         assert_eq!(result, "my-project");
 
         // Test upper_snake filter

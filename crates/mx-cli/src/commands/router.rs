@@ -82,9 +82,7 @@ impl RouterCommand {
 
         // Check if MechCrate is initialized
         if !mx_lib::is_initialized() {
-            anyhow::bail!(
-                "MechCrate not initialized. Run 'mx init' first to install templates."
-            );
+            anyhow::bail!("MechCrate not initialized. Run 'mx init' first to install templates.");
         }
 
         println!(

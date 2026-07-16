@@ -8,8 +8,8 @@ use clap::Args;
 use console::style;
 use dialoguer::MultiSelect;
 
-use mx_lib::{templates_dir, is_initialized};
 use mx_lib::recipe::RecipeInstaller;
+use mx_lib::{is_initialized, templates_dir};
 
 /// Create a new MechCrate project
 #[derive(Args, Debug)]
@@ -46,9 +46,7 @@ impl NewCommand {
 
         // Check if MechCrate is initialized
         if !is_initialized() {
-            anyhow::bail!(
-                "MechCrate not initialized. Run 'mx init' first to install templates."
-            );
+            anyhow::bail!("MechCrate not initialized. Run 'mx init' first to install templates.");
         }
 
         // Get templates directory
@@ -104,7 +102,8 @@ impl NewCommand {
 
             for service_spec in &self.services {
                 // Parse service_spec as "recipe:name" or just "recipe" (uses recipe name as service name)
-                let (recipe_name, service_name) = if let Some((r, s)) = service_spec.split_once(':') {
+                let (recipe_name, service_name) = if let Some((r, s)) = service_spec.split_once(':')
+                {
                     (r, s.to_string())
                 } else {
                     (service_spec.as_str(), service_spec.clone())
@@ -219,7 +218,7 @@ impl NewCommand {
                 let path = entry.path();
                 if path.is_file() {
                     let filename = path.file_name().unwrap().to_string_lossy();
-                    
+
                     // Only copy shared config files, skip service-specific ones
                     let target_name = match filename.as_ref() {
                         "env.shared" => Some(".env.shared"),
@@ -373,7 +372,7 @@ make down
             .interact_opt()?;
 
         let mut selected_providers = Vec::new();
-        
+
         if let Some(indices) = selection {
             for idx in indices {
                 if idx < providers.len() - 1 {
@@ -387,7 +386,10 @@ make down
     }
 
     fn setup_cloudflare_infra(&self, templates_root: &Path, project_path: &Path) -> Result<()> {
-        println!("  {} Setting up Cloudflare infrastructure...", style("→").cyan());
+        println!(
+            "  {} Setting up Cloudflare infrastructure...",
+            style("→").cyan()
+        );
 
         let cf_template_dir = templates_root.join("infra/cloudflare");
         let cf_project_dir = project_path.join("infra/cloudflare");
@@ -408,7 +410,8 @@ make down
         self.copy_dir_recursive(&cf_template_dir, &cf_project_dir)?;
 
         // Replace placeholders
-        let project_slug = self.name
+        let project_slug = self
+            .name
             .to_lowercase()
             .replace(' ', "-")
             .chars()
@@ -439,7 +442,12 @@ make down
         Ok(())
     }
 
-    fn replace_placeholders_in_dir(&self, dir: &Path, placeholder: &str, value: &str) -> Result<()> {
+    fn replace_placeholders_in_dir(
+        &self,
+        dir: &Path,
+        placeholder: &str,
+        value: &str,
+    ) -> Result<()> {
         let extensions = ["ts", "toml", "json", "md"];
 
         for entry in walkdir::WalkDir::new(dir) {

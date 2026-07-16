@@ -220,7 +220,11 @@ impl Recipe {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let content = std::fs::read_to_string(path).map_err(|e| {
-            Error::RecipeNotFound(format!("Failed to read recipe file {}: {}", path.display(), e))
+            Error::RecipeNotFound(format!(
+                "Failed to read recipe file {}: {}",
+                path.display(),
+                e
+            ))
         })?;
 
         Self::parse(&content)
@@ -228,7 +232,8 @@ impl Recipe {
 
     /// Parse recipe JSON content
     pub fn parse(content: &str) -> Result<Self> {
-        serde_json::from_str(content).map_err(|e| Error::InvalidRecipe(format!("JSON parse error: {}", e)))
+        serde_json::from_str(content)
+            .map_err(|e| Error::InvalidRecipe(format!("JSON parse error: {}", e)))
     }
 
     /// Get the display title (falls back to name)
@@ -238,7 +243,9 @@ impl Recipe {
 
     /// Get the description or a default
     pub fn display_description(&self) -> &str {
-        self.description.as_deref().unwrap_or("No description available")
+        self.description
+            .as_deref()
+            .unwrap_or("No description available")
     }
 
     /// Get an option by name
@@ -248,9 +255,7 @@ impl Recipe {
 
     /// Get option default value
     pub fn get_option_default(&self, name: &str) -> Option<&str> {
-        self.options
-            .get(name)
-            .and_then(|o| o.default.as_deref())
+        self.options.get(name).and_then(|o| o.default.as_deref())
     }
 
     /// Build placeholder values from service name and option values
@@ -276,7 +281,9 @@ impl Recipe {
         }
 
         // Always include SERVICE_NAME
-        values.entry("SERVICE_NAME".to_string()).or_insert_with(|| service_name.to_string());
+        values
+            .entry("SERVICE_NAME".to_string())
+            .or_insert_with(|| service_name.to_string());
 
         values
     }

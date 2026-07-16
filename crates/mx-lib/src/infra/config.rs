@@ -153,7 +153,11 @@ impl InfraConfig {
 
             if let Some((key, value)) = line.split_once('=') {
                 let key = key.trim().to_string();
-                let value = value.trim().trim_matches('"').trim_matches('\'').to_string();
+                let value = value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string();
                 config.insert(key, value);
             }
         }
@@ -171,7 +175,13 @@ impl InfraConfig {
     pub fn list_configured(&self) -> Vec<(InfraProvider, bool, bool)> {
         InfraProvider::all()
             .iter()
-            .map(|&p| (p, self.is_globally_configured(p), self.is_project_configured(p)))
+            .map(|&p| {
+                (
+                    p,
+                    self.is_globally_configured(p),
+                    self.is_project_configured(p),
+                )
+            })
             .collect()
     }
 }

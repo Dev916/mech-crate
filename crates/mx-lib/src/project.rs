@@ -85,12 +85,11 @@ impl ProjectDetector {
 
     /// Find the project root from the current working directory
     pub fn find_root_from_cwd(&self) -> Result<PathBuf> {
-        let cwd = std::env::current_dir().map_err(|e| {
-            Error::Config(format!("Failed to get current directory: {}", e))
-        })?;
-        
+        let cwd = std::env::current_dir()
+            .map_err(|e| Error::Config(format!("Failed to get current directory: {}", e)))?;
+
         tracing::debug!("Looking for project root from: {}", cwd.display());
-        
+
         match self.find_root(&cwd) {
             Ok(root) => {
                 tracing::debug!("Found project root: {}", root.display());

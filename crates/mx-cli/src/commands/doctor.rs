@@ -4,9 +4,9 @@ use anyhow::Result;
 use clap::Args;
 use console::style;
 
-use mx_lib::{home_dir, templates_dir, is_initialized};
 use mx_lib::docker::Docker;
 use mx_lib::project::ProjectDetector;
+use mx_lib::{home_dir, is_initialized, templates_dir};
 
 /// Check project health
 #[derive(Args, Debug)]
@@ -30,7 +30,11 @@ impl DoctorCommand {
         println!(
             "  {} Initialized: {}",
             init_status,
-            if initialized { "yes" } else { "no (run 'mx init')" }
+            if initialized {
+                "yes"
+            } else {
+                "no (run 'mx init')"
+            }
         );
 
         if let Ok(home) = home_dir() {
@@ -65,7 +69,10 @@ impl DoctorCommand {
         };
         print!("  {} Docker: ", docker_status);
         if docker_ok {
-            println!("{}", Docker::version().unwrap_or_else(|_| "installed".into()));
+            println!(
+                "{}",
+                Docker::version().unwrap_or_else(|_| "installed".into())
+            );
         } else {
             println!("{}", style("not found").red());
         }
@@ -118,8 +125,14 @@ impl DoctorCommand {
                 // Check required directories
                 let dirs_to_check = [
                     ("docker/", project_root.join("docker").is_dir()),
-                    ("docker/compose/", project_root.join("docker/compose").is_dir()),
-                    ("docker/.config/", project_root.join("docker/.config").is_dir()),
+                    (
+                        "docker/compose/",
+                        project_root.join("docker/compose").is_dir(),
+                    ),
+                    (
+                        "docker/.config/",
+                        project_root.join("docker/.config").is_dir(),
+                    ),
                     ("make/", project_root.join("make").is_dir()),
                     ("scripts/", project_root.join("scripts").is_dir()),
                 ];
@@ -155,10 +168,7 @@ impl DoctorCommand {
             }
             Err(_) => {
                 println!();
-                println!(
-                    "{} Not in a MechCrate project",
-                    style("!").yellow()
-                );
+                println!("{} Not in a MechCrate project", style("!").yellow());
                 println!("  Create one with: mx new <project-name>");
             }
         }

@@ -43,11 +43,7 @@ impl SelfUpdateCommand {
             style("→").cyan().bold(),
             source_dir.display()
         );
-        println!(
-            "{} Target: {}",
-            style("→").cyan().bold(),
-            bin_dir.display()
-        );
+        println!("{} Target: {}", style("→").cyan().bold(), bin_dir.display());
 
         // Get current version
         let current_version = env!("CARGO_PKG_VERSION");
@@ -70,11 +66,7 @@ impl SelfUpdateCommand {
                 step
             );
             step += 1;
-            println!(
-                "  {}. Copy binaries to {}",
-                step,
-                bin_dir.display()
-            );
+            println!("  {}. Copy binaries to {}", step, bin_dir.display());
             step += 1;
             println!(
                 "  {}. Ensure /usr/local/bin symlinks point to {}",
@@ -134,11 +126,7 @@ impl SelfUpdateCommand {
 
         std::fs::create_dir_all(&bin_dir)?;
 
-        let binaries = [
-            ("mx", true),
-            ("mx-mcp", false),
-            ("mx-ingest", false),
-        ];
+        let binaries = [("mx", true), ("mx-mcp", false), ("mx-ingest", false)];
 
         for (name, required) in binaries {
             let src = release_dir.join(name);
@@ -187,11 +175,7 @@ impl SelfUpdateCommand {
             if system_path.is_symlink() {
                 if let Ok(target) = std::fs::read_link(&system_path) {
                     if target == bin_path {
-                        println!(
-                            "  {} {} (symlink ok)",
-                            style("✓").green(),
-                            name
-                        );
+                        println!("  {} {} (symlink ok)", style("✓").green(), name);
                         continue;
                     }
                 }
@@ -199,11 +183,7 @@ impl SelfUpdateCommand {
 
             // Need to create/update symlink
             needs_sudo = true;
-            println!(
-                "  {} {} needs symlink update",
-                style("→").yellow(),
-                name
-            );
+            println!("  {} {} needs symlink update", style("→").yellow(), name);
         }
 
         if needs_sudo {
@@ -262,10 +242,7 @@ impl SelfUpdateCommand {
         println!();
 
         // Run mx init to refresh templates
-        println!(
-            "{} Refreshing templates...",
-            style("→").cyan().bold()
-        );
+        println!("{} Refreshing templates...", style("→").cyan().bold());
         let status = Command::new(bin_dir.join("mx"))
             .args(["init", "--force"])
             .env("MECH_CRATE_ROOT", &source_dir)

@@ -54,7 +54,7 @@ impl DevCommand {
 
     async fn run_make_target(&self, target: &str) -> Result<()> {
         let detector = ProjectDetector::new();
-        
+
         let project_root = detector.find_root_from_cwd().with_context(|| {
             format!(
                 "Not in a MechCrate project.\n\n\
@@ -78,18 +78,18 @@ impl DevCommand {
 
         // Build the make command
         let mut cmd = Command::new("make");
-        
+
         // Set working directory to project root
         cmd.current_dir(&project_root);
-        
+
         // Ensure PATH includes common binary locations (docker, etc.)
         cmd.env("PATH", ensure_path());
-        
+
         // Pass through stdin/stdout/stderr for interactive commands
         cmd.stdin(Stdio::inherit());
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
-        
+
         // Add target
         cmd.arg(target);
 
@@ -105,21 +105,18 @@ impl DevCommand {
 
         if self.verbose {
             let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy()).collect();
-            println!(
-                "{} Running: make {}",
-                style("→").cyan(),
-                args.join(" ")
-            );
-            println!(
-                "{} PATH includes: /usr/local/bin",
-                style("→").cyan()
-            );
+            println!("{} Running: make {}", style("→").cyan(), args.join(" "));
+            println!("{} PATH includes: /usr/local/bin", style("→").cyan());
         }
 
         // Run interactively
-        let status = cmd
-            .status()
-            .with_context(|| format!("Failed to run 'make {}' in {}", target, project_root.display()))?;
+        let status = cmd.status().with_context(|| {
+            format!(
+                "Failed to run 'make {}' in {}",
+                target,
+                project_root.display()
+            )
+        })?;
 
         if !status.success() {
             std::process::exit(status.code().unwrap_or(1));

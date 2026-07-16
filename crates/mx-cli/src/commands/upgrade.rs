@@ -28,9 +28,7 @@ impl UpgradeCommand {
     pub async fn run(&self) -> Result<()> {
         // Check if MechCrate is initialized
         if !mx_lib::is_initialized() {
-            anyhow::bail!(
-                "MechCrate not initialized. Run 'mx init' first to install templates."
-            );
+            anyhow::bail!("MechCrate not initialized. Run 'mx init' first to install templates.");
         }
 
         // Find project root
@@ -60,11 +58,7 @@ impl UpgradeCommand {
             let path = project_root.join(dir);
             if !path.exists() {
                 if self.dry_run {
-                    println!(
-                        "  {} Would create: {}",
-                        style("[DRY RUN]").blue(),
-                        dir
-                    );
+                    println!("  {} Would create: {}", style("[DRY RUN]").blue(), dir);
                 } else {
                     std::fs::create_dir_all(&path)?;
                     println!("  {} Created: {}", style("✓").green(), dir);
@@ -85,7 +79,10 @@ impl UpgradeCommand {
 
         // Process entries
         for entry in &entries {
-            let rel_path = entry.project_path.strip_prefix(&project_root).unwrap_or(&entry.project_path);
+            let rel_path = entry
+                .project_path
+                .strip_prefix(&project_root)
+                .unwrap_or(&entry.project_path);
 
             match &entry.action {
                 UpgradeAction::Add => {
@@ -132,7 +129,10 @@ impl UpgradeCommand {
             println!();
 
             for entry in &pending_updates {
-                let rel_path = entry.project_path.strip_prefix(&project_root).unwrap_or(&entry.project_path);
+                let rel_path = entry
+                    .project_path
+                    .strip_prefix(&project_root)
+                    .unwrap_or(&entry.project_path);
                 println!("    • {}", rel_path.display());
             }
 
@@ -159,7 +159,9 @@ impl UpgradeCommand {
                     println!("{}", style("━".repeat(60)).yellow());
 
                     if self.diff {
-                        if let Ok(diff) = upgrader.file_diff(&entry.project_path, &entry.template_path) {
+                        if let Ok(diff) =
+                            upgrader.file_diff(&entry.project_path, &entry.template_path)
+                        {
                             println!();
                             for line in diff.lines().take(50) {
                                 if line.starts_with('+') {
@@ -198,7 +200,9 @@ impl UpgradeCommand {
                             1 => false, // No
                             2 => {
                                 // Show diff and ask again
-                                if let Ok(diff) = upgrader.file_diff(&entry.project_path, &entry.template_path) {
+                                if let Ok(diff) =
+                                    upgrader.file_diff(&entry.project_path, &entry.template_path)
+                                {
                                     println!();
                                     for line in diff.lines() {
                                         if line.starts_with('+') {
@@ -232,16 +236,14 @@ impl UpgradeCommand {
 
                     if update_file {
                         // Backup original file
-                        let backup_path = entry.project_path.with_extension(
-                            format!(
-                                "{}.bak",
-                                entry
-                                    .project_path
-                                    .extension()
-                                    .and_then(|e| e.to_str())
-                                    .unwrap_or("")
-                            ),
-                        );
+                        let backup_path = entry.project_path.with_extension(format!(
+                            "{}.bak",
+                            entry
+                                .project_path
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .unwrap_or("")
+                        ));
                         std::fs::copy(&entry.project_path, &backup_path)?;
 
                         upgrader.copy_file(&entry.template_path, &entry.project_path)?;
@@ -288,17 +290,32 @@ impl UpgradeCommand {
             println!("  {} Added:   {} file(s)", style("✓").green(), added_count);
         }
         if updated_count > 0 {
-            println!("  {} Updated: {} file(s)", style("✓").green(), updated_count);
+            println!(
+                "  {} Updated: {} file(s)",
+                style("✓").green(),
+                updated_count
+            );
         }
         if skipped_count > 0 {
-            println!("  {} Skipped: {} file(s)", style("○").yellow(), skipped_count);
+            println!(
+                "  {} Skipped: {} file(s)",
+                style("○").yellow(),
+                skipped_count
+            );
         }
-        if added_count == 0 && updated_count == 0 && skipped_count == 0 && pending_updates.is_empty() {
+        if added_count == 0
+            && updated_count == 0
+            && skipped_count == 0
+            && pending_updates.is_empty()
+        {
             println!("  {} Project is up to date!", style("✓").green());
         }
 
         println!();
-        println!("{} Your tooling is fresh!", style("🦝 Crate Raccoon says:").cyan());
+        println!(
+            "{} Your tooling is fresh!",
+            style("🦝 Crate Raccoon says:").cyan()
+        );
         println!();
 
         Ok(())

@@ -7,9 +7,9 @@ use clap::Args;
 use console::style;
 use dialoguer::Select;
 
-use mx_lib::{templates_dir, is_initialized};
 use mx_lib::project::ProjectDetector;
 use mx_lib::recipe::RecipeInstaller;
+use mx_lib::{is_initialized, templates_dir};
 
 /// Add a service to the project
 #[derive(Args, Debug)]
@@ -34,9 +34,7 @@ impl AddCommand {
     pub async fn run(&self) -> Result<()> {
         // Check if MechCrate is initialized
         if !is_initialized() {
-            anyhow::bail!(
-                "MechCrate not initialized. Run 'mx init' first to install templates."
-            );
+            anyhow::bail!("MechCrate not initialized. Run 'mx init' first to install templates.");
         }
 
         // Find project root
