@@ -1,3 +1,16 @@
+---
+title: "Formal Verification: Proving Software Correctness"
+category: theory
+languages: []
+complexity: research
+use_cases:
+  - "proving correctness of critical systems"
+  - "specifying systems in TLA+"
+  - "model-checking concurrent protocols"
+  - "using SMT solvers and proof assistants"
+summary: "Mathematical techniques (Hoare logic, temporal logic, model checking, TLA+, SMT, proof assistants) for proving software satisfies its specification."
+---
+
 # Formal Verification: Proving Software Correctness
 
 **Purpose**: Mathematical techniques for proving that software systems satisfy their specifications, eliminating entire classes of bugs through rigorous analysis.

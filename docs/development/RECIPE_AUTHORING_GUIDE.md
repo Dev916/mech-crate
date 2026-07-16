@@ -1,3 +1,16 @@
+---
+title: "Recipe Authoring Guide"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "authoring a new MechCrate recipe"
+  - "writing the recipe.json specification"
+  - "structuring Docker and supervisor config"
+  - "setting up internal reverse proxying"
+summary: "A comprehensive guide for creating MechCrate recipes, reusable application templates with Docker orchestration, process management, and reverse proxying."
+---
+
 # Recipe Authoring Guide
 
 A comprehensive guide for creating MechCrate recipes—reusable application templates with Docker orchestration, process management, and reverse proxying.

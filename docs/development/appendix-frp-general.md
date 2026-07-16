@@ -1,3 +1,16 @@
+---
+title: "Functional Reactive Programming (General)"
+category: patterns
+languages: []
+complexity: advanced
+use_cases:
+  - "designing stream and observable pipelines"
+  - "modeling time-varying values"
+  - "keeping effects at the edges"
+  - "composing declarative dataflow graphs"
+summary: "A durable, law-abiding FRP foundation that scales across stacks: streams over time, explicit effects, and emergent behavior from composition."
+---
+
 # Appendix: Functional Reactive Programming (General)
 
 Purpose: durable, law-abiding FRP foundation that scales across stacks. Focus on streams over time, explicit effects, and emergent behavior from composition.

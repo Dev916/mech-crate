@@ -74,9 +74,18 @@ fn test_mx_mcp_help() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
+    // Remaining subcommands after dropping the legacy backend lifecycle.
     assert!(stdout.contains("build"));
-    assert!(stdout.contains("start"));
     assert!(stdout.contains("status"));
+    assert!(stdout.contains("config"));
+    assert!(stdout.contains("run"));
+    assert!(stdout.contains("info"));
+    assert!(stdout.contains("test"));
+    // Legacy backend lifecycle subcommands are gone.
+    assert!(!stdout.contains("start"));
+    assert!(!stdout.contains("stop"));
+    assert!(!stdout.contains("logs"));
+    assert!(!stdout.contains("ingest"));
 }
 
 #[test]

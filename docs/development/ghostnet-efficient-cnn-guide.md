@@ -1,3 +1,16 @@
+---
+title: "GhostNet: Efficient CNN Architecture Guide"
+category: ml
+languages: [python]
+complexity: advanced
+use_cases:
+  - "building efficient CNNs for mobile and edge"
+  - "reducing FLOPs without losing accuracy"
+  - "deploying real-time vision on constrained hardware"
+  - "compressing models via pruning and quantization"
+summary: "A comprehensive guide to efficient CNN architectures using ghost operations for mobile and edge deployment."
+---
+
 # GhostNet: Efficient CNN Architecture - Comprehensive Guide
 
 ## Table of Contents

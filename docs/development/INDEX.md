@@ -1309,3 +1309,23 @@ docker, dockerfile, multi-stage builds, buildkit, layer caching, container optim
 **End of Index**
 
 *Navigate confidently through advanced software engineering theory and practice.*
+
+---
+
+## Frontmatter Authoring (for the techniques corpus)
+
+Every doc in this folder (except INDEX.md) carries YAML frontmatter consumed by `mx rag ingest`:
+
+```yaml
+---
+title: Human-readable title
+category: one of: theory | patterns | architecture | concurrency | api-design | database | frontend | docker | infra | shell | blockchain | ml | security | process | other
+languages: [rust, typescript]        # omit or [] when language-agnostic
+complexity: intermediate | advanced | expert | research
+use_cases:
+  - short "reach for this when..." phrases (2-4)
+summary: One sentence describing the doc.
+---
+```
+
+Docs without frontmatter still ingest (heuristics + a warning), but filtered retrieval quality drops. Re-ingest after edits: `mx rag ingest`.

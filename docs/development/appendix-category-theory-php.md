@@ -1,3 +1,16 @@
+---
+title: "Category Theory in PHP"
+category: theory
+languages: [php]
+complexity: advanced
+use_cases:
+  - "implementing functional patterns in PHP 8+"
+  - "building validation and transformation pipelines"
+  - "using lenses for immutable nested updates"
+  - "modernizing PHP with monadic composition"
+summary: "Practical implementations of category theory concepts (functors, monads, comonads, transformers, optics, free monads) in PHP 8+."
+---
+
 # Category Theory in PHP
 
 Practical implementations of category theory concepts in PHP 8+.

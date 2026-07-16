@@ -73,6 +73,20 @@ regex = "1.10"
 # HTTP mocking for tests
 wiremock = "0.6"
 
+# Database (pgvector corpus)
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
+pgvector = { version = "=0.4.1", features = ["sqlx"] }
+
+# YAML frontmatter
+serde_yaml = "0.9"
+
+# TOML config
+toml = "0.8"
+
+# Hashing
+sha2 = "0.10"
+hex = "0.4"
+
 [profile.release]
 lto = true
 codegen-units = 1

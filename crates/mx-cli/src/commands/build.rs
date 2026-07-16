@@ -46,7 +46,7 @@ pub struct BuildCommand {
 impl BuildCommand {
     pub async fn run(&self) -> Result<()> {
         let detector = ProjectDetector::new();
-        
+
         let project_root = detector.find_root_from_cwd().with_context(|| {
             format!(
                 "Not in a MechCrate project.\n\n\
@@ -78,18 +78,18 @@ impl BuildCommand {
         );
 
         let mut cmd = Command::new("make");
-        
+
         // Set working directory to project root
         cmd.current_dir(&project_root);
-        
+
         // Ensure PATH includes common binary locations (docker, etc.)
         cmd.env("PATH", ensure_path());
-        
+
         // Pass through stdin/stdout/stderr
         cmd.stdin(Stdio::inherit());
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
-        
+
         cmd.arg("_build");
         cmd.arg(format!("service={}", self.service));
         cmd.arg(format!("tag={}", self.tag.as_deref().unwrap_or("latest")));
@@ -103,16 +103,12 @@ impl BuildCommand {
 
         if self.verbose {
             let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy()).collect();
-            println!(
-                "{} Running: make {}",
-                style("→").cyan(),
-                args.join(" ")
-            );
+            println!("{} Running: make {}", style("→").cyan(), args.join(" "));
         }
 
-        let status = cmd
-            .status()
-            .with_context(|| format!("Failed to run 'make _build' in {}", project_root.display()))?;
+        let status = cmd.status().with_context(|| {
+            format!("Failed to run 'make _build' in {}", project_root.display())
+        })?;
 
         if !status.success() {
             anyhow::bail!("Build failed");

@@ -1,3 +1,16 @@
+---
+title: "Type Theory: Types as Specifications and Proofs"
+category: theory
+languages: []
+complexity: expert
+use_cases:
+  - "designing expressive type systems"
+  - "encoding invariants in types"
+  - "applying Curry-Howard reasoning"
+  - "using dependent, linear, and refinement types"
+summary: "A mathematical framework for typing systems (dependent, linear, session, refinement types) connecting types to logic and proofs."
+---
+
 # Type Theory: Types as Specifications and Proofs
 
 **Purpose**: Mathematical framework for typing systems in programming languages, connecting types to logic, enabling compile-time verification and safer software construction.

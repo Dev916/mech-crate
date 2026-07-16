@@ -1,3 +1,16 @@
+---
+title: "Rust Idioms and Patterns"
+category: patterns
+languages: [rust]
+complexity: advanced
+use_cases:
+  - "structuring a functional-core Rust project"
+  - "modeling domains with enums and newtypes"
+  - "defining ports and adapters with traits"
+  - "injecting effects and concurrency at the edges"
+summary: "Guidance for a functional-core Rust stack with explicit effects at the edges: structure, boundaries, and checklists."
+---
+
 Appendix A: Rust Idioms and Patterns
 
 Purpose

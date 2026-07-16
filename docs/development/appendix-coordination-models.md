@@ -1,3 +1,16 @@
+---
+title: "Coordination Models: Decoupled Concurrent System Composition"
+category: architecture
+languages: []
+complexity: expert
+use_cases:
+  - "decoupling computation from communication"
+  - "using tuple spaces (Linda) for coordination"
+  - "modeling workflows with Petri nets"
+  - "designing constraint-based synchronization"
+summary: "Abstract coordination mechanisms (tuple spaces, Petri nets, coordination languages) that decouple computation from communication."
+---
+
 # Coordination Models: Decoupled Concurrent System Composition
 
 **Purpose**: Abstract coordination mechanisms that decouple computation from communication, enabling flexible concurrent system design through shared spaces and constraint-based synchronization.

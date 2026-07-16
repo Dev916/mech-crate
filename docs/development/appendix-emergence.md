@@ -1,3 +1,16 @@
+---
+title: "Emergence as a Design Practice"
+category: theory
+languages: []
+complexity: advanced
+use_cases:
+  - "designing systems that adapt via simple local rules"
+  - "building robustness from feedback and redundancy"
+  - "applying living-organism mental models"
+  - "planning safe replication and scaling"
+summary: "Grounding emergent design in practical steps: simple rules, strong constraints, rich feedback, and adaptation without losing identity."
+---
+
 # Appendix: Emergence as a Design Practice
 
 ## Purpose

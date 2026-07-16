@@ -1,3 +1,16 @@
+---
+title: "Apple Design Quick Implementation Guide"
+category: frontend
+languages: []
+complexity: intermediate
+use_cases:
+  - "quickly scaffolding Apple-style components"
+  - "applying ready-made CSS variables"
+  - "styling buttons and cards consistently"
+  - "generating UI with Apple design tokens"
+summary: "A fast, copy-paste implementation guide with Apple-style CSS variables and component patterns for UI generation."
+---
+
 # 🍎 Apple Design Quick Implementation Guide for LLMs
 
 ## When Asked to Create UI Components

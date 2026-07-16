@@ -1,3 +1,16 @@
+---
+title: "Sources & References"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "finding source references for a topic"
+  - "researching further reading"
+  - "citing foundational works"
+  - "locating canonical papers and books"
+summary: "A comprehensive bibliography for the theoretical frameworks, patterns, and concepts covered across this codex, organized by topic area."
+---
+
 # Sources & References
 
 **Purpose**: Comprehensive bibliography for all theoretical frameworks, patterns, and concepts covered in this codex. Organized by topic area for easy research and further study.

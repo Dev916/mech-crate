@@ -12,8 +12,8 @@ mod commands;
 use commands::{
     add::AddCommand, build::BuildCommand, cc_plugin::CcPluginCommand, dev::DevCommand,
     docs::DocsCommand, doctor::DoctorCommand, infra::InfraCommand, init::InitCommand,
-    mcp::McpCommand, new::NewCommand, recipes::RecipesCommand, router::RouterCommand,
-    self_update::SelfUpdateCommand, unyform::UnyformCommand,
+    mcp::McpCommand, new::NewCommand, rag::RagCommand, recipes::RecipesCommand,
+    router::RouterCommand, self_update::SelfUpdateCommand, unyform::UnyformCommand,
 };
 
 /// MechCrate CLI - Project scaffolding and infrastructure automation
@@ -79,6 +79,9 @@ enum Commands {
 
     /// MCP server management
     Mcp(McpCommand),
+
+    /// Techniques corpus (RAG) management
+    Rag(RagCommand),
 
     /// Check project health
     Doctor(DoctorCommand),
@@ -147,6 +150,7 @@ async fn main() -> Result<()> {
         Commands::Router(cmd) => cmd.run().await,
         Commands::Infra(cmd) => cmd.run().await,
         Commands::Mcp(cmd) => cmd.run().await,
+        Commands::Rag(cmd) => cmd.run().await,
         Commands::Doctor(cmd) => cmd.run().await,
         Commands::Unyform(cmd) => cmd.run().await,
         Commands::CcPlugin(cmd) => cmd.run().await,

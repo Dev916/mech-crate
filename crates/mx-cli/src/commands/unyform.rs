@@ -64,7 +64,9 @@ impl LoginCommand {
 
         // If API key provided via flag, use it directly
         if let Some(ref api_key) = self.api_key {
-            return self.login_with_key(&unyform, api_key, self.url.as_deref()).await;
+            return self
+                .login_with_key(&unyform, api_key, self.url.as_deref())
+                .await;
         }
 
         // Browser OAuth not fully implemented in Rust yet
@@ -87,9 +89,7 @@ impl LoginCommand {
 
         match selection {
             0 => {
-                let api_key: String = Password::new()
-                    .with_prompt("API Key")
-                    .interact()?;
+                let api_key: String = Password::new().with_prompt("API Key").interact()?;
 
                 let url: String = Input::new()
                     .with_prompt("Unyform URL")
@@ -108,7 +108,12 @@ impl LoginCommand {
         }
     }
 
-    async fn login_with_key(&self, unyform: &UnyformClient, api_key: &str, url: Option<&str>) -> Result<()> {
+    async fn login_with_key(
+        &self,
+        unyform: &UnyformClient,
+        api_key: &str,
+        url: Option<&str>,
+    ) -> Result<()> {
         println!("{} Authenticating...", style("→").cyan().bold());
 
         let user = unyform.login_with_api_key(api_key, url).await?;

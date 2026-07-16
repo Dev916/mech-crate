@@ -1,3 +1,16 @@
+---
+title: "Memory Models: Hardware-Software Concurrency Interface"
+category: concurrency
+languages: []
+complexity: expert
+use_cases:
+  - "reasoning about memory reordering and visibility"
+  - "choosing correct memory orderings"
+  - "writing correct lock-free code"
+  - "understanding hardware versus language memory models"
+summary: "Formal specifications of how concurrent reads and writes to shared memory interact, defining legal reorderings and visibility guarantees."
+---
+
 # Memory Models: Hardware-Software Concurrency Interface
 
 **Purpose**: Formal specifications of how concurrent reads and writes to shared memory interact, defining legal reorderings and visibility guarantees at the hardware and programming language level.

@@ -216,7 +216,7 @@ impl UnyformClient {
     pub fn clear_credentials(&self) -> Result<(), UnyformError> {
         let creds_path = self.config_dir.join("credentials.json");
         let session_path = self.config_dir.join("session.json");
-        
+
         if creds_path.exists() {
             std::fs::remove_file(&creds_path)?;
         }
@@ -267,10 +267,15 @@ impl UnyformClient {
     }
 
     /// Login with API key
-    pub async fn login_with_api_key(&self, api_key: &str, url: Option<&str>) -> Result<LoginResponse, UnyformError> {
+    pub async fn login_with_api_key(
+        &self,
+        api_key: &str,
+        url: Option<&str>,
+    ) -> Result<LoginResponse, UnyformError> {
         let base_url = url.unwrap_or(&self.default_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&format!("{}/v1/auth/login", base_url))
             .header("Content-Type", "application/json")
             .json(&serde_json::json!({
@@ -280,9 +285,10 @@ impl UnyformClient {
             .await?;
 
         if !response.status().is_success() {
-            let error: ApiError = response.json().await.map_err(|_| {
-                UnyformError::Api("Login failed".to_string())
-            })?;
+            let error: ApiError = response
+                .json()
+                .await
+                .map_err(|_| UnyformError::Api("Login failed".to_string()))?;
             return Err(UnyformError::Api(error.error.message));
         }
 
@@ -311,7 +317,8 @@ impl UnyformClient {
     pub async fn logout(&self) -> Result<(), UnyformError> {
         if let Ok(url) = self.get_url() {
             if let Ok(auth) = self.get_auth_header() {
-                let _ = self.client
+                let _ = self
+                    .client
                     .post(&format!("{}/v1/auth/logout", url))
                     .header("Authorization", auth)
                     .send()
@@ -326,7 +333,8 @@ impl UnyformClient {
         let url = self.get_url()?;
         let auth = self.get_auth_header()?;
 
-        let response = self.client
+        let response = self
+            .client
             .get(&format!("{}/v1/auth/me", url))
             .header("Authorization", &auth)
             .send()
@@ -351,16 +359,18 @@ impl UnyformClient {
         let auth = self.get_auth_header()?;
         let org = self.get_default_org()?;
 
-        let response = self.client
+        let response = self
+            .client
             .get(&format!("{}/v1/orgs/{}/recipes", url, org))
             .header("Authorization", &auth)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            let error: ApiError = response.json().await.map_err(|_| {
-                UnyformError::Api("Failed to list recipes".to_string())
-            })?;
+            let error: ApiError = response
+                .json()
+                .await
+                .map_err(|_| UnyformError::Api("Failed to list recipes".to_string()))?;
             return Err(UnyformError::Api(error.error.message));
         }
 
@@ -368,21 +378,29 @@ impl UnyformClient {
     }
 
     /// Get recipe versions
-    pub async fn get_recipe_versions(&self, recipe_name: &str) -> Result<RecipeVersionsResponse, UnyformError> {
+    pub async fn get_recipe_versions(
+        &self,
+        recipe_name: &str,
+    ) -> Result<RecipeVersionsResponse, UnyformError> {
         let url = self.get_url()?;
         let auth = self.get_auth_header()?;
         let org = self.get_default_org()?;
 
-        let response = self.client
-            .get(&format!("{}/v1/orgs/{}/recipes/{}/versions", url, org, recipe_name))
+        let response = self
+            .client
+            .get(&format!(
+                "{}/v1/orgs/{}/recipes/{}/versions",
+                url, org, recipe_name
+            ))
             .header("Authorization", &auth)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            let error: ApiError = response.json().await.map_err(|_| {
-                UnyformError::Api("Failed to get versions".to_string())
-            })?;
+            let error: ApiError = response
+                .json()
+                .await
+                .map_err(|_| UnyformError::Api("Failed to get versions".to_string()))?;
             return Err(UnyformError::Api(error.error.message));
         }
 
@@ -390,7 +408,11 @@ impl UnyformClient {
     }
 
     /// Get a specific recipe version
-    pub async fn get_recipe(&self, recipe_name: &str, version: Option<&str>) -> Result<Recipe, UnyformError> {
+    pub async fn get_recipe(
+        &self,
+        recipe_name: &str,
+        version: Option<&str>,
+    ) -> Result<Recipe, UnyformError> {
         let url = self.get_url()?;
         let auth = self.get_auth_header()?;
         let org = self.get_default_org()?;
@@ -400,7 +422,8 @@ impl UnyformClient {
             v.to_string()
         } else {
             let versions = self.get_recipe_versions(recipe_name).await?;
-            versions.versions
+            versions
+                .versions
                 .iter()
                 .find(|v| v.is_latest)
                 .or_else(|| versions.versions.first())
@@ -408,16 +431,21 @@ impl UnyformClient {
                 .ok_or_else(|| UnyformError::Api("No versions found".to_string()))?
         };
 
-        let response = self.client
-            .get(&format!("{}/v1/orgs/{}/recipes/{}/versions/{}", url, org, recipe_name, version))
+        let response = self
+            .client
+            .get(&format!(
+                "{}/v1/orgs/{}/recipes/{}/versions/{}",
+                url, org, recipe_name, version
+            ))
             .header("Authorization", &auth)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            let error: ApiError = response.json().await.map_err(|_| {
-                UnyformError::Api("Failed to get recipe".to_string())
-            })?;
+            let error: ApiError = response
+                .json()
+                .await
+                .map_err(|_| UnyformError::Api("Failed to get recipe".to_string()))?;
             return Err(UnyformError::Api(error.error.message));
         }
 

@@ -1,3 +1,16 @@
+---
+title: "API Design & Structure Playbook"
+category: api-design
+languages: []
+complexity: advanced
+use_cases:
+  - "modeling resources and URLs"
+  - "choosing HTTP verbs, status codes, and error shapes"
+  - "designing pagination, versioning, and compatibility"
+  - "applying HATEOAS/hypermedia contracts"
+summary: "An opinionated playbook for designing HTTP APIs that stay evolvable, predictable, and kind to clients."
+---
+
 # **Appendix: API Design & Structure Playbook**
 
 An opinionated, battle-tested appendix for designing HTTP APIs that stay evolvable, predictable, and kind to clients. Pulls from HATEOAS patterns, "Your API is Bad", and other industry scars.

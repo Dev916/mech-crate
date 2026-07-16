@@ -1,3 +1,16 @@
+---
+title: "Laravel Idioms and Patterns"
+category: patterns
+languages: [php]
+complexity: intermediate
+use_cases:
+  - "structuring a Laravel app by domain, infra, and app layers"
+  - "keeping Eloquent out of the domain"
+  - "defining ports and adapters in Laravel"
+  - "handling errors with Result-like wrappers"
+summary: "Laravel with a functional bias: pure domain, explicit ports, and Eloquent kept at the edge."
+---
+
 Appendix B: Laravel Idioms and Patterns
 
 Purpose

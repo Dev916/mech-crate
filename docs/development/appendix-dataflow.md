@@ -1,3 +1,16 @@
+---
+title: "Dataflow Models: Deterministic Concurrent Computation"
+category: patterns
+languages: []
+complexity: advanced
+use_cases:
+  - "modeling computation as dataflow graphs"
+  - "achieving deterministic parallelism"
+  - "using Kahn process networks or synchronous dataflow"
+  - "designing flow-based programming systems"
+summary: "Frameworks for modeling computation as data flowing through networks of processing nodes, enabling deterministic parallelism and compositional reasoning."
+---
+
 # Dataflow Models: Deterministic Concurrent Computation
 
 **Purpose**: Mathematical frameworks for modeling computation as data flowing through networks of interconnected processing nodes, enabling deterministic parallelism and compositional reasoning.

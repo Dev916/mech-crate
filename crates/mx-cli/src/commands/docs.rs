@@ -97,9 +97,8 @@ impl DocsCommand {
         self.check_node()?;
 
         // Find scripts/docs directory
-        let root = mech_crate_root().context(
-            "Could not find MechCrate root. Set MECH_CRATE_ROOT environment variable.",
-        )?;
+        let root = mech_crate_root()
+            .context("Could not find MechCrate root. Set MECH_CRATE_ROOT environment variable.")?;
         let docs_script_dir = root.join("scripts").join("docs");
 
         if !docs_script_dir.exists() {
@@ -230,11 +229,7 @@ impl DocsCommand {
 
     fn run_npx(&self, docs_script_dir: &std::path::Path, args: &[String]) -> Result<()> {
         if self.verbose {
-            println!(
-                "{} Running: npx {}",
-                style("→").cyan(),
-                args.join(" ")
-            );
+            println!("{} Running: npx {}", style("→").cyan(), args.join(" "));
         }
 
         let status = Command::new("npx")
@@ -256,9 +251,7 @@ impl DocsCommand {
 
     fn check_node(&self) -> Result<()> {
         // Check for Node.js
-        which::which("node").context(
-            "Node.js not found.\n  Install with: brew install node",
-        )?;
+        which::which("node").context("Node.js not found.\n  Install with: brew install node")?;
 
         // Check Node.js version
         let output = Command::new("node")
@@ -283,16 +276,17 @@ impl DocsCommand {
         }
 
         // Check for npm
-        which::which("npm").context(
-            "npm not found. Install Node.js to get npm.",
-        )?;
+        which::which("npm").context("npm not found. Install Node.js to get npm.")?;
 
         Ok(())
     }
 
     fn print_help(&self) {
         println!();
-        println!("{} - Portable Markdown to PDF Compiler", style("mx docs").bold());
+        println!(
+            "{} - Portable Markdown to PDF Compiler",
+            style("mx docs").bold()
+        );
         println!();
         println!("  Just needs Node.js - no other system dependencies required!");
         println!("  PDF generation via bundled Chromium - always works!");

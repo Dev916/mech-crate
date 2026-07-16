@@ -8,7 +8,7 @@ use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use walkdir::WalkDir;
 
-use mx_lib::{home_dir, source_templates_dir, is_initialized};
+use mx_lib::{home_dir, is_initialized, save_source_root, source_templates_dir};
 
 /// Initialize MechCrate installation
 #[derive(Args, Debug)]
@@ -34,8 +34,14 @@ impl InitCommand {
                 home.display()
             );
             println!();
-            println!("  Use {} to update templates", style("mx init --update").cyan());
-            println!("  Use {} to force re-initialize", style("mx init --force").cyan());
+            println!(
+                "  Use {} to update templates",
+                style("mx init --update").cyan()
+            );
+            println!(
+                "  Use {} to force re-initialize",
+                style("mx init --force").cyan()
+            );
             return Ok(());
         }
 
@@ -44,7 +50,7 @@ impl InitCommand {
             Ok(s) => s,
             Err(_) => {
                 anyhow::bail!(
-                    "Cannot find source templates. Make sure you're running mx from a valid installation."
+                    "Cannot find source templates. Set MECH_CRATE_ROOT to your mech-crate checkout, e.g.:\n  MECH_CRATE_ROOT=/path/to/mech-crate mx init"
                 );
             }
         };
@@ -59,26 +65,30 @@ impl InitCommand {
 
         // Create directory structure
         let dirs = [
-            "",           // root
+            "", // root
             "config",
             "config/infra",
             "config/unyform",
-            "recipes",    // cached recipes from Unyform
-            "router",     // Traefik router installation
-            "mcp",        // MCP server state
+            "recipes", // cached recipes from Unyform
+            "router",  // Traefik router installation
+            "mcp",     // MCP server state
         ];
 
         for dir in dirs {
             let path = home.join(dir);
             if !path.exists() {
                 std::fs::create_dir_all(&path)?;
-                println!("  {} Created: {}", style("•").dim(), dir.is_empty().then(|| ".mech-crate/").unwrap_or(dir));
+                println!(
+                    "  {} Created: {}",
+                    style("•").dim(),
+                    dir.is_empty().then(|| ".mech-crate/").unwrap_or(dir)
+                );
             }
         }
 
         // Copy templates
         let templates_dest = home.join("templates");
-        
+
         if templates_dest.exists() {
             if self.force {
                 println!("  {} Removing old templates...", style("→").cyan());
@@ -114,6 +124,18 @@ impl InitCommand {
         let version_file = home.join("version");
         std::fs::write(&version_file, env!("CARGO_PKG_VERSION"))?;
 
+        // Record the source repo root so globally installed binaries
+        // (outside the repo) can still resolve it later (e.g. MCP commands)
+        if let Some(source_root) = source.parent() {
+            if let Err(e) = save_source_root(source_root) {
+                println!(
+                    "  {} Could not record source root: {}",
+                    style("⚠").yellow(),
+                    e
+                );
+            }
+        }
+
         println!();
         println!(
             "{} MechCrate initialized successfully!",
@@ -121,8 +143,14 @@ impl InitCommand {
         );
         println!();
         println!("You can now use mx commands from anywhere:");
-        println!("  {} - Create a new project", style("mx new <project-name>").cyan());
-        println!("  {} - List available recipes", style("mx recipes list").cyan());
+        println!(
+            "  {} - Create a new project",
+            style("mx new <project-name>").cyan()
+        );
+        println!(
+            "  {} - List available recipes",
+            style("mx recipes list").cyan()
+        );
         println!("  {} - Check system health", style("mx doctor").cyan());
 
         Ok(())

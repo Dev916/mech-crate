@@ -1,3 +1,16 @@
+---
+title: "Category Theory: Mathematical Composition and Abstraction"
+category: theory
+languages: [haskell]
+complexity: expert
+use_cases:
+  - "designing composable, type-safe APIs"
+  - "understanding functional programming deeply"
+  - "building domain-specific languages"
+  - "grounding abstractions in rigorous mathematics"
+summary: "The complete theoretical foundation of category theory applied to software engineering: functors, monads, natural transformations, optics, and more."
+---
+
 # Category Theory: Mathematical Composition and Abstraction
 
 **Purpose**: Mathematical framework for studying composition, providing abstract patterns that unify diverse concepts across mathematics and computer science.

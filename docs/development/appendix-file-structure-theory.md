@@ -1,3 +1,16 @@
+---
+title: "Project & File-Structure Theory for Scalable Applications"
+category: architecture
+languages: []
+complexity: intermediate
+use_cases:
+  - "structuring a codebase to scale with size and team"
+  - "reducing coupling and improving cohesion"
+  - "aligning file layout with team boundaries"
+  - "choosing a project folder architecture"
+summary: "Principles and patterns for structuring application folders and files so they scale with codebase, team, and feature complexity."
+---
+
 # Project & File-Structure Theory for Scalable Applications
 
 **Audience:**  

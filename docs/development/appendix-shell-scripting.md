@@ -1,3 +1,16 @@
+---
+title: "Shell Scripting for DevOps Excellence"
+category: shell
+languages: [bash]
+complexity: intermediate
+use_cases:
+  - "writing testable, composable shell scripts"
+  - "separating pure core from effectful shell"
+  - "adding validation and structured logging"
+  - "standardizing DevOps automation"
+summary: "Production-grade shell scripting standards that treat scripts as composable, testable, side-effect-aware programs."
+---
+
 # Appendix: Shell Scripting for DevOps Excellence
 
 **Purpose**

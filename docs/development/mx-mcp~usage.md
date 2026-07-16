@@ -1,3 +1,16 @@
+---
+title: "MechCrate MCP Server Usage"
+category: process
+languages: []
+complexity: intermediate
+use_cases:
+  - "understanding MCP server capabilities"
+  - "building and starting the MCP server"
+  - "accessing mx commands through MCP"
+  - "using RAG documentation retrieval"
+summary: "Overview of the MechCrate MCP server that lets LLMs manage projects, orchestrate services, configure infrastructure, and retrieve documentation."
+---
+
 # MechCrate MCP Server
 
 A Model Context Protocol (MCP) server that enables LLMs to interact with MechCrate projects, providing full operational capabilities for project management, service orchestration, infrastructure configuration, and intelligent documentation retrieval.
@@ -7,10 +20,9 @@ A Model Context Protocol (MCP) server that enables LLMs to interact with MechCra
 - **Full MX Command Access**: Create projects, add services, manage router, configure infrastructure
 - **Project Makefile Operations**: dev, up, down, logs, shell, restart, build, and more
 - **Project Analysis**: Detect projects, list services, inspect configuration
-- **RAG Documentation**: Semantic search with specialized query modes via Weaviate
+- **Techniques Corpus**: Hybrid semantic + lexical search over development techniques, backed by Postgres + pgvector
 - **Comprehensive Tool Descriptions**: Detailed documentation for LLM understanding
-- **Auto-Start Weaviate**: Automatically starts the RAG backend with dynamic port allocation
-- **Port Conflict Resolution**: Handles multiple instances with automatic port allocation
+- **Resilient Corpus Access**: Neon primary with a local Postgres fallback; RAG tools degrade to an offline message instead of crashing the server
 
 ## Quick Start
 
@@ -24,14 +36,22 @@ mx mcp build
 cd mcp-server && cargo build --release
 ```
 
-### 2. Start Weaviate & Ingest Documentation
+### 2. Ingest the Techniques Corpus
+
+The corpus lives in Postgres + pgvector. Point it at a database via
+`~/.mech-crate/config/rag.toml` (Neon primary, local Postgres fallback), or spin
+up a local instance:
 
 ```bash
-# Start Weaviate (auto-allocates ports if 8080 is busy)
-mx mcp start
+docker run -d --name mx-rag -p 5432:5432 \
+  -e POSTGRES_DB=mx_rag -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17
+```
 
-# Ingest documentation
-mx mcp ingest
+Then ingest `docs/development` (embeddings use `OPENAI_API_KEY`):
+
+```bash
+mx rag ingest          # scan, chunk, embed, upsert (idempotent)
+mx rag status          # backend, doc/chunk counts, embedding model
 ```
 
 ### 3. Get Client Configuration
@@ -40,7 +60,7 @@ mx mcp ingest
 mx mcp config
 ```
 
-This generates a wrapper script that auto-starts Weaviate and provides the correct configuration.
+This outputs the MCP client configuration for the server.
 
 ### 4. Configure MCP Client
 
@@ -59,15 +79,16 @@ The `mx mcp config` command outputs the configuration. Example for Claude Deskto
 }
 ```
 
-### Alternative: Direct Binary (Weaviate auto-starts)
+### Alternative: Direct Binary
 
-The MCP server can auto-start Weaviate when launched:
+Point the client straight at the built binary. The server connects to the
+corpus lazily on the first RAG call and never blocks startup on it:
 
 ```json
 {
   "mcpServers": {
     "mechcrate": {
-      "command": "/path/to/mech-crate/mcp-server/target/release/mx-mcp",
+      "command": "/path/to/mech-crate/target/release/mx-mcp",
       "env": {
         "MECH_CRATE_ROOT": "/path/to/mech-crate"
       }
@@ -76,25 +97,9 @@ The MCP server can auto-start Weaviate when launched:
 }
 ```
 
-## Port Allocation
+Pass `--no-rag` to disable the corpus entirely (RAG tools then report offline).
 
-When multiple Weaviate instances need to run (or port 8080 is busy), the server automatically allocates ports:
-
-| Service | Default | Range |
-|---------|---------|-------|
-| Weaviate HTTP | 8080 | 8080-8179 |
-| Weaviate gRPC | 50051 | 50051-50150 |
-
-Port state is stored in `~/.mech-crate/mcp/`:
-- `.weaviate-http-port` - Currently allocated HTTP port
-- `.weaviate-grpc-port` - Currently allocated gRPC port
-
-Override the ranges with environment variables:
-```bash
-MX_MCP_HTTP_PORT_RANGE=9080-9179 mx mcp start
-```
-
-## Available Tools (44 total)
+## Available Tools (47 total)
 
 ### Global MX Commands
 
@@ -145,17 +150,18 @@ MX_MCP_HTTP_PORT_RANGE=9080-9179 mx mcp start
 | `project_detect` | Detect if a path is within a project |
 | `service_info` | Get details about a specific service |
 
-### RAG Documentation (7 tools)
+### Techniques Corpus / RAG (8 tools)
 
 | Tool | Description |
 |------|-------------|
-| `rag_search` | Semantic search across all documentation |
-| `rag_search_category` | Search within a specific category (recipe, command, docker, etc.) |
-| `rag_find_implementation` | Find code examples - Dockerfiles, compose, configs, scripts |
+| `rag_context` | **Primary entry point.** Describe what you're `working_on` (+ optional language/category) and get relevant techniques grouped by source doc |
+| `rag_search` | Hybrid semantic + lexical search across the techniques corpus |
+| `rag_search_category` | Search within a specific category (theory, patterns, concurrency, database, etc.) |
+| `rag_find_implementation` | Find implementations for a concept, filtered by language |
 | `rag_get_guidance` | Get architecture/design guidance with optional constraints |
-| `rag_compare_approaches` | Compare recipes, providers, or implementation strategies |
-| `rag_find_related` | Discover related documentation for a topic |
-| `rag_health` | Check Weaviate availability |
+| `rag_compare_approaches` | Compare two approaches side by side with relevant chunks |
+| `rag_find_related` | Discover related techniques from other docs |
+| `rag_health` | Report the active backend (`neon`/`local`/`offline`), doc/chunk counts, and embedding model |
 
 ## Architecture
 
@@ -171,21 +177,24 @@ MX_MCP_HTTP_PORT_RANGE=9080-9179 mx mcp start
 │  │ (bin/mx)    │  │ (make)      │  │ (analyze, discover)     │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    Tool Registry (44 tools)                  ││
+│  │                    Tool Registry (47 tools)                  ││
 │  │  Comprehensive LLM descriptions for intelligent tool use    ││
 │  └─────────────────────────────────────────────────────────────┘│
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │              Weaviate RAG Client (7 query modes)             ││
+│  │           CorpusStore (8 rag_* tools, hybrid search)         ││
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────┬───────────────────────────────────┘
-                              │ HTTP (auto-allocated port)
+                              │ SQL (Neon primary → local fallback)
 ┌─────────────────────────────▼───────────────────────────────────┐
-│                        Weaviate                                  │
+│                    Postgres + pgvector                           │
 │  ┌─────────────────┐  ┌─────────────────────────────────────┐  │
-│  │ MechCrateDoc    │  │ text2vec-transformers              │  │
-│  │ (documentation) │  │ (sentence-transformers)            │  │
+│  │ technique_docs  │  │ technique_chunks                    │  │
+│  │ technique_chunks│  │ HNSW cosine + pg_trgm (0.85/0.15)   │  │
 │  └─────────────────┘  └─────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
+
+Embeddings come from an OpenAI-compatible `/embeddings` endpoint
+(`text-embedding-3-small`, 1536 dims) via the `EmbeddingProvider` trait.
 ```
 
 ## Example LLM Interactions
@@ -276,43 +285,54 @@ RUST_LOG=debug ./target/release/mx-mcp
 
 ```bash
 mx mcp build          # Build the MCP server binary
-mx mcp start          # Start Weaviate RAG backend (with port allocation)
-mx mcp stop           # Stop Weaviate
-mx mcp status         # Show Weaviate container status
-mx mcp logs           # Tail Weaviate logs
-mx mcp ingest         # Ingest documentation into Weaviate
-mx mcp ingest --clear # Clear and re-ingest
+mx mcp status         # Show corpus backend + doc/chunk counts
 mx mcp config         # Show MCP client configuration
-mx mcp run            # Run MCP server (auto-starts Weaviate)
+mx mcp run            # Run MCP server interactively
 mx mcp test           # Test MCP server response
 mx mcp info           # Show MCP server information
 mx mcp help           # Show help
+```
+
+Corpus ingestion lives under `mx rag`:
+
+```bash
+mx rag ingest          # Ingest docs/development into the pgvector corpus
+mx rag ingest --clear  # Clear and re-ingest
+mx rag ingest --dry-run  # Parse/chunk only (no DB or embeddings)
+mx rag status          # Backend, doc/chunk counts, embedding model
 ```
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `WEAVIATE_URL` | Weaviate endpoint | Auto-detected from stored port |
 | `MECH_CRATE_ROOT` | MechCrate installation directory | Auto-detected |
+| `MX_RAG_DATABASE_URL` | Neon (primary) corpus URL | From `rag.toml`, else local fallback |
+| `MX_RAG_FALLBACK_DATABASE_URL` | Local Postgres fallback URL | `postgres://postgres@localhost:5432/mx_rag` |
+| `OPENAI_API_KEY` | Embedding API key (or `MX_RAG_EMBEDDING_API_KEY`) | — |
+| `MX_RAG_EMBEDDING_MODEL` | Embedding model | `text-embedding-3-small` |
 | `RUST_LOG` | Log level | `info` |
-| `MX_MCP_HTTP_PORT_RANGE` | HTTP port allocation range | `8080-8179` |
-| `MX_MCP_GRPC_PORT_RANGE` | gRPC port allocation range | `50051-50150` |
+
+Corpus config is read from `~/.mech-crate/config/rag.toml`; the env vars above override it.
 
 ## Troubleshooting
 
-### Weaviate Not Available
+### Corpus Offline
 
 ```bash
-# Check if containers are running
-mx mcp status
+# Show the active backend (neon / local / offline) and counts
+mx rag status
 
-# View logs
-mx mcp logs
+# Start a local pgvector instance if neither Neon nor local is reachable
+docker run -d --name mx-rag -p 5432:5432 \
+  -e POSTGRES_DB=mx_rag -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17
 
-# Restart
-mx mcp stop && mx mcp start
+# Or set the primary URL
+export MX_RAG_DATABASE_URL=postgres://...neon.tech/mx_rag
 ```
+
+The MCP server never crashes when the corpus is unreachable — the `rag_*` tools
+return an actionable offline message instead.
 
 ### MechCrate Root Not Found
 
@@ -330,26 +350,15 @@ export MECH_CRATE_ROOT=/path/to/mech-crate
 
 ### RAG Search Returns No Results
 
-Re-ingest documentation:
+Confirm the corpus is populated, then re-ingest if needed:
 
 ```bash
-mx mcp ingest --clear
+mx rag status
+mx rag ingest --clear
 ```
 
-### Port Conflicts
-
-Check allocated ports:
-
-```bash
-mx mcp info
-```
-
-Force new port allocation:
-
-```bash
-rm ~/.mech-crate/mcp/.weaviate-*-port
-mx mcp start
-```
+If `rag_health` reports search running in trigram-only mode, no embedding API key
+is configured — set `OPENAI_API_KEY` and run `mx rag ingest --reembed`.
 
 ## License
 

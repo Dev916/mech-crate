@@ -1,3 +1,16 @@
+---
+title: "Build, Deploy & Release Recipe"
+category: infra
+languages: []
+complexity: intermediate
+use_cases:
+  - "bootstrapping monorepo build and deploy infrastructure"
+  - "organizing modular Makefiles and scripts"
+  - "setting up semantic version bumping"
+  - "deploying to Cloudflare with Terraform IaC"
+summary: "A batteries-included blueprint for monorepo infrastructure: modular Makefiles, Docker organization, semantic versioning, Cloudflare deployment, and Terraform IaC."
+---
+
 # Build, Deploy & Release Recipe
 
 > A batteries-included blueprint for monorepo infrastructure: modular Makefiles, Docker organization, semantic versioning, Cloudflare deployment, and Terraform IaC. Use this to bootstrap any project with production-grade patterns.

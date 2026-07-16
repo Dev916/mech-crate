@@ -1,3 +1,16 @@
+---
+title: "Software as Life: Computational Nature and Digital Evolution"
+category: theory
+languages: []
+complexity: intermediate
+use_cases:
+  - "understanding software evolution and decay"
+  - "explaining technical debt as entropy"
+  - "designing self-organizing systems"
+  - "reasoning about technology adoption"
+summary: "Explores how software systems mirror living organisms through physics, emergence, evolution, entropy, and ecosystems."
+---
+
 # Software as Life: Computational Nature and Digital Evolution
 
 **Inspired by**: [The Nature of Code](https://natureofcode.com/book/preface/)

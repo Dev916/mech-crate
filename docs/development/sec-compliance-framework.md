@@ -1,3 +1,16 @@
+---
+title: "SEC Compliance Framework for Tokenized Securities"
+category: security
+languages: []
+complexity: advanced
+use_cases:
+  - "planning a compliant security token offering"
+  - "navigating Regulation D, A+, and S"
+  - "meeting transfer agent and registration requirements"
+  - "building compliance monitoring systems"
+summary: "A comprehensive guide to achieving and maintaining SEC compliance for digital security offerings."
+---
+
 # SEC Compliance Framework for Tokenized Securities
 
 **Comprehensive guide to achieving and maintaining SEC compliance for digital security offerings.**

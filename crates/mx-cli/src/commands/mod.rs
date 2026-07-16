@@ -10,6 +10,7 @@ pub mod infra;
 pub mod init;
 pub mod mcp;
 pub mod new;
+pub mod rag;
 pub mod recipes;
 pub mod router;
 pub mod self_update;

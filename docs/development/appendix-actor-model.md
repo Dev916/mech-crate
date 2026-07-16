@@ -1,3 +1,16 @@
+---
+title: "Actor Model: Deep Theory & Practice"
+category: concurrency
+languages: [rust, typescript]
+complexity: advanced
+use_cases:
+  - "modeling message-passing concurrency"
+  - "designing supervision and fault-tolerance trees"
+  - "implementing virtual actors (Orleans model)"
+  - "avoiding common actor anti-patterns"
+summary: "Comprehensive coverage of the Actor Model computational paradigm, from Hewitt's axioms through Erlang/OTP, Akka, and Orleans."
+---
+
 # Appendix: Actor Model - Deep Theory & Practice
 
 Purpose: Provide comprehensive coverage of the Actor Model computational paradigm, from Hewitt's original axioms through modern implementations like Erlang/OTP, Akka, and Orleans.

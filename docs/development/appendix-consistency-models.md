@@ -1,3 +1,16 @@
+---
+title: "Consistency Models: The Spectrum of Distributed Guarantees"
+category: architecture
+languages: []
+complexity: expert
+use_cases:
+  - "choosing a consistency model for a system"
+  - "reasoning about CAP and PACELC trade-offs"
+  - "distinguishing causal from eventual consistency"
+  - "specifying which operation orderings are legal"
+summary: "Formal specifications of correctness for concurrent and distributed systems, from strong to eventual consistency."
+---
+
 # Consistency Models: The Spectrum of Distributed Guarantees
 
 **Purpose**: Formal specifications of correctness for concurrent and distributed systems, defining what behaviors are legal when multiple processes access shared state.

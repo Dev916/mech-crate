@@ -1,3 +1,16 @@
+---
+title: "Streams Deep Dive"
+category: patterns
+languages: []
+complexity: advanced
+use_cases:
+  - "designing stream topologies and contracts"
+  - "reasoning about time and delivery semantics"
+  - "applying backpressure and flow control"
+  - "ensuring idempotency and recovery"
+summary: "A language-agnostic reference for designing, reasoning about, and operating data streams from first principles to advanced patterns."
+---
+
 # Appendix: Streams Deep Dive
 
 Purpose: deep, language-agnostic reference for designing, reasoning about, and operating data streams from first principles to advanced patterns.

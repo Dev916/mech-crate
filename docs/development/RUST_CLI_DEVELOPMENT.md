@@ -1,3 +1,16 @@
+---
+title: "MechCrate Rust CLI Development Guide"
+category: patterns
+languages: [rust]
+complexity: advanced
+use_cases:
+  - "developing new mx CLI features"
+  - "understanding crate responsibilities"
+  - "building and testing the workspace"
+  - "extending the CLI and MCP server"
+summary: "How to develop, build, and extend the MechCrate CLI (mx) and MCP server within the Cargo workspace."
+---
+
 # MechCrate Rust CLI Development Guide
 
 This guide covers how to develop, build, and extend the MechCrate CLI (`mx`) and MCP server.
@@ -98,7 +111,15 @@ crates/mx-lib/
     ├── router/
     │   └── mod.rs          # Traefik router management
     ├── mcp/
-    │   └── mod.rs          # MCP server & Weaviate management
+    │   └── mod.rs          # MCP server config & lifecycle
+    ├── corpus/
+    │   ├── mod.rs          # Techniques corpus (pgvector) exports
+    │   ├── store.rs        # CorpusStore: Neon→local fallback, hybrid search
+    │   ├── embed.rs        # EmbeddingProvider trait + OpenAI-compatible embedder
+    │   ├── chunk.rs        # Heading-aware markdown chunker
+    │   ├── frontmatter.rs  # YAML frontmatter parser
+    │   ├── config.rs       # RagConfig (rag.toml + env)
+    │   └── ingest.rs       # Scan/ingest pipeline
     ├── upgrade/
     │   └── mod.rs          # Project upgrade functionality
     └── unyform/

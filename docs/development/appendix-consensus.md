@@ -1,3 +1,16 @@
+---
+title: "Consensus Algorithms: Distributed Agreement Under Failure"
+category: architecture
+languages: []
+complexity: expert
+use_cases:
+  - "choosing a consensus protocol such as Paxos or Raft"
+  - "reasoning about FLP impossibility"
+  - "building fault-tolerant replicated state"
+  - "handling Byzantine failures"
+summary: "Algorithms and theory for achieving agreement among distributed processes despite failures: FLP, Paxos, Raft, and Byzantine consensus."
+---
+
 # Consensus Algorithms: Distributed Agreement Under Failure
 
 **Purpose**: Algorithms and theoretical frameworks for achieving agreement among distributed processes despite failures, enabling fault-tolerant distributed systems.

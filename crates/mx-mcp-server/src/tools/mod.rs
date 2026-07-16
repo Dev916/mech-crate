@@ -10,8 +10,54 @@ use crate::error::{McpError, McpResult};
 use crate::mcp::protocol::{Tool, ToolCallResult, ToolInputSchema};
 use crate::mx::{MakeExecutor, MxExecutor};
 use crate::project::ProjectDetector;
-use crate::rag::{format_search_results, WeaviateClient};
 use crate::unyform::UnyformClient;
+use mx_lib::corpus::{CorpusStore, SearchMode, TechHit, TechQuery};
+
+const CORPUS_OFFLINE: &str = "Techniques corpus is offline: could not reach Neon or local Postgres.\n\
+Configure ~/.mech-crate/config/rag.toml (database_url / fallback_database_url) or start a local pgvector:\n\
+  docker run -d --name mx-rag -p 5432:5432 -e POSTGRES_DB=mx_rag -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17\n\
+Then run: mx rag ingest";
+
+/// Render hits grouped by source doc, with metadata and scores.
+fn format_hits(header: &str, hits: &[TechHit], mode: SearchMode) -> String {
+    if hits.is_empty() {
+        return format!("{header}\n\nNo relevant techniques found. Try different phrasing, or check `rag_health` and `mx rag ingest`.");
+    }
+    let mut out = format!("{header}\n");
+    if matches!(mode, SearchMode::TrigramOnly) {
+        out.push_str(
+            "\n> Note: lexical-only search (no embedding key configured); results may be weaker.\n",
+        );
+    }
+    let mut by_doc: Vec<(&str, Vec<&TechHit>)> = Vec::new();
+    for h in hits {
+        match by_doc.iter_mut().find(|(p, _)| *p == h.path.as_str()) {
+            Some((_, v)) => v.push(h),
+            None => by_doc.push((h.path.as_str(), vec![h])),
+        }
+    }
+    for (path, doc_hits) in by_doc {
+        let first = doc_hits[0];
+        out.push_str(&format!("\n## {} ({})\n", first.title, path));
+        out.push_str(&format!(
+            "category: {} | languages: {} | use cases: {}\n",
+            first.category,
+            first.languages.join(", "),
+            first.use_cases.join("; ")
+        ));
+        if let Some(s) = &first.summary {
+            out.push_str(&format!("> {}\n", s));
+        }
+        for h in doc_hits {
+            out.push_str(&format!(
+                "\n### {} (score {:.2})\n\n{}\n",
+                h.heading_path, h.score, h.content
+            ));
+        }
+        out.push_str("\n---\n");
+    }
+    out
+}
 
 /// Tool registry containing all available tools
 pub struct ToolRegistry {
@@ -62,6 +108,7 @@ enum ToolHandler {
     ServiceInfo,
 
     // RAG queries
+    RagContext,
     RagSearch,
     RagSearchCategory,
     RagFindImplementation,
@@ -843,24 +890,53 @@ Returns:
             },
 
             // ─────────────────────────────────────────────────────────────────
-            // RAG Documentation Queries
+            // RAG Techniques Corpus Queries
             // ─────────────────────────────────────────────────────────────────
 
             ToolDefinition {
                 tool: Tool {
+                    name: "rag_context".to_string(),
+                    description: r#"Get development techniques relevant to what you are working on RIGHT NOW.
+
+This is the primary entry point to the techniques corpus (theory, patterns,
+architecture, concurrency, API design, databases, Docker, FSM/FRP, and more,
+drawn from mech-crate docs/development). Describe the task in 1-2 sentences
+and get back the most relevant technique chunks, grouped by source document.
+
+Examples:
+- working_on: "designing a retry/backoff strategy for an async Rust job queue", language: "rust"
+- working_on: "structuring a Laravel service layer so business logic stays testable", language: "php"
+- working_on: "choosing between embedding and referencing for MongoDB order documents""#.to_string(),
+                    input_schema: ToolInputSchema {
+                        schema_type: "object".to_string(),
+                        properties: Some(json!({
+                            "working_on": {
+                                "type": "string",
+                                "description": "1-2 sentence description of the current task/problem"
+                            },
+                            "language": {
+                                "type": "string",
+                                "description": "Optional language filter (e.g. rust, typescript, php, python)"
+                            },
+                            "category": {
+                                "type": "string",
+                                "description": "Optional category filter (e.g. theory, patterns, architecture, concurrency, api-design, database, docker, shell, blockchain, ml, security, process, frontend, infra)"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum chunks to return (default: 5)"
+                            }
+                        })),
+                        required: Some(vec!["working_on".to_string()]),
+                    },
+                },
+                handler: ToolHandler::RagContext,
+            },
+
+            ToolDefinition {
+                tool: Tool {
                     name: "rag_search".to_string(),
-                    description: r#"Search MechCrate documentation using semantic search.
-
-Use this to find relevant documentation about:
-- How to structure projects
-- Recipe configuration
-- Docker best practices
-- Traefik routing setup
-- Infrastructure configuration
-- Make target usage
-
-The search uses embeddings to find semantically similar content,
-even if the exact words don't match."#.to_string(),
+                    description: "Semantic + lexical hybrid search over the development-techniques corpus (theory, patterns, architecture, concurrency, API design, databases, Docker, and more). Prefer rag_context when you can describe your current task.".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -882,15 +958,7 @@ even if the exact words don't match."#.to_string(),
             ToolDefinition {
                 tool: Tool {
                     name: "rag_search_category".to_string(),
-                    description: r#"Search documentation within a specific category.
-
-Categories:
-- recipe: Recipe authoring and configuration
-- command: MX command documentation
-- structure: Project structure and conventions
-- docker: Docker configuration and best practices
-- traefik: Routing and networking
-- infra: Infrastructure providers"#.to_string(),
+                    description: "Search the techniques corpus within one category. Categories: theory, patterns, architecture, concurrency, api-design, database, frontend, docker, infra, shell, blockchain, ml, security, process, other.".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -900,7 +968,7 @@ Categories:
                             },
                             "category": {
                                 "type": "string",
-                                "description": "Category to search: recipe, command, structure, docker, traefik, infra"
+                                "description": "Category to search: theory, patterns, architecture, concurrency, api-design, database, frontend, docker, infra, shell, blockchain, ml, security, process, other."
                             },
                             "limit": {
                                 "type": "integer",
@@ -916,15 +984,7 @@ Categories:
             ToolDefinition {
                 tool: Tool {
                     name: "rag_find_implementation".to_string(),
-                    description: r#"Find code implementation examples in MechCrate documentation.
-
-Use this to find:
-- Code snippets for specific patterns
-- Implementation examples for Dockerfiles, compose files, etc.
-- Configuration examples (nginx, supervisor, traefik)
-- Script examples (bash, make)
-
-Returns results prioritizing content with code blocks."#.to_string(),
+                    description: "Find code-bearing technique content for a pattern in a given language (filters on the corpus languages metadata; e.g. 'lens/prism optics' + language 'typescript').".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -946,15 +1006,7 @@ Returns results prioritizing content with code blocks."#.to_string(),
             ToolDefinition {
                 tool: Tool {
                     name: "rag_get_guidance".to_string(),
-                    description: r#"Get architecture and design guidance from MechCrate documentation.
-
-Use this when you need help with:
-- Choosing between different approaches
-- Understanding MechCrate conventions
-- Design decisions for project structure
-- Best practices for Docker, compose, routing
-
-The search contextualizes results around the given problem and constraints."#.to_string(),
+                    description: "Get architecture/design guidance from the techniques corpus for a specific problem, optionally with constraints (e.g. 'must be lock-free', 'PHP 8').".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -977,15 +1029,7 @@ The search contextualizes results around the given problem and constraints."#.to
             ToolDefinition {
                 tool: Tool {
                     name: "rag_compare_approaches".to_string(),
-                    description: r#"Compare different approaches or technologies in MechCrate context.
-
-Use this to compare:
-- Different recipes (laravel vs nuxt vs rust-api)
-- Different infrastructure providers (cloudflare vs aws)
-- Different configuration approaches
-- Alternative implementation strategies
-
-Returns relevant documentation for each approach for comparison."#.to_string(),
+                    description: "Compare two or more approaches/technologies using the techniques corpus (e.g. ['mutex', 'atomics'] or ['embedding documents', 'referencing documents']).".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -1009,15 +1053,7 @@ Returns relevant documentation for each approach for comparison."#.to_string(),
             ToolDefinition {
                 tool: Tool {
                     name: "rag_find_related".to_string(),
-                    description: r#"Find documentation related to a specific topic or document.
-
-Use this for:
-- Discovering related concepts
-- Finding prerequisites for a topic
-- Exploring connected documentation
-- Understanding broader context
-
-Useful when you need to expand understanding of a topic."#.to_string(),
+                    description: "Find techniques related to a topic or document, excluding the topic's own doc — useful to expand context around a chosen approach.".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -1039,7 +1075,7 @@ Useful when you need to expand understanding of a topic."#.to_string(),
             ToolDefinition {
                 tool: Tool {
                     name: "rag_health".to_string(),
-                    description: "Check if the Weaviate RAG server is available.".to_string(),
+                    description: "Check techniques corpus availability: backend (neon/local/offline), doc/chunk counts, embedding model, last ingest time.".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: None,
@@ -1375,7 +1411,7 @@ Actions:
         args: Value,
         mx: &MxExecutor,
         project_detector: &ProjectDetector,
-        weaviate: &WeaviateClient,
+        corpus: Option<&CorpusStore>,
     ) -> McpResult<ToolCallResult> {
         let tool_def = self
             .tools
@@ -1388,21 +1424,24 @@ Actions:
 
         match &tool_def.handler {
             ToolHandler::MxNew => {
-                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'name' is required".to_string())
-                })?;
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'name' is required".to_string()))?;
                 let _working_dir = args.get("working_directory").and_then(|v| v.as_str());
                 let with_infra: Option<Vec<&str>> = args
                     .get("with_infra")
                     .and_then(|v| v.as_array())
                     .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect());
 
-                let output = mx.new_project(
-                    name,
-                    None,
-                    with_infra.as_deref(),
-                    true, // no_prompt for MCP
-                ).await?;
+                let output = mx
+                    .new_project(
+                        name,
+                        None,
+                        with_infra.as_deref(),
+                        true, // no_prompt for MCP
+                    )
+                    .await?;
 
                 Ok(ToolCallResult::text(output.format()))
             }
@@ -1457,13 +1496,21 @@ Actions:
             }
 
             ToolHandler::MxInfraLink => {
-                let provider = args.get("provider").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'provider' is required".to_string())
-                })?;
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
-                let output = mx.execute(&["infra", "link", provider], Some(project_path.as_ref())).await?;
+                let provider = args
+                    .get("provider")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'provider' is required".to_string())
+                    })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
+                let output = mx
+                    .execute(&["infra", "link", provider], Some(project_path.as_ref()))
+                    .await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
@@ -1479,23 +1526,32 @@ Actions:
             }
 
             ToolHandler::MxAddService => {
-                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'name' is required".to_string())
-                })?;
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'name' is required".to_string()))?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let recipe = args.get("recipe").and_then(|v| v.as_str());
                 let domain = args.get("domain").and_then(|v| v.as_str());
 
-                let output = mx.add_service(name, recipe, domain, project_path.as_ref()).await?;
+                let output = mx
+                    .add_service(name, recipe, domain, project_path.as_ref())
+                    .await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
             ToolHandler::MxUpgrade => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let diff = args.get("diff").and_then(|v| v.as_bool()).unwrap_or(false);
                 let yes = args.get("yes").and_then(|v| v.as_bool()).unwrap_or(true);
 
@@ -1504,24 +1560,35 @@ Actions:
             }
 
             ToolHandler::MxBuild => {
-                let service = args.get("service").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'service' is required".to_string())
-                })?;
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let service = args
+                    .get("service")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'service' is required".to_string())
+                    })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let prod = args.get("prod").and_then(|v| v.as_bool()).unwrap_or(false);
                 let tag = args.get("tag").and_then(|v| v.as_str());
                 let push = args.get("push").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                let output = mx.build(service, prod, tag, push, project_path.as_ref()).await?;
+                let output = mx
+                    .build(service, prod, tag, push, project_path.as_ref())
+                    .await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
             ToolHandler::MakeDev => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let service = args.get("service").and_then(|v| v.as_str());
 
                 let output = MakeExecutor::dev(service, project_path.as_ref()).await?;
@@ -1529,9 +1596,12 @@ Actions:
             }
 
             ToolHandler::MakeUp => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let service = args.get("service").and_then(|v| v.as_str());
 
                 let output = MakeExecutor::up(service, project_path.as_ref()).await?;
@@ -1539,9 +1609,12 @@ Actions:
             }
 
             ToolHandler::MakeDown => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let service = args.get("service").and_then(|v| v.as_str());
 
                 let output = MakeExecutor::down(service, project_path.as_ref()).await?;
@@ -1549,9 +1622,12 @@ Actions:
             }
 
             ToolHandler::MakeLogs => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let service = args.get("service").and_then(|v| v.as_str());
 
                 let output = MakeExecutor::logs(service, project_path.as_ref()).await?;
@@ -1559,51 +1635,72 @@ Actions:
             }
 
             ToolHandler::MakeRestart => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
-                let service = args.get("service").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'service' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
+                let service = args
+                    .get("service")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'service' is required".to_string())
+                    })?;
 
                 let output = MakeExecutor::restart(service, project_path.as_ref()).await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
             ToolHandler::MakeShell => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
-                let service = args.get("service").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'service' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
+                let service = args
+                    .get("service")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'service' is required".to_string())
+                    })?;
 
                 let output = MakeExecutor::shell(service, None, project_path.as_ref()).await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
             ToolHandler::MakePs => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
 
                 let output = MakeExecutor::ps(project_path.as_ref()).await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
             ToolHandler::MakeHelp => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
 
                 let output = MakeExecutor::help(project_path.as_ref()).await?;
                 Ok(ToolCallResult::text(output.format()))
             }
 
             ToolHandler::MakeKey => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let bytes = args.get("bytes").and_then(|v| v.as_u64()).unwrap_or(32) as u32;
                 let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("hex");
 
@@ -1612,9 +1709,12 @@ Actions:
             }
 
             ToolHandler::ProjectAnalyze => {
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
 
                 let project = project_detector.analyze(project_path.as_ref()).await?;
                 let result = format!(
@@ -1635,43 +1735,63 @@ Actions:
             }
 
             ToolHandler::ProjectList => {
-                let search_path = args.get("search_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'search_path' is required".to_string())
-                })?;
+                let search_path = args
+                    .get("search_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'search_path' is required".to_string())
+                    })?;
 
-                let projects = project_detector.find_all_projects(search_path.as_ref()).await?;
+                let projects = project_detector
+                    .find_all_projects(search_path.as_ref())
+                    .await?;
                 let result = if projects.is_empty() {
                     "No MechCrate projects found.".to_string()
                 } else {
                     format!(
                         "Found {} project(s):\n{}",
                         projects.len(),
-                        projects.iter().map(|p| format!("  - {:?}", p)).collect::<Vec<_>>().join("\n")
+                        projects
+                            .iter()
+                            .map(|p| format!("  - {:?}", p))
+                            .collect::<Vec<_>>()
+                            .join("\n")
                     )
                 };
                 Ok(ToolCallResult::text(result))
             }
 
             ToolHandler::ProjectDetect => {
-                let path = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'path' is required".to_string())
-                })?;
+                let path = args
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'path' is required".to_string()))?;
 
                 match ProjectDetector::find_project_root(path.as_ref()) {
                     Some(root) => Ok(ToolCallResult::text(format!("Project root: {:?}", root))),
-                    None => Ok(ToolCallResult::text("No MechCrate project found at or above this path.".to_string())),
+                    None => Ok(ToolCallResult::text(
+                        "No MechCrate project found at or above this path.".to_string(),
+                    )),
                 }
             }
 
             ToolHandler::ServiceInfo => {
-                let service = args.get("service").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'service' is required".to_string())
-                })?;
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let service = args
+                    .get("service")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'service' is required".to_string())
+                    })?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
 
-                let svc = project_detector.get_service(project_path.as_ref(), service).await?;
+                let svc = project_detector
+                    .get_service(project_path.as_ref(), service)
+                    .await?;
                 let result = format!(
                     "Service: {}\nDockerfile: {}\nCompose: {}\nDev Compose: {}\nApp Directory: {:?}",
                     svc.name,
@@ -1683,229 +1803,297 @@ Actions:
                 Ok(ToolCallResult::text(result))
             }
 
-            ToolHandler::RagSearch => {
-                let query = args.get("query").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'query' is required".to_string())
-                })?;
-                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-
-                match weaviate.search(query, limit).await {
-                    Ok(docs) => Ok(ToolCallResult::text(format_search_results(&docs))),
-                    Err(e) => Ok(ToolCallResult::text(format!(
-                        "RAG search failed (Weaviate may not be running): {}",
-                        e
+            ToolHandler::RagContext => {
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
+                let working_on =
+                    args.get("working_on")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            McpError::InvalidArguments("'working_on' is required".to_string())
+                        })?;
+                let language = args.get("language").and_then(|v| v.as_str());
+                let category = args.get("category").and_then(|v| v.as_str());
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as i64;
+                match corpus
+                    .search(&TechQuery {
+                        text: working_on,
+                        category,
+                        language,
+                        limit,
+                    })
+                    .await
+                {
+                    Ok((hits, mode)) => Ok(ToolCallResult::text(format_hits(
+                        &format!("# Techniques for: {}", working_on),
+                        &hits,
+                        mode,
                     ))),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus search failed: {e}"))),
+                }
+            }
+
+            ToolHandler::RagSearch => {
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
+                let query = args
+                    .get("query")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'query' is required".to_string()))?;
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as i64;
+                match corpus
+                    .search(&TechQuery {
+                        text: query,
+                        category: None,
+                        language: None,
+                        limit,
+                    })
+                    .await
+                {
+                    Ok((hits, mode)) => Ok(ToolCallResult::text(format_hits(
+                        &format!("# Results for: {}", query),
+                        &hits,
+                        mode,
+                    ))),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus search failed: {e}"))),
                 }
             }
 
             ToolHandler::RagSearchCategory => {
-                let query = args.get("query").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'query' is required".to_string())
-                })?;
-                let category = args.get("category").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'category' is required".to_string())
-                })?;
-                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-
-                match weaviate.search_by_category(query, category, limit).await {
-                    Ok(docs) => Ok(ToolCallResult::text(format_search_results(&docs))),
-                    Err(e) => Ok(ToolCallResult::text(format!(
-                        "RAG search failed (Weaviate may not be running): {}",
-                        e
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
+                let query = args
+                    .get("query")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'query' is required".to_string()))?;
+                let category = args
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'category' is required".to_string())
+                    })?;
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as i64;
+                match corpus
+                    .search(&TechQuery {
+                        text: query,
+                        category: Some(category),
+                        language: None,
+                        limit,
+                    })
+                    .await
+                {
+                    Ok((hits, mode)) => Ok(ToolCallResult::text(format_hits(
+                        &format!("# [{}] results for: {}", category, query),
+                        &hits,
+                        mode,
                     ))),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus search failed: {e}"))),
                 }
             }
 
             ToolHandler::RagFindImplementation => {
-                let pattern = args.get("pattern").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'pattern' is required".to_string())
-                })?;
-                let language = args.get("language").and_then(|v| v.as_str());
-
-                // Build query for code implementations
-                let query = if let Some(lang) = language {
-                    format!("code implementation {} {} example", pattern, lang)
-                } else {
-                    format!("code implementation {} example", pattern)
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
                 };
-
-                match weaviate.search(&query, 5).await {
-                    Ok(docs) => {
-                        // Filter to prefer code-heavy results
-                        let filtered: Vec<_> = docs
-                            .into_iter()
-                            .filter(|d| {
-                                d.content.contains("```") ||
-                                d.content.contains("FROM ") ||  // Dockerfile
-                                d.content.contains("services:") ||  // compose
-                                d.content.contains("fn ") ||
-                                d.content.contains("function ")
-                            })
+                let pattern = args
+                    .get("pattern")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'pattern' is required".to_string())
+                    })?;
+                let language = args.get("language").and_then(|v| v.as_str());
+                let query = format!("code implementation example {}", pattern);
+                match corpus
+                    .search(&TechQuery {
+                        text: &query,
+                        category: None,
+                        language,
+                        limit: 8,
+                    })
+                    .await
+                {
+                    Ok((hits, mode)) => {
+                        let code_hits: Vec<TechHit> = hits
+                            .iter()
+                            .filter(|h| h.content.contains("```"))
+                            .cloned()
                             .collect();
-
-                        if filtered.is_empty() {
-                            // Fall back to unfiltered if no code found
-                            match weaviate.search(&query, 5).await {
-                                Ok(all) => Ok(ToolCallResult::text(format_search_results(&all))),
-                                Err(e) => Ok(ToolCallResult::text(format!("Search failed: {}", e))),
-                            }
+                        let chosen = if code_hits.is_empty() {
+                            hits
                         } else {
-                            Ok(ToolCallResult::text(format_search_results(&filtered)))
-                        }
+                            code_hits
+                        };
+                        let chosen: Vec<TechHit> = chosen.into_iter().take(5).collect();
+                        Ok(ToolCallResult::text(format_hits(
+                            &format!("# Implementations: {}", pattern),
+                            &chosen,
+                            mode,
+                        )))
                     }
-                    Err(e) => Ok(ToolCallResult::text(format!(
-                        "RAG search failed (Weaviate may not be running): {}", e
-                    ))),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus search failed: {e}"))),
                 }
             }
 
             ToolHandler::RagGetGuidance => {
-                let problem = args.get("problem").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'problem' is required".to_string())
-                })?;
-                let constraints: Option<Vec<String>> = args
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
+                let problem = args
+                    .get("problem")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'problem' is required".to_string())
+                    })?;
+                let constraints: Vec<String> = args
                     .get("constraints")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
-
-                // Build query with constraints
-                let query = if let Some(ref c) = constraints {
-                    format!("architecture design pattern {} constraints: {}", problem, c.join(", "))
-                } else {
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let query = if constraints.is_empty() {
                     format!("architecture design pattern best practice {}", problem)
+                } else {
+                    format!(
+                        "architecture design pattern {} constraints: {}",
+                        problem,
+                        constraints.join(", ")
+                    )
                 };
-
-                match weaviate.search(&query, 7).await {
-                    Ok(docs) => {
-                        // Group by source document for better context
-                        let mut grouped: std::collections::HashMap<String, Vec<&crate::rag::Document>> = 
-                            std::collections::HashMap::new();
-                        for doc in &docs {
-                            grouped.entry(doc.source.clone()).or_default().push(doc);
-                        }
-
-                        let mut result = format!("## Guidance for: {}\n\n", problem);
-                        if let Some(c) = constraints {
-                            result.push_str(&format!("**Constraints:** {}\n\n", c.join(", ")));
-                        }
-                        result.push_str("---\n\n");
-
-                        for (source, chunks) in grouped {
-                            result.push_str(&format!("### From: {}\n\n", source));
-                            for chunk in chunks {
-                                result.push_str(&chunk.content);
-                                result.push_str("\n\n");
-                            }
-                        }
-
-                        Ok(ToolCallResult::text(result))
-                    }
-                    Err(e) => Ok(ToolCallResult::text(format!(
-                        "RAG search failed (Weaviate may not be running): {}", e
-                    ))),
+                let mut header = format!("# Guidance for: {}", problem);
+                if !constraints.is_empty() {
+                    header.push_str(&format!("\n**Constraints:** {}", constraints.join(", ")));
+                }
+                match corpus
+                    .search(&TechQuery {
+                        text: &query,
+                        category: None,
+                        language: None,
+                        limit: 7,
+                    })
+                    .await
+                {
+                    Ok((hits, mode)) => Ok(ToolCallResult::text(format_hits(&header, &hits, mode))),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus search failed: {e}"))),
                 }
             }
 
             ToolHandler::RagCompareApproaches => {
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let approaches: Vec<String> = args
                     .get("approaches")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                    .ok_or_else(|| McpError::InvalidArguments("'approaches' is required".to_string()))?;
-
-                let criteria: Option<Vec<String>> = args
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'approaches' is required".to_string())
+                    })?;
+                let criteria: Vec<String> = args
                     .get("criteria")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
-
-                let mut result = format!("## Comparison: {}\n\n", approaches.join(" vs "));
-                if let Some(ref c) = criteria {
-                    result.push_str(&format!("**Focus:** {}\n\n", c.join(", ")));
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mut result = format!("# Comparison: {}\n", approaches.join(" vs "));
+                if !criteria.is_empty() {
+                    result.push_str(&format!("**Focus:** {}\n", criteria.join(", ")));
                 }
-                result.push_str("---\n\n");
-
                 for approach in &approaches {
-                    let query = if let Some(ref c) = criteria {
-                        format!("{} {} {}", approach, c.join(" "), approaches.join(" vs "))
+                    let query = if criteria.is_empty() {
+                        format!("{} technique tradeoffs usage", approach)
                     } else {
-                        format!("{} features usage documentation", approach)
+                        format!("{} {}", approach, criteria.join(" "))
                     };
-
-                    result.push_str(&format!("### {}\n\n", approach));
-
-                    match weaviate.search(&query, 3).await {
-                        Ok(docs) => {
-                            if docs.is_empty() {
-                                result.push_str("No specific documentation found.\n\n");
-                            } else {
-                                for doc in docs {
-                                    result.push_str(&format!("**{}**\n", doc.title));
-                                    result.push_str(&doc.content);
-                                    result.push_str("\n\n");
-                                }
-                            }
+                    match corpus
+                        .search(&TechQuery {
+                            text: &query,
+                            category: None,
+                            language: None,
+                            limit: 3,
+                        })
+                        .await
+                    {
+                        Ok((hits, mode)) => {
+                            result.push_str(&format_hits(
+                                &format!("\n## {}", approach),
+                                &hits,
+                                mode,
+                            ));
                         }
                         Err(e) => {
-                            result.push_str(&format!("Search error: {}\n\n", e));
+                            result.push_str(&format!("\n## {}\n\nSearch error: {e}\n", approach))
                         }
                     }
                 }
-
                 Ok(ToolCallResult::text(result))
             }
 
             ToolHandler::RagFindRelated => {
-                let topic = args.get("topic").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'topic' is required".to_string())
-                })?;
-                let max_results = args.get("max_results").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-
-                // Normalize topic for search
-                let query = topic.replace(".md", "").replace("-", " ").replace("_", " ");
-
-                match weaviate.search(&query, max_results + 3).await {
-                    Ok(docs) => {
-                        // Filter out the source topic itself
-                        let filtered: Vec<_> = docs
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
+                let topic = args
+                    .get("topic")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'topic' is required".to_string()))?;
+                let max_results = args
+                    .get("max_results")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5) as usize;
+                let query = topic.replace(".md", "").replace(['-', '_'], " ");
+                match corpus
+                    .search(&TechQuery {
+                        text: &query,
+                        category: None,
+                        language: None,
+                        limit: (max_results + 5) as i64,
+                    })
+                    .await
+                {
+                    Ok((hits, mode)) => {
+                        let filtered: Vec<TechHit> = hits
                             .into_iter()
-                            .filter(|d| !d.source.contains(topic) && !d.title.contains(topic))
+                            .filter(|h| !h.path.contains(topic) && !h.title.contains(topic))
                             .take(max_results)
                             .collect();
-
-                        if filtered.is_empty() {
-                            Ok(ToolCallResult::text(format!(
-                                "No related documents found for: {}", topic
-                            )))
-                        } else {
-                            let mut result = format!("## Documents Related to: {}\n\n", topic);
-                            for doc in &filtered {
-                                result.push_str(&format!("### {} [{}]\n\n", doc.title, doc.category));
-                                result.push_str(&doc.content);
-                                result.push_str("\n\n---\n\n");
-                            }
-                            Ok(ToolCallResult::text(result))
-                        }
+                        Ok(ToolCallResult::text(format_hits(
+                            &format!("# Related to: {}", topic),
+                            &filtered,
+                            mode,
+                        )))
                     }
-                    Err(e) => Ok(ToolCallResult::text(format!(
-                        "RAG search failed (Weaviate may not be running): {}", e
-                    ))),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus search failed: {e}"))),
                 }
             }
 
             ToolHandler::RagHealth => {
-                let healthy = weaviate.health_check().await;
-                let result = if healthy {
-                    "Weaviate RAG server is available and ready."
-                } else {
-                    "Weaviate RAG server is not available. Start it with: docker compose up -d"
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
                 };
-                Ok(ToolCallResult::text(result))
+                match corpus.status().await {
+                    Ok(st) => Ok(ToolCallResult::text(
+                        serde_json::to_string_pretty(&st).unwrap_or_default(),
+                    )),
+                    Err(e) => Ok(ToolCallResult::text(format!("Corpus status failed: {e}"))),
+                }
             }
 
             // ─────────────────────────────────────────────────────────────────
             // Document Compilation Handlers
             // ─────────────────────────────────────────────────────────────────
-
             ToolHandler::MxDocsCompile => {
                 let mut cmd_args: Vec<String> = vec!["docs".to_string()];
 
@@ -1953,7 +2141,11 @@ Actions:
                 if let Some(company_name) = args.get("company_name").and_then(|v| v.as_str()) {
                     cmd_args.push(format!("--company-name={}", company_name));
                 }
-                if args.get("no_logo").and_then(|v| v.as_bool()).unwrap_or(false) {
+                if args
+                    .get("no_logo")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
                     cmd_args.push("--no-logo".to_string());
                 }
 
@@ -1965,7 +2157,11 @@ Actions:
                 }
 
                 // Table of contents
-                if args.get("no_toc").and_then(|v| v.as_bool()).unwrap_or(false) {
+                if args
+                    .get("no_toc")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
                     cmd_args.push("--no-toc".to_string());
                 }
 
@@ -1989,35 +2185,31 @@ Actions:
             // ─────────────────────────────────────────────────────────────────
             // Unyform Integration Handlers
             // ─────────────────────────────────────────────────────────────────
-
             ToolHandler::UnyformLogin => {
                 let unyform = UnyformClient::new();
                 let api_key = args.get("api_key").and_then(|v| v.as_str());
                 let url = args.get("url").and_then(|v| v.as_str());
 
                 match api_key {
-                    Some(key) => {
-                        match unyform.login_with_api_key(key, url).await {
-                            Ok(resp) => {
-                                let org_name = resp.user.organizations.first()
-                                    .map(|o| o.name.as_str())
-                                    .unwrap_or("N/A");
-                                Ok(ToolCallResult::text(format!(
-                                    "Logged in as {} ({})\nOrganization: {}",
-                                    resp.user.name,
-                                    resp.user.email,
-                                    org_name
-                                )))
-                            }
-                            Err(e) => Ok(ToolCallResult::text(format!("Login failed: {}", e))),
+                    Some(key) => match unyform.login_with_api_key(key, url).await {
+                        Ok(resp) => {
+                            let org_name = resp
+                                .user
+                                .organizations
+                                .first()
+                                .map(|o| o.name.as_str())
+                                .unwrap_or("N/A");
+                            Ok(ToolCallResult::text(format!(
+                                "Logged in as {} ({})\nOrganization: {}",
+                                resp.user.name, resp.user.email, org_name
+                            )))
                         }
-                    }
-                    None => {
-                        Ok(ToolCallResult::text(
-                            "API key required. Use: unyform_login with api_key parameter\n\n\
-                             For browser OAuth, run `mx login --browser` from terminal."
-                        ))
-                    }
+                        Err(e) => Ok(ToolCallResult::text(format!("Login failed: {}", e))),
+                    },
+                    None => Ok(ToolCallResult::text(
+                        "API key required. Use: unyform_login with api_key parameter\n\n\
+                             For browser OAuth, run `mx login --browser` from terminal.",
+                    )),
                 }
             }
 
@@ -2033,13 +2225,15 @@ Actions:
                 let unyform = UnyformClient::new();
                 if !unyform.is_logged_in() {
                     return Ok(ToolCallResult::text(
-                        "Not logged in. Use unyform_login to authenticate."
+                        "Not logged in. Use unyform_login to authenticate.",
                     ));
                 }
 
                 match unyform.whoami().await {
                     Ok(user) => {
-                        let orgs = user.organizations.iter()
+                        let orgs = user
+                            .organizations
+                            .iter()
                             .map(|o| format!("  {} ({})", o.slug, o.role))
                             .collect::<Vec<_>>()
                             .join("\n");
@@ -2049,12 +2243,13 @@ Actions:
                              Email: {}\n\
                              Name: {}\n\n\
                              Organizations:\n{}",
-                            user.email,
-                            user.name,
-                            orgs
+                            user.email, user.name, orgs
                         )))
                     }
-                    Err(e) => Ok(ToolCallResult::text(format!("Failed to get user info: {}", e))),
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "Failed to get user info: {}",
+                        e
+                    ))),
                 }
             }
 
@@ -2062,7 +2257,7 @@ Actions:
                 let unyform = UnyformClient::new();
                 if !unyform.is_logged_in() {
                     return Ok(ToolCallResult::text(
-                        "Not logged in. Use unyform_login to authenticate."
+                        "Not logged in. Use unyform_login to authenticate.",
                     ));
                 }
 
@@ -2072,16 +2267,20 @@ Actions:
                             Ok(ToolCallResult::text(
                                 "No recipes found.\n\n\
                                  Recipes are generated from your connected repositories.\n\
-                                 Connect a repo and run analysis from the Unyform dashboard."
+                                 Connect a repo and run analysis from the Unyform dashboard.",
                             ))
                         } else {
-                            let recipes = resp.recipes.iter()
-                                .map(|r| format!(
-                                    "  {} @ v{} - {}",
-                                    r.name,
-                                    r.version,
-                                    r.description.as_deref().unwrap_or("No description")
-                                ))
+                            let recipes = resp
+                                .recipes
+                                .iter()
+                                .map(|r| {
+                                    format!(
+                                        "  {} @ v{} - {}",
+                                        r.name,
+                                        r.version,
+                                        r.description.as_deref().unwrap_or("No description")
+                                    )
+                                })
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             Ok(ToolCallResult::text(format!(
@@ -2091,7 +2290,10 @@ Actions:
                             )))
                         }
                     }
-                    Err(e) => Ok(ToolCallResult::text(format!("Failed to list recipes: {}", e))),
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "Failed to list recipes: {}",
+                        e
+                    ))),
                 }
             }
 
@@ -2099,39 +2301,52 @@ Actions:
                 let unyform = UnyformClient::new();
                 if !unyform.is_logged_in() {
                     return Ok(ToolCallResult::text(
-                        "Not logged in. Use unyform_login to authenticate."
+                        "Not logged in. Use unyform_login to authenticate.",
                     ));
                 }
 
-                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'name' is required".to_string())
-                })?;
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'name' is required".to_string()))?;
                 let version = args.get("version").and_then(|v| v.as_str());
 
                 match unyform.get_recipe(name, version).await {
                     Ok(recipe) => {
-                        let org = unyform.get_default_org().unwrap_or_else(|_| "unknown".to_string());
+                        let org = unyform
+                            .get_default_org()
+                            .unwrap_or_else(|_| "unknown".to_string());
                         match unyform.cache_recipe(&org, &recipe) {
                             Ok(path) => Ok(ToolCallResult::text(format!(
                                 "Recipe cached: {:?}\n\n\
                                  Run unyform_recipes_apply to apply to a project.",
                                 path
                             ))),
-                            Err(e) => Ok(ToolCallResult::text(format!("Failed to cache recipe: {}", e))),
+                            Err(e) => Ok(ToolCallResult::text(format!(
+                                "Failed to cache recipe: {}",
+                                e
+                            ))),
                         }
                     }
-                    Err(e) => Ok(ToolCallResult::text(format!("Failed to pull recipe: {}", e))),
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "Failed to pull recipe: {}",
+                        e
+                    ))),
                 }
             }
 
             ToolHandler::UnyformRecipesApply => {
                 let unyform = UnyformClient::new();
-                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'name' is required".to_string())
-                })?;
-                let project_path = args.get("project_path").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'project_path' is required".to_string())
-                })?;
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'name' is required".to_string()))?;
+                let project_path = args
+                    .get("project_path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments("'project_path' is required".to_string())
+                    })?;
                 let version = args.get("version").and_then(|v| v.as_str());
                 let _fix = args.get("fix").and_then(|v| v.as_bool()).unwrap_or(false);
 
@@ -2148,9 +2363,14 @@ Actions:
                 };
 
                 // Apply patterns
-                let rules_dir = std::path::PathBuf::from(project_path).join(".cursor").join("rules");
+                let rules_dir = std::path::PathBuf::from(project_path)
+                    .join(".cursor")
+                    .join("rules");
                 if let Err(e) = std::fs::create_dir_all(&rules_dir) {
-                    return Ok(ToolCallResult::text(format!("Failed to create rules directory: {}", e)));
+                    return Ok(ToolCallResult::text(format!(
+                        "Failed to create rules directory: {}",
+                        e
+                    )));
                 }
 
                 let org_slug = name.split('-').next().unwrap_or(name);
@@ -2161,10 +2381,12 @@ Actions:
 
                 for pattern in &recipe.patterns {
                     if let Some(obj) = pattern.as_object() {
-                        if let (Some(name), Some(desc)) = (obj.get("name"), obj.get("description")) {
-                            rules_content.push_str(&format!("## {}\n\n", name.as_str().unwrap_or("")));
+                        if let (Some(name), Some(desc)) = (obj.get("name"), obj.get("description"))
+                        {
+                            rules_content
+                                .push_str(&format!("## {}\n\n", name.as_str().unwrap_or("")));
                             rules_content.push_str(&format!("{}\n\n", desc.as_str().unwrap_or("")));
-                            
+
                             if let Some(rules) = obj.get("rules").and_then(|r| r.as_array()) {
                                 rules_content.push_str("### Rules\n\n");
                                 for rule in rules {
@@ -2179,7 +2401,10 @@ Actions:
                 }
 
                 if let Err(e) = std::fs::write(&rules_file, &rules_content) {
-                    return Ok(ToolCallResult::text(format!("Failed to write rules file: {}", e)));
+                    return Ok(ToolCallResult::text(format!(
+                        "Failed to write rules file: {}",
+                        e
+                    )));
                 }
 
                 let result = format!(
@@ -2202,72 +2427,82 @@ Actions:
                 let unyform = UnyformClient::new();
                 if !unyform.is_logged_in() {
                     return Ok(ToolCallResult::text(
-                        "Not logged in. Use unyform_login to authenticate."
+                        "Not logged in. Use unyform_login to authenticate.",
                     ));
                 }
 
-                let name = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    McpError::InvalidArguments("'name' is required".to_string())
-                })?;
+                let name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidArguments("'name' is required".to_string()))?;
 
                 match unyform.get_recipe_versions(name).await {
                     Ok(resp) => {
-                        let versions = resp.versions.iter()
-                            .map(|v| format!(
-                                "  v{}{} - {}",
-                                v.version,
-                                if v.is_latest { " (latest)" } else { "" },
-                                v.generated_at
-                            ))
+                        let versions = resp
+                            .versions
+                            .iter()
+                            .map(|v| {
+                                format!(
+                                    "  v{}{} - {}",
+                                    v.version,
+                                    if v.is_latest { " (latest)" } else { "" },
+                                    v.generated_at
+                                )
+                            })
                             .collect::<Vec<_>>()
                             .join("\n");
                         Ok(ToolCallResult::text(format!(
                             "Versions for {}\n\
                              ────────────────────────────────────\n{}",
-                            name,
-                            versions
+                            name, versions
                         )))
                     }
-                    Err(e) => Ok(ToolCallResult::text(format!("Failed to get versions: {}", e))),
+                    Err(e) => Ok(ToolCallResult::text(format!(
+                        "Failed to get versions: {}",
+                        e
+                    ))),
                 }
             }
 
             ToolHandler::UnyformRecipesCache => {
                 let unyform = UnyformClient::new();
-                let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("list");
+                let action = args
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("list");
 
                 match action {
-                    "clear" => {
-                        match unyform.clear_cache() {
-                            Ok(_) => Ok(ToolCallResult::text("Recipe cache cleared")),
-                            Err(e) => Ok(ToolCallResult::text(format!("Failed to clear cache: {}", e))),
-                        }
-                    }
-                    _ => {
-                        match unyform.list_cached_recipes() {
-                            Ok(recipes) => {
-                                if recipes.is_empty() {
-                                    Ok(ToolCallResult::text(
-                                        "No cached recipes.\n\n\
-                                         Pull recipes with unyform_recipes_pull"
-                                    ))
-                                } else {
-                                    let list = recipes.iter()
-                                        .map(|(org, name, versions)| {
-                                            format!("  {}/{}: {}", org, name, versions.join(", "))
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join("\n");
-                                    Ok(ToolCallResult::text(format!(
-                                        "Cached Recipes\n\
+                    "clear" => match unyform.clear_cache() {
+                        Ok(_) => Ok(ToolCallResult::text("Recipe cache cleared")),
+                        Err(e) => Ok(ToolCallResult::text(format!(
+                            "Failed to clear cache: {}",
+                            e
+                        ))),
+                    },
+                    _ => match unyform.list_cached_recipes() {
+                        Ok(recipes) => {
+                            if recipes.is_empty() {
+                                Ok(ToolCallResult::text(
+                                    "No cached recipes.\n\n\
+                                         Pull recipes with unyform_recipes_pull",
+                                ))
+                            } else {
+                                let list = recipes
+                                    .iter()
+                                    .map(|(org, name, versions)| {
+                                        format!("  {}/{}: {}", org, name, versions.join(", "))
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                Ok(ToolCallResult::text(format!(
+                                    "Cached Recipes\n\
                                          ────────────────────────────────────\n{}",
-                                        list
-                                    )))
-                                }
+                                    list
+                                )))
                             }
-                            Err(e) => Ok(ToolCallResult::text(format!("Failed to list cache: {}", e))),
                         }
-                    }
+                        Err(e) => Ok(ToolCallResult::text(format!("Failed to list cache: {}", e))),
+                    },
                 }
             }
         }

@@ -1,3 +1,16 @@
+---
+title: "Real World Asset (RWA) Tokenization Guide"
+category: blockchain
+languages: [solidity, typescript, python]
+complexity: advanced
+use_cases:
+  - "tokenizing real estate, bonds, or commodities"
+  - "choosing a token standard such as ERC-3643, ERC-1400, or ERC-4626"
+  - "implementing KYC/AML and compliance"
+  - "integrating tokenized assets with DeFi"
+summary: "A comprehensive guide to tokenizing real world assets on blockchain with industry standards, token standards, compliance, and production implementations."
+---
+
 # Real World Asset (RWA) Tokenization Guide
 
 **Comprehensive guide to tokenizing real world assets on blockchain with industry standards, best practices, and innovation.**

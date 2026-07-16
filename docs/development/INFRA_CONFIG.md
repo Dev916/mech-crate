@@ -1,3 +1,16 @@
+---
+title: "Infrastructure Configuration Guide"
+category: infra
+languages: []
+complexity: intermediate
+use_cases:
+  - "setting up global infrastructure credentials"
+  - "linking projects to shared credentials"
+  - "overriding configuration per project"
+  - "configuring Cloudflare, AWS, or Hetzner providers"
+summary: "How MechCrate resolves hierarchical infrastructure credentials for Cloudflare, DigitalOcean, AWS, and Hetzner across global and project scopes."
+---
+
 # Infrastructure Configuration Guide
 
 MechCrate supports hierarchical configuration for infrastructure providers like Cloudflare, DigitalOcean, AWS, and Hetzner. This allows you to set up credentials once globally and reuse them across all projects, while still allowing project-specific overrides when needed.

@@ -72,7 +72,9 @@ impl ProjectUpgrader {
                     FileCategory::Tooling
                 }
             }
-            path if path.starts_with("scripts/") && (path.ends_with(".sh") || path.ends_with(".mjs")) => {
+            path if path.starts_with("scripts/")
+                && (path.ends_with(".sh") || path.ends_with(".mjs")) =>
+            {
                 if path.starts_with("scripts/cf-") {
                     FileCategory::Conditional("cloudflare".to_string())
                 } else {
@@ -176,7 +178,9 @@ impl ProjectUpgrader {
                 other => other.clone(),
             };
 
-            let project_path = self.project_dir.join(self.template_to_project_path(rel_path));
+            let project_path = self
+                .project_dir
+                .join(self.template_to_project_path(rel_path));
             let template_path = entry.path().to_path_buf();
 
             let action = if !project_path.exists() {

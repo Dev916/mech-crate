@@ -49,12 +49,12 @@ impl ProjectDetector {
     /// Detect MechCrate project from a path (walks up to find root)
     pub fn find_project_root(start: &Path) -> Option<PathBuf> {
         let mut current = start.to_path_buf();
-        
+
         loop {
             if Self::is_mech_crate_project(&current) {
                 return Some(current);
             }
-            
+
             if !current.pop() {
                 return None;
             }
@@ -92,7 +92,7 @@ impl ProjectDetector {
     /// Discover services in the project
     async fn discover_services(&self, root: &Path) -> McpResult<Vec<ServiceInfo>> {
         let mut services = Vec::new();
-        
+
         // Check apps directory
         let apps_dir = root.join("apps");
         if apps_dir.exists() {
@@ -100,11 +100,12 @@ impl ProjectDetector {
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
                         let name = entry.file_name().to_string_lossy().to_string();
-                        
+
                         let dockerfile_path = root.join(format!("docker/dockerfiles/{}/app", name));
                         let compose_path = root.join(format!("docker/compose/{}.yml", name));
-                        let dev_compose_path = root.join(format!("docker/compose/{}.dev.yml", name));
-                        
+                        let dev_compose_path =
+                            root.join(format!("docker/compose/{}.dev.yml", name));
+
                         services.push(ServiceInfo {
                             name: name.clone(),
                             has_dockerfile: dockerfile_path.exists(),
@@ -116,29 +117,36 @@ impl ProjectDetector {
                 }
             }
         }
-        
+
         // Also check compose files for services without app directories
         let compose_dir = root.join("docker/compose");
         if compose_dir.exists() {
             if let Ok(mut entries) = fs::read_dir(&compose_dir).await {
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     let file_name = entry.file_name().to_string_lossy().to_string();
-                    
+
                     // Skip dev overrides and shared services
-                    if file_name.ends_with(".dev.yml") || file_name.starts_with("db.") || file_name.starts_with("redis.") {
+                    if file_name.ends_with(".dev.yml")
+                        || file_name.starts_with("db.")
+                        || file_name.starts_with("redis.")
+                    {
                         continue;
                     }
-                    
+
                     if file_name.ends_with(".yml") {
                         let service_name = file_name.trim_end_matches(".yml").to_string();
-                        
+
                         // Skip if already found via apps
                         if !services.iter().any(|s| s.name == service_name) {
                             services.push(ServiceInfo {
                                 name: service_name.clone(),
-                                has_dockerfile: root.join(format!("docker/dockerfiles/{}/app", service_name)).exists(),
+                                has_dockerfile: root
+                                    .join(format!("docker/dockerfiles/{}/app", service_name))
+                                    .exists(),
                                 has_compose: true,
-                                has_dev_compose: root.join(format!("docker/compose/{}.dev.yml", service_name)).exists(),
+                                has_dev_compose: root
+                                    .join(format!("docker/compose/{}.dev.yml", service_name))
+                                    .exists(),
                                 app_dir: None,
                             });
                         }
@@ -146,7 +154,7 @@ impl ProjectDetector {
                 }
             }
         }
-        
+
         Ok(services)
     }
 
@@ -154,19 +162,19 @@ impl ProjectDetector {
     async fn discover_infra(&self, root: &Path) -> (bool, Vec<String>) {
         let infra_dir = root.join("infra");
         let mut providers = Vec::new();
-        
+
         if !infra_dir.exists() {
             return (false, providers);
         }
-        
+
         let known_providers = ["cloudflare", "digitalocean", "aws", "hetzner"];
-        
+
         for provider in known_providers {
             if infra_dir.join(provider).exists() {
                 providers.push(provider.to_string());
             }
         }
-        
+
         (!providers.is_empty(), providers)
     }
 
@@ -174,7 +182,7 @@ impl ProjectDetector {
     async fn discover_compose_files(&self, root: &Path) -> McpResult<Vec<String>> {
         let mut files = Vec::new();
         let compose_dir = root.join("docker/compose");
-        
+
         if compose_dir.exists() {
             if let Ok(mut entries) = fs::read_dir(&compose_dir).await {
                 while let Ok(Some(entry)) = entries.next_entry().await {
@@ -185,7 +193,7 @@ impl ProjectDetector {
                 }
             }
         }
-        
+
         files.sort();
         Ok(files)
     }
@@ -194,7 +202,7 @@ impl ProjectDetector {
     async fn discover_make_targets(&self, root: &Path) -> McpResult<Vec<String>> {
         let mut targets = Vec::new();
         let make_dir = root.join("make");
-        
+
         // Standard targets from Makefile.template
         targets.extend(vec![
             "help".to_string(),
@@ -204,7 +212,7 @@ impl ProjectDetector {
             "doctor".to_string(),
             "make-key".to_string(),
         ]);
-        
+
         if make_dir.exists() {
             if let Ok(mut entries) = fs::read_dir(&make_dir).await {
                 while let Ok(Some(entry)) = entries.next_entry().await {
@@ -247,7 +255,7 @@ impl ProjectDetector {
                 }
             }
         }
-        
+
         targets.sort();
         targets.dedup();
         Ok(targets)
@@ -256,7 +264,7 @@ impl ProjectDetector {
     /// Get service information
     pub async fn get_service(&self, root: &Path, service_name: &str) -> McpResult<ServiceInfo> {
         let project = self.analyze(root).await?;
-        
+
         project
             .services
             .into_iter()
@@ -267,11 +275,11 @@ impl ProjectDetector {
     /// List all projects in a directory
     pub async fn find_all_projects(&self, search_dir: &Path) -> McpResult<Vec<PathBuf>> {
         let mut projects = Vec::new();
-        
+
         if Self::is_mech_crate_project(search_dir) {
             projects.push(search_dir.to_path_buf());
         }
-        
+
         if let Ok(mut entries) = fs::read_dir(search_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
@@ -282,7 +290,7 @@ impl ProjectDetector {
                 }
             }
         }
-        
+
         Ok(projects)
     }
 }

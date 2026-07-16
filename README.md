@@ -87,8 +87,8 @@ mx router status     # Check router status
 mx router inspect    # Show dashboard URL and connected services
 
 mx mcp build         # Build MCP server for AI integration
-mx mcp start         # Start Weaviate RAG backend
-mx mcp status        # Check MCP status
+mx rag ingest        # Ingest docs/development into the techniques corpus (pgvector)
+mx mcp status        # Check MCP status (corpus backend + counts)
 
 mx infra list        # List infrastructure providers
 mx infra setup <provider>  # Configure provider credentials
