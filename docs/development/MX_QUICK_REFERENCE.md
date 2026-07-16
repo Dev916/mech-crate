@@ -49,19 +49,25 @@ target/release/mx-mcp     # Release MCP server
 # MCP Server
 ./target/release/mx-mcp
 RUST_LOG=debug ./target/release/mx-mcp
-./target/release/mx-mcp --mech-crate-root /path --weaviate-url http://localhost:8080
+./target/release/mx-mcp --mech-crate-root /path   # --no-rag skips the techniques corpus
 ```
 
 ## MCP Server Management
 
 ```bash
 mx mcp build          # Build MCP server
-mx mcp start          # Start Weaviate
-mx mcp stop           # Stop Weaviate
-mx mcp status         # Check status
-mx mcp logs -f        # Follow logs
-mx mcp ingest --clear # Re-ingest docs
+mx mcp status         # Corpus backend + doc/chunk counts
 mx mcp config         # Show client config
+mx mcp run            # Run the server interactively
+```
+
+## Techniques Corpus (pgvector)
+
+```bash
+mx rag ingest         # Ingest docs/development into the corpus
+mx rag ingest --clear # Clear and re-ingest
+mx rag ingest --dry-run  # Parse/chunk only (no DB or embeddings)
+mx rag status         # Backend, doc/chunk counts, embedding model
 ```
 
 ## Testing
@@ -109,7 +115,8 @@ crates/
 | Variable | Description |
 |----------|-------------|
 | `MECH_CRATE_ROOT` | MechCrate installation path |
-| `WEAVIATE_URL` | Weaviate endpoint |
+| `MX_RAG_DATABASE_URL` | Neon corpus URL (local Postgres fallback otherwise) |
+| `OPENAI_API_KEY` | Embedding API key (`text-embedding-3-small`) |
 | `RUST_LOG` | Log level (debug, info, warn, error) |
 
 ## MCP Client Config (Claude Desktop)
@@ -145,7 +152,7 @@ crates/
 | Project | 3 | `mx_` |
 | Make | 9 | `make_` |
 | Analysis | 4 | `project_`, `service_` |
-| RAG | 7 | `rag_` |
+| RAG | 8 | `rag_` |
 | Unyform | 8 | `unyform_` |
 
 ## Debugging
@@ -168,5 +175,5 @@ RUST_LOG=debug ./target/release/mx-mcp
 |-------|----------|
 | Build errors | `cargo clean && cargo build` |
 | MCP root not found | Set `MECH_CRATE_ROOT` |
-| Weaviate unavailable | `mx mcp stop && mx mcp start` |
-| RAG no results | `mx mcp ingest --clear` |
+| Corpus offline | Check `mx rag status`; start local pgvector or set `MX_RAG_DATABASE_URL` |
+| RAG no results | `mx rag ingest --clear` |

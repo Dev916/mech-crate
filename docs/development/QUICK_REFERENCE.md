@@ -146,6 +146,6 @@ mx add api --recipe rust-api  # Add service with recipe
 mx router install        # Install global Traefik
 mx router up             # Start router
 mx mcp build             # Build MCP server
-mx mcp start             # Start Weaviate RAG backend
+mx rag ingest            # Ingest docs/development into the techniques corpus
 mx upgrade --dry-run     # Preview project upgrade
 ```
