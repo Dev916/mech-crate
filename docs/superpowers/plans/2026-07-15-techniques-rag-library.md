@@ -44,7 +44,7 @@
 **Interfaces:**
 - Produces: `mx_lib::corpus` module path; migration embedded later via `sqlx::migrate!("./migrations")` (path relative to mx-lib crate root).
 
-- [ ] **Step 1: Add workspace dependencies**
+- [x] **Step 1: Add workspace dependencies**
 
 In root `Cargo.toml` under `[workspace.dependencies]`, append:
 
@@ -64,7 +64,7 @@ sha2 = "0.10"
 hex = "0.4"
 ```
 
-- [ ] **Step 2: Add mx-lib dependencies**
+- [x] **Step 2: Add mx-lib dependencies**
 
 In `crates/mx-lib/Cargo.toml` under `[dependencies]`, append:
 
@@ -84,7 +84,7 @@ And under `[dev-dependencies]` append:
 wiremock = { workspace = true }
 ```
 
-- [ ] **Step 3: Create the migration**
+- [x] **Step 3: Create the migration**
 
 Create `crates/mx-lib/migrations/0001_technique_corpus.sql`:
 
@@ -126,7 +126,7 @@ CREATE INDEX IF NOT EXISTS technique_chunks_content_trgm
 CREATE INDEX IF NOT EXISTS technique_chunks_category_idx ON technique_chunks (category);
 ```
 
-- [ ] **Step 4: Scaffold the module**
+- [x] **Step 4: Scaffold the module**
 
 Create `crates/mx-lib/src/corpus/mod.rs`:
 
@@ -152,7 +152,7 @@ Create empty placeholder files so it compiles: `chunk.rs`, `config.rs`, `embed.r
 
 In `crates/mx-lib/src/lib.rs` add `pub mod corpus;` alongside the existing module declarations.
 
-- [ ] **Step 5: Verify compile and commit**
+- [x] **Step 5: Verify compile and commit**
 
 Run: `cargo check --workspace`
 Expected: exit 0.
@@ -177,7 +177,7 @@ git commit -m "feat(corpus): add pgvector deps, migration, and corpus module sca
 **Interfaces:**
 - Produces: `TechniqueMeta { title: Option<String>, category: Option<String>, languages: Vec<String>, complexity: Option<String>, use_cases: Vec<String>, summary: Option<String> }` and `parse_frontmatter(content: &str) -> (Option<TechniqueMeta>, &str)` where the `&str` is the body with frontmatter stripped.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/mx-lib/src/corpus/frontmatter.rs`:
 
@@ -217,12 +217,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p mx-lib corpus::frontmatter`
 Expected: FAIL (compile error — `parse_frontmatter` not defined).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Write above the tests in `frontmatter.rs`:
 
@@ -265,12 +265,12 @@ pub fn parse_frontmatter(content: &str) -> (Option<TechniqueMeta>, &str) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p mx-lib corpus::frontmatter`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/frontmatter.rs
@@ -292,7 +292,7 @@ git commit -m "feat(corpus): YAML frontmatter parser with graceful fallback"
 **Interfaces:**
 - Produces: `DEFAULT_CHUNK_CHARS: usize = 1200`, `Chunk { heading_path: String, content: String }`, `chunk_markdown(doc_title: &str, body: &str, max_chars: usize) -> Vec<Chunk>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/mx-lib/src/corpus/chunk.rs`:
 
@@ -334,12 +334,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p mx-lib corpus::chunk`
 Expected: FAIL (compile error).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Write above the tests in `chunk.rs`:
 
@@ -449,12 +449,12 @@ fn hard_split(s: &str, max: usize) -> Vec<String> {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p mx-lib corpus::chunk`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/chunk.rs
@@ -487,7 +487,7 @@ git commit -m "feat(corpus): heading-aware chunker with paragraph packing"
   pub const EMBED_SUB_BATCH: usize = 256;
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/mx-lib/src/corpus/embed.rs`:
 
@@ -548,12 +548,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p mx-lib corpus::embed`
 Expected: FAIL (compile error).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Write above the tests in `embed.rs` (hq `llm/openai.rs` embeddings port):
 
@@ -649,12 +649,12 @@ impl EmbeddingProvider for OpenAiCompatEmbedder {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p mx-lib corpus::embed`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/embed.rs
@@ -689,7 +689,7 @@ git commit -m "feat(corpus): EmbeddingProvider trait + OpenAI-compatible embedde
   }
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/mx-lib/src/corpus/config.rs` (note: env-var tests mutate process env — keep them in ONE test function to avoid parallel-test races):
 
@@ -732,12 +732,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p mx-lib corpus::config`
 Expected: FAIL (compile error).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Write above the tests in `config.rs`:
 
@@ -835,12 +835,12 @@ impl RagConfig {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p mx-lib corpus::config`
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/config.rs
@@ -885,7 +885,7 @@ git commit -m "feat(corpus): RagConfig with file + env precedence"
   pub fn sha256_hex(data: &str) -> String;
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/mx-lib/src/corpus/store.rs`:
 
@@ -961,12 +961,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p mx-lib corpus::store`
 Expected: FAIL (compile error).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Write above the tests in `store.rs`:
 
@@ -1167,7 +1167,7 @@ impl CorpusStore {
 }
 ```
 
-- [ ] **Step 4: Start the test DB and run tests**
+- [x] **Step 4: Start the test DB and run tests**
 
 ```bash
 docker rm -f mx-rag-test 2>/dev/null; docker run -d --name mx-rag-test -p 55433:5432 -e POSTGRES_DB=mx_rag -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17
@@ -1176,7 +1176,7 @@ MX_RAG_TEST_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo test -
 ```
 Expected: 2 passed. Also run `cargo test -p mx-lib corpus::store` WITHOUT the env var: passes (skips).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/store.rs
@@ -1213,7 +1213,7 @@ git commit -m "feat(corpus): CorpusStore with Neon->local fallback, migrations, 
   }
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to the `tests` module in `store.rs` (sparse-vector trick from hq: disjoint hot indices are orthogonal):
 
@@ -1291,12 +1291,12 @@ Add to the `tests` module in `store.rs` (sparse-vector trick from hq: disjoint h
     }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `MX_RAG_TEST_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo test -p mx-lib corpus::store`
 Expected: FAIL (compile error — `search_with_embedding`, `TechQuery`, etc. missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `store.rs` (inside `impl CorpusStore` plus the new types):
 
@@ -1493,12 +1493,12 @@ pub use config::RagConfig;
 pub use store::{BackendKind, CorpusStore, DocMeta, SearchMode, TechHit, TechQuery};
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `MX_RAG_TEST_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo test -p mx-lib corpus::store`
 Expected: all pass (4 tests total in this module now).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/store.rs crates/mx-lib/src/corpus/mod.rs
@@ -1531,7 +1531,7 @@ git commit -m "feat(corpus): hybrid search with filters, trigram-only fallback, 
       -> anyhow::Result<IngestSummary>;
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/mx-lib/src/corpus/ingest.rs`:
 
@@ -1605,12 +1605,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p mx-lib corpus::ingest`
 Expected: FAIL (compile error).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Write above the tests in `ingest.rs`:
 
@@ -1763,12 +1763,12 @@ pub async fn ingest(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `MX_RAG_TEST_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo test -p mx-lib corpus::ingest`
 Expected: 2 passed. Also passes without the env var (DB test skips).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/ingest.rs
@@ -1795,7 +1795,7 @@ git commit -m "feat(corpus): idempotent frontmatter-aware ingestion pipeline"
 - Consumes: `mx_lib::corpus::{RagConfig, CorpusStore, ingest::{scan_dir, ingest, IngestOptions}}`, `mx_lib::paths::mech_crate_root`.
 - Produces: `RagCommand` clap Args struct with `pub async fn run(&self) -> anyhow::Result<()>`.
 
-- [ ] **Step 1: Write the command**
+- [x] **Step 1: Write the command**
 
 Create `crates/mx-cli/src/commands/rag.rs`:
 
@@ -1937,7 +1937,7 @@ impl RagCommand {
 }
 ```
 
-- [ ] **Step 2: Wire into the CLI**
+- [x] **Step 2: Wire into the CLI**
 
 In `crates/mx-cli/src/commands/mod.rs` add `pub mod rag;` (alphabetical position, after `pub mod new;` / before `pub mod recipes;`).
 
@@ -1945,7 +1945,7 @@ In `crates/mx-cli/src/main.rs`:
 - Add to the `Commands` enum (near the other management commands): `/// Techniques corpus (RAG) management` then `Rag(commands::rag::RagCommand),`
 - Add to the match: `Commands::Rag(cmd) => cmd.run().await,`
 
-- [ ] **Step 3: Verify dry-run and help**
+- [x] **Step 3: Verify dry-run and help**
 
 ```bash
 cargo run -p mx-cli -- rag --help
@@ -1953,14 +1953,14 @@ cargo run -p mx-cli -- rag ingest --dry-run
 ```
 Expected: help lists `ingest`/`status`; dry-run prints `Dry run: N docs, M chunks, W warnings` and exits 0 (docs/development currently has no frontmatter, so expect ~50 warnings — that's correct until Task 12).
 
-- [ ] **Step 4: Verify status against the test DB**
+- [x] **Step 4: Verify status against the test DB**
 
 ```bash
 MX_RAG_FALLBACK_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo run -p mx-cli -- rag status
 ```
 Expected: prints `Backend: local` with counts.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-cli/src/commands/rag.rs crates/mx-cli/src/commands/mod.rs crates/mx-cli/src/main.rs
@@ -1991,7 +1991,7 @@ git commit -m "feat(mx-cli): add mx rag ingest/status commands"
 - Consumes: `mx_lib::corpus::{RagConfig, CorpusStore, TechQuery, TechHit, SearchMode}`.
 - Produces: `ToolRegistry::execute(..., corpus: Option<&CorpusStore>)` signature; new tool name `rag_context` with args `working_on` (required), `language`, `category`, `limit`.
 
-- [ ] **Step 1: Update error.rs**
+- [x] **Step 1: Update error.rs**
 
 Replace the `Weaviate` variant:
 
@@ -2000,7 +2000,7 @@ Replace the `Weaviate` variant:
     Corpus(String),
 ```
 
-- [ ] **Step 2: Rewrite main.rs**
+- [x] **Step 2: Rewrite main.rs**
 
 Replace the Weaviate block of `main.rs` so it becomes:
 
@@ -2057,7 +2057,7 @@ async fn main() -> anyhow::Result<()> {
 
 (The `detect_mcp_dir` function and all weaviate imports are deleted.)
 
-- [ ] **Step 3: Rewire server.rs**
+- [x] **Step 3: Rewire server.rs**
 
 - Change imports: remove `use crate::rag::WeaviateClient;`, add `use mx_lib::corpus::{CorpusStore, RagConfig};` and `use tracing::warn;` if not present.
 - Change struct + constructor:
@@ -2102,7 +2102,7 @@ impl McpServer {
 
 - Thread `corpus.as_ref()` through `handle_tool_call` in place of `&weaviate` (update its signature to `corpus: Option<&CorpusStore>` and the `execute(...)` call accordingly).
 
-- [ ] **Step 4: Re-point tools/mod.rs**
+- [x] **Step 4: Re-point tools/mod.rs**
 
 - Imports: remove `use crate::rag::{format_search_results, WeaviateClient};`, add `use mx_lib::corpus::{CorpusStore, SearchMode, TechHit, TechQuery};`.
 - Change `execute` signature: `weaviate: &WeaviateClient` → `corpus: Option<&CorpusStore>`.
@@ -2356,14 +2356,14 @@ Examples:
             }
 ```
 
-- [ ] **Step 5: Delete Weaviate artifacts**
+- [x] **Step 5: Delete Weaviate artifacts**
 
 ```bash
 git rm crates/mx-mcp-server/src/rag/mod.rs crates/mx-mcp-server/src/weaviate/mod.rs crates/mx-mcp-server/src/bin/ingest.rs crates/mx-mcp-server/docker-compose.yml
 ```
 Remove `mod rag;` / `mod weaviate;` from `main.rs` (done in Step 2), remove the `[[bin]] mx-ingest` section from `crates/mx-mcp-server/Cargo.toml`, and add `mx-lib = { path = "../mx-lib" }` if not already a dependency (it is — verify).
 
-- [ ] **Step 6: Build, smoke-test, verify no weaviate references**
+- [x] **Step 6: Build, smoke-test, verify no weaviate references**
 
 ```bash
 cargo build -p mx-mcp-server
@@ -2379,7 +2379,7 @@ grep -ri weaviate crates/ || echo "CLEAN"
 ```
 Expected: `"rag_context"`, the backend-local match, `CLEAN`. (The rag_health text is JSON embedded in the MCP result string, hence the escaped quotes in the final grep.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -2404,7 +2404,7 @@ git commit -m "feat(mx-mcp): replace Weaviate with pgvector corpus; add rag_cont
 **Interfaces:**
 - Consumes: `mx_lib::corpus::{RagConfig, CorpusStore}` for the new `status`.
 
-- [ ] **Step 1: Trim the subcommand enum**
+- [x] **Step 1: Trim the subcommand enum**
 
 In `crates/mx-cli/src/commands/mcp.rs` remove the `Start`, `Up`, `Stop`, `Down`, `Logs`, and `Ingest` variants (and their match arms + private methods `start`, `stop`, `logs`, `ingest`). Resulting enum:
 
@@ -2428,7 +2428,7 @@ enum McpSubcommand {
 }
 ```
 
-- [ ] **Step 2: Rewrite status to use the corpus**
+- [x] **Step 2: Rewrite status to use the corpus**
 
 Replace the `status` method body with:
 
@@ -2454,11 +2454,11 @@ Replace the `status` method body with:
 
 Update `info`/`config`/`test` bodies only as needed to drop Weaviate fields (see Step 3) — keep their MCP-server behavior.
 
-- [ ] **Step 3: Purge McpManager weaviate helpers**
+- [x] **Step 3: Purge McpManager weaviate helpers**
 
 In `crates/mx-lib/src/mcp/mod.rs` delete: `ingest_binary`, `allocate_ports`, `http_port`, `weaviate_url`, `is_weaviate_running`, `start_weaviate`, `stop_weaviate`, `weaviate_logs`, `weaviate_status`, `ingest`, and any port-file constants/helpers they used. Update `McpInfo` (and its construction in `info()` / use in `generate_config()`) to drop `weaviate_url`/`weaviate_running` fields. Keep `state_dir`, `source_dir`, `mcp_binary`, `needs_build`, `build`, `ensure_binary`, `info`, `generate_config`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 cargo build --workspace
@@ -2468,7 +2468,7 @@ grep -ri weaviate crates/ || echo "CLEAN"
 ```
 Expected: help shows trimmed list; status prints corpus info; `CLEAN`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2493,7 +2493,7 @@ git commit -m "refactor(mx-cli): drop weaviate lifecycle from mx mcp; corpus-bac
 **Interfaces:**
 - Consumes: frontmatter schema from Task 2 (`title`, `category`, `languages`, `complexity`, `use_cases`, `summary`).
 
-- [ ] **Step 1: Add frontmatter to each doc**
+- [x] **Step 1: Add frontmatter to each doc**
 
 For each file, insert at byte 0 a block following this template, then a blank line, then the original content:
 
@@ -2572,7 +2572,7 @@ Assignments (title/use_cases/summary come from each doc's own intro + INDEX.md; 
 
 (If a file listed here no longer exists or new files appeared, apply best-fit category from the taxonomy and note it in the commit message.)
 
-- [ ] **Step 2: Add the authoring guide to INDEX.md**
+- [x] **Step 2: Add the authoring guide to INDEX.md**
 
 Append to `docs/development/INDEX.md`:
 
@@ -2598,12 +2598,12 @@ Docs without frontmatter still ingest (heuristics + a warning), but filtered ret
 
 (Remove the zero-width escapes around the fences when writing the actual file.)
 
-- [ ] **Step 3: Verify zero warnings**
+- [x] **Step 3: Verify zero warnings**
 
 Run: `cargo run -p mx-cli -- rag ingest --dry-run`
 Expected: `Dry run: 56 docs, <N> chunks, 0 warnings` (doc count = current file count minus INDEX.md).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/development
@@ -2628,11 +2628,11 @@ git commit -m "docs(development): add technique frontmatter to all docs + author
 **Interfaces:**
 - Consumes: everything prior.
 
-- [ ] **Step 1: Provision Neon**
+- [x] **Step 1: Provision Neon**
 
 Create the Neon project via the Neon MCP (org `org-snowy-credit-95327987`, name `mech-crate`, region `aws-us-west-2`, PG 17) or `neonctl projects create --name mech-crate --org-id org-snowy-credit-95327987`. Capture the pooled connection string for the default database.
 
-- [ ] **Step 2: Write rag.toml**
+- [x] **Step 2: Write rag.toml**
 
 ```bash
 mkdir -p ~/.mech-crate/config
@@ -2644,7 +2644,7 @@ fallback_database_url = "postgres://postgres@localhost:5432/mx_rag"
 EOF
 ```
 
-- [ ] **Step 3: Live ingest and status**
+- [x] **Step 3: Live ingest and status**
 
 ```bash
 cargo run -p mx-cli -- rag ingest
@@ -2652,7 +2652,7 @@ cargo run -p mx-cli -- rag status
 ```
 Expected: ingest reports ~56 docs; status shows `Backend: neon` and the counts.
 
-- [ ] **Step 4: Relevance probe through the MCP server**
+- [x] **Step 4: Relevance probe through the MCP server**
 
 ```bash
 cargo build -p mx-mcp-server
@@ -2663,7 +2663,7 @@ printf '%s\n%s\n' \
 ```
 Expected: `appendix-rust-concurrency`.
 
-- [ ] **Step 5: Commit (docs-only if anything changed in-repo)**
+- [x] **Step 5: Commit (docs-only if anything changed in-repo)**
 
 No repo files change in this task besides possibly notes; if none: `git commit --allow-empty -m "chore(corpus): neon provisioned and live corpus ingested"`.
 
@@ -2680,7 +2680,7 @@ No repo files change in this task besides possibly notes; if none: `git commit -
 **Files:**
 - Create: `~/.claude/skills/techniques/SKILL.md`
 
-- [ ] **Step 1: Write the skill**
+- [x] **Step 1: Write the skill**
 
 ```markdown
 ---
@@ -2715,7 +2715,7 @@ Query the mx MCP techniques corpus before committing to an implementation approa
 - Re-querying the same question in the same session — reuse what you got
 ```
 
-- [ ] **Step 2: Verify and commit**
+- [x] **Step 2: Verify and commit**
 
 ```bash
 head -5 ~/.claude/skills/techniques/SKILL.md
@@ -2741,7 +2741,7 @@ git commit -m "feat(skills): add techniques skill (corpus consultation loop)"
 **Files:**
 - Modify: `~/.claude/skills/writing-devloop-plans/SKILL.md`
 
-- [ ] **Step 1: Insert the consultation step**
+- [x] **Step 1: Insert the consultation step**
 
 In the `## Process` section, directly after the paragraph `1. **Invoke `superpowers:writing-plans` to produce the base plan.** ...`, insert:
 
@@ -2749,7 +2749,7 @@ In the `## Process` section, directly after the paragraph `1. **Invoke `superpow
    **Consult the techniques corpus while writing the base plan.** Before drafting tasks, call `mcp__mx__rag_context` with a 1–2 sentence description of the feature and its stack (plus `language` when obvious). Weave returned techniques into task design. When a task directly applies one, add an `**Apply:** <source doc path> — <technique>` line directly below that task's Acceptance Criteria so the executing subagent inherits the reference. If the corpus is offline (`mcp__mx__rag_health`) or returns nothing relevant, note it and continue — never block planning on it.
 ```
 
-- [ ] **Step 2: Verify and snapshot**
+- [x] **Step 2: Verify and snapshot**
 
 ```bash
 grep -c "rag_context" ~/.claude/skills/writing-devloop-plans/SKILL.md
@@ -2771,7 +2771,7 @@ git commit -m "feat(skills): writing-devloop-plans consults techniques corpus"
 **Files:**
 - Modify: `~/.claude/skills/devloop/subagent-prompt.md`
 
-- [ ] **Step 1: Insert the step**
+- [x] **Step 1: Insert the step**
 
 In the `YOUR JOB:` list, after step `1. DERIVE ACCEPTANCE CRITERIA ...` and before the current step 2 (`Use the superpowers:executing-plans skill...`), insert:
 
@@ -2785,7 +2785,7 @@ In the `YOUR JOB:` list, after step `1. DERIVE ACCEPTANCE CRITERIA ...` and befo
 
 Renumber the existing steps 2..N to 3..N+1 (update any in-text references to those step numbers in the same file).
 
-- [ ] **Step 2: Verify and snapshot**
+- [x] **Step 2: Verify and snapshot**
 
 ```bash
 grep -c "rag_context" ~/.claude/skills/devloop/subagent-prompt.md
@@ -2809,11 +2809,11 @@ git commit -m "feat(skills): devloop subagents consult techniques corpus per tas
 **Files:**
 - Modify: `docs/development/MX_QUICK_REFERENCE.md`, `docs/development/mx-mcp~usage.md`, `docs/development/MX_RUST_CLI_AND_MCP_SERVER.md`, `docs/development/RUST_CLI_DEVELOPMENT.md`, `docs/development/QUICK_REFERENCE.md` (whichever still reference Weaviate), plus `README.md` if it mentions Weaviate.
 
-- [ ] **Step 1: Update stale RAG sections**
+- [x] **Step 1: Update stale RAG sections**
 
 In each file found by `grep -rli weaviate docs/development README.md`, rewrite the RAG/Weaviate sections to describe the pgvector corpus: backend (Neon primary / local Postgres fallback via `~/.mech-crate/config/rag.toml`), `mx rag ingest` / `mx rag status`, the 8 `rag_*` MCP tools (including `rag_context`), and the embedding adapter (`text-embedding-3-small` default, `OPENAI_API_KEY`). Delete instructions about docker-compose Weaviate, `mx mcp start/stop/ingest`, and the transformers container.
 
-- [ ] **Step 2: Final verification**
+- [x] **Step 2: Final verification**
 
 ```bash
 grep -rli weaviate docs/development README.md Makefile make templates scripts 2>/dev/null || echo "DOCS CLEAN"
@@ -2824,7 +2824,7 @@ cargo run -p mx-cli -- rag ingest --dry-run
 ```
 Expected: `DOCS CLEAN`, `CODE CLEAN`, builds/tests pass, dry run 0 warnings.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A
