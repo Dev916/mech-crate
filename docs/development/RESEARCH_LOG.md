@@ -14,3 +14,4 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 
 | Date | Topic | Verdict | Sources | Outcome |
 |---|---|---|---|---|
+| 2026-07-18 | Rust atomics memory ordering (Acquire/Release/SeqCst) selection | FRESH | 0 | No-op — covered & current in appendix-rust-concurrency.md (top score 0.59, complexity expert); no PR |
