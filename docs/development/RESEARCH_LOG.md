@@ -14,4 +14,4 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 
 | Date | Topic | Verdict | Sources | Outcome |
 |---|---|---|---|---|
-| 2026-07-18 | Rust async cancellation and graceful shutdown patterns | NEW | 9 | Authored `rust-async-cancellation-graceful-shutdown.md` — PR pending |
+| 2026-07-18 | Rust async cancellation and graceful shutdown patterns | NEW | 9 | Authored `rust-async-cancellation-graceful-shutdown.md` — [PR #14](https://github.com/Dev916/mech-crate/pull/14) |
