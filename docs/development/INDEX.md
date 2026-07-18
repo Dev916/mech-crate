@@ -1329,3 +1329,13 @@ summary: One sentence describing the doc.
 ```
 
 Docs without frontmatter still ingest (heuristics + a warning), but filtered retrieval quality drops. Re-ingest after edits: `mx rag ingest`.
+
+## Research Provenance
+
+Docs written or updated by the `technique-research` skill carry additional frontmatter:
+
+- `provenance: researched` (vs `curated` hand-written originals)
+- `researched: YYYY-MM-DD` — refreshed on every research pass; the autonomous staleness sweep picks the oldest
+- `sources:` — list of URLs backing the doc's sourced claims
+
+Sourced claims cite inline (`[1]`-style keyed to `sources`). The agent's own contributions appear ONLY under `## Synthesis (inferred)` headings — never blended into sourced text. An improvement pass updates sections and appends sources; it does not silently delete prior content.
