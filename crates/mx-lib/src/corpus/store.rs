@@ -453,6 +453,46 @@ impl CorpusStore {
     }
 }
 
+/// One mined gap theme from weak-scoring queries.
+#[derive(Debug, Clone)]
+pub struct GapTheme {
+    pub theme: String,
+    pub count: i64,
+    pub avg_score: Option<f64>,
+    pub last_seen: chrono::DateTime<chrono::Utc>,
+}
+
+impl CorpusStore {
+    /// Themes from queries in the last `days` whose top_score < 0.45 (or NULL),
+    /// grouped by normalized text (lowercase + whitespace-collapsed), needing at
+    /// least `min_count` occurrences. Ordered by count descending.
+    pub async fn gaps(&self, days: i64, min_count: i64) -> anyhow::Result<Vec<GapTheme>> {
+        let rows: Vec<(String, i64, Option<f64>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+            "SELECT lower(regexp_replace(trim(query), '\\s+', ' ', 'g')) AS theme,
+                    count(*) AS cnt, avg(top_score) AS avg_score, max(created_at) AS last_seen
+               FROM rag_queries
+              WHERE created_at > now() - ($1 || ' days')::interval
+                AND (top_score IS NULL OR top_score < 0.45)
+              GROUP BY theme
+             HAVING count(*) >= $2
+              ORDER BY cnt DESC, last_seen DESC",
+        )
+        .bind(days.to_string())
+        .bind(min_count)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(theme, count, avg_score, last_seen)| GapTheme {
+                theme,
+                count,
+                avg_score,
+                last_seen,
+            })
+            .collect())
+    }
+}
+
 /// Serialize DB-touching tests across the whole test binary: they share one
 /// Postgres database and each `clear()`s global state then asserts exact
 /// counts, so they must not run concurrently. Shared (not per-module) so the
@@ -768,5 +808,44 @@ mod tests {
             }
             sqlx::query(stmt).execute(store.pool()).await.ok();
         }
+    }
+
+    #[tokio::test]
+    async fn gaps_aggregates_weak_queries() {
+        let Some(cfg) = test_cfg() else { return };
+        let _guard = db_lock().lock().await;
+        let store = CorpusStore::connect(&cfg).await.unwrap();
+        sqlx::query("DELETE FROM rag_queries")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        let seed = |q: &str, score: Option<f64>| {
+            let pool = store.pool().clone();
+            let q = q.to_string();
+            async move {
+                sqlx::query(
+                    "INSERT INTO rag_queries (query, tool, top_score, mode) VALUES ($1, 'test', $2, 'hybrid')",
+                )
+                .bind(q)
+                .bind(score)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+        };
+        seed("GraphQL  Federation", Some(0.30)).await; // weak
+        seed("graphql federation", Some(0.20)).await; // same theme, different case/spacing
+        seed("graphql federation", None).await; // NULL counts as weak
+        seed("solid rust patterns", Some(0.90)).await; // strong: excluded
+        seed("lonely topic", Some(0.10)).await; // weak but singleton
+
+        let gaps = store.gaps(30, 2).await.unwrap();
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].theme, "graphql federation");
+        assert_eq!(gaps[0].count, 3);
+        let with_singletons = store.gaps(30, 1).await.unwrap();
+        assert_eq!(with_singletons.len(), 2);
+        assert_eq!(with_singletons[0].theme, "graphql federation"); // count desc
     }
 }
