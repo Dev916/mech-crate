@@ -17,7 +17,7 @@ Research judgment, source evaluation, and authoring are agent work, so the engin
 |---|---|
 | Trigger | Both: on-demand `/technique-research <topic>` AND a scheduled autonomous run. Schedule must be user-controllable (retime, pause, off). |
 | Quality gate | PR-gated. Each run commits to a `research/<slug>` branch and opens a PR; `mx rag ingest` picks up the delta only after merge. |
-| Sources | Provider registry with a documented contract. v1 active provider: **web** (wraps the `deep-research` skill). Planned, contract-conforming: `context7`, `cross-model` (GPT/Gemini), `hq-corpus`, `rss`, `medium-api` (https://mediumapi.com/). Future providers logged as GitHub issues. |
+| Sources | Provider registry with a documented contract. v1 active providers: **web** (wraps the `deep-research` skill), **x** (existing mcp__x__* tools — innovation/project discovery via search), **hackernews** (no-auth Algolia HN API via curl). Planned, contract-conforming: `context7`, `cross-model` (GPT/Gemini), `hq-corpus`, `reddit` (needs OAuth app), `rss`, `medium-api` (https://mediumapi.com/). Future providers logged as GitHub issues. |
 | Autonomous topic selection | Ladder: backlog file → staleness sweep → query-gap mining → tech-radar discovery. All four in scope (gap mining requires Rust query logging). |
 | Runtime | Local Claude Code cron now; cloud routine later (issue filed with provisioning checklist). |
 | Approach | A (skill-centric). Approaches B (Rust orchestrator) and C (dedicated Workflow harness) filed as issues for later. |
@@ -89,7 +89,7 @@ Branch `research/<slug>` → PR containing: coverage verdict, what changed and w
 - **Cost note:** <tokens/API characteristics>
 ```
 
-v1 entries: `web` (active), `context7`, `cross-model`, `hq-corpus`, `rss`, `medium-api` (planned). Adding a provider = add an entry, flip status; Phase 2 automatically includes it.
+v1 entries: `web`, `x`, `hackernews` (active); `context7`, `cross-model`, `hq-corpus`, `reddit`, `rss`, `medium-api` (planned). Adding a provider = add an entry, flip status; Phase 2 automatically includes it. Social/discussion providers (x, hackernews, reddit) are discovery-grade: their claims default to low/medium confidence and must be corroborated by a primary source or marked inferred before landing in a doc.
 
 ## Doc conventions (provenance)
 
@@ -158,6 +158,7 @@ One topic per scheduled run; deep-research invoked at most once per run; provide
 2. Provider: cross-model consultation (key config design).
 3. Provider: RSS feeds.
 4. Provider: Medium via mediumapi.com.
+8. Provider: Reddit (OAuth app registration + API integration).
 5. Approach B: native `mx rag research` orchestrator.
 6. Approach C: dedicated multi-agent Workflow harness.
 7. Query-gap mining v2: embedding-based theme clustering.

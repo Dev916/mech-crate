@@ -545,7 +545,7 @@ git commit -m "docs(development): research backlog, log, and provenance conventi
 ### Task 5: The `technique-research` skill + provider registry
 
 **Acceptance Criteria (observable):**
-- `~/.claude/skills/technique-research/SKILL.md` exists with frontmatter `name: technique-research` and a trigger-rich description; `references/source-providers.md` exists with the provider contract, one `active` web provider, and five `planned` entries (context7, cross-model, hq-corpus, rss, medium-api).
+- `~/.claude/skills/technique-research/SKILL.md` exists with frontmatter `name: technique-research` and a trigger-rich description; `references/source-providers.md` exists with the provider contract, three `active` providers (web, x, hackernews), and six `planned` entries (context7, cross-model, hq-corpus, reddit, rss, medium-api).
 - Repo snapshots `skills/technique-research/SKILL.md` + `skills/technique-research/references/source-providers.md` are byte-identical to the home copies (diff exits 0).
 
 **Verify via:** cli
@@ -591,7 +591,7 @@ If the corpus is offline, proceed as NEW but flag "dedup skipped — corpus offl
 
 ## Phase 2 — Research via providers
 
-Read `references/source-providers.md`. Run every provider whose **Status** is `active` and whose **Use when** matches the topic. v1: the `web` provider (invoke the deep-research skill with the topic + what Phase 1 says is missing). Collect claims with citations and confidence; reconcile disagreements explicitly. If sources are too thin to support a doc, log "insufficient sources" to RESEARCH_LOG.md and STOP without a PR.
+Read `references/source-providers.md`. Run every provider whose **Status** is `active` and whose **Use when** matches the topic — v1 actives: `web` (deep-research skill, always), plus `x` and `hackernews` for innovation/discovery topics. Collect claims with citations and confidence; reconcile disagreements explicitly. Discovery-grade claims (x, hackernews, reddit) must be corroborated by a primary source before being stated as fact — otherwise they go under Synthesis (inferred) or are dropped. If sources are too thin to support a doc, log "insufficient sources" to RESEARCH_LOG.md and STOP without a PR.
 
 ## Phase 3 — Author
 
@@ -647,6 +647,20 @@ Every entry defines:
 - **Returns:** cited, adversarially-verified claims from web sources (docs, papers, engineering blogs)
 - **Cost note:** token-heavy (multi-agent fan-out); at most one invocation per run
 
+### x
+- **Status:** active
+- **Use when:** innovation/project-discovery topics — new tools, emerging patterns, "what are practitioners adopting"; also the tech-radar sweep
+- **Query:** `mcp__x__search_recent` with 2-3 topic keyword variants (e.g. `<topic> -is:retweet lang:en`); pull threads from high-signal hits via `mcp__x__get_user`/timeline when an author looks authoritative
+- **Returns:** discovery-grade claims cited as tweet/thread URLs, confidence LOW-MEDIUM — must be corroborated by a primary source (repo, docs, post) or placed under Synthesis (inferred)
+- **Cost note:** cheap API calls; recent-search window ~7 days, so it finds what's NEW, not what's established
+
+### hackernews
+- **Status:** active
+- **Use when:** innovation/project-discovery and "how do experienced engineers argue about this" topics; also the tech-radar sweep
+- **Query:** no-auth Algolia HN API via curl: `curl -s "https://hn.algolia.com/api/v1/search?query=<url-encoded topic>&tags=story&hitsPerPage=15"` (add `&numericFilters=created_at_i><epoch>` for freshness); fetch linked articles for top relevant hits, and comment threads via `tags=comment` when the discussion itself is the signal
+- **Returns:** story/article claims cited by URL (+ HN discussion link), confidence MEDIUM for linked primary sources, LOW for comment claims — comment-only claims must be corroborated or marked inferred
+- **Cost note:** free, no auth, fast; rank by points/num_comments for signal
+
 ### context7
 - **Status:** planned
 - **Use when:** topic names a specific library/framework/SDK
@@ -667,6 +681,13 @@ Every entry defines:
 - **Query:** `mcp__hq__hq_corpus_search` with the topic
 - **Returns:** internal-doc claims, citation = corpus doc path/id
 - **Cost note:** cheap
+
+### reddit
+- **Status:** planned (needs OAuth app registration — see GitHub issue)
+- **Use when:** practitioner-experience and tooling-adoption topics (r/rust, r/programming, r/ExperiencedDevs, topic-specific subs)
+- **Query:** Reddit API search (OAuth client credentials from env) across relevant subreddits, sorted by top/relevance; fetch high-score threads
+- **Returns:** discovery-grade claims cited as thread URLs, confidence LOW-MEDIUM — corroborate with primary sources or mark inferred
+- **Cost note:** free tier rate limits; requires registered app credentials
 
 ### rss
 - **Status:** planned (see GitHub issue)
@@ -773,7 +794,7 @@ git commit -m "chore(research): schedule weekly autonomous technique-research ru
 ### Task 8: File the follow-up GitHub issues
 
 **Acceptance Criteria (observable):**
-- `gh issue list --repo Dev916/mech-crate` shows 7 new open issues titled: "Cloud routine for technique research (always-on scheduling)", "Research provider: cross-model consultation", "Research provider: RSS feeds", "Research provider: Medium (mediumapi.com)", "mx rag research: native Rust research orchestrator (Approach B)", "Multi-agent Workflow harness for research (Approach C)", "Query-gap mining v2: embedding-based theme clustering".
+- `gh issue list --repo Dev916/mech-crate` shows 8 new open issues titled: "Cloud routine for technique research (always-on scheduling)", "Research provider: cross-model consultation", "Research provider: Reddit (OAuth app + API)", "Research provider: RSS feeds", "Research provider: Medium (mediumapi.com)", "mx rag research: native Rust research orchestrator (Approach B)", "Multi-agent Workflow harness for research (Approach C)", "Query-gap mining v2: embedding-based theme clustering".
 
 **Verify via:** cli
 
