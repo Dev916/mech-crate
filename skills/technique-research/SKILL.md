@@ -52,10 +52,13 @@ Read `references/source-providers.md`. Run every provider whose **Status** is `a
 
 ## Schedule management
 
-The autonomous run is a local Claude Code cron job. On request:
-- List: CronList. Pause/off: CronDelete the technique-research job. Retime: delete + CronCreate with the new cadence, prompt: "Invoke the technique-research skill in autonomous mode."
+The autonomous run is a **user crontab** entry (persistent across sessions/reboots) running `scripts/research-weekly.sh` from the mech-crate repo — headless `claude -p`, logs to `~/.mech-crate/research-cron.log`. On request:
+- Inspect: `crontab -l` (line: `3 9 * * 1 .../scripts/research-weekly.sh`)
+- Pause/off: `crontab -e` and comment out (or remove) that line
+- Retime: edit the cron expression in that line
+- Logs/last run: `tail ~/.mech-crate/research-cron.log`
 
-<!-- active job: 27bd29fa, cadence 0 9 * * 1 (Mon 09:00) -->
+(Claude Code's in-session CronCreate is NOT used — those jobs are session-only and expire after 7 days.)
 
 ## Guardrails
 
