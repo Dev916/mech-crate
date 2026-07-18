@@ -55,6 +55,8 @@ Read `references/source-providers.md`. Run every provider whose **Status** is `a
 The autonomous run is a local Claude Code cron job. On request:
 - List: CronList. Pause/off: CronDelete the technique-research job. Retime: delete + CronCreate with the new cadence, prompt: "Invoke the technique-research skill in autonomous mode."
 
+<!-- active job: 27bd29fa, cadence 0 9 * * 1 (Mon 09:00) -->
+
 ## Guardrails
 
 - One topic per run. deep-research at most once per run.
