@@ -45,7 +45,7 @@
 - Consumes: existing `CorpusStore`, `TechQuery`, `SearchMode`, `db_lock()`.
 - Produces: `TechQuery.tool: &'a str` (new field); `status()` JSON gains `"logged_queries": <i64>`.
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 Create `crates/mx-lib/migrations/0002_rag_queries.sql`:
 
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS rag_queries (
 CREATE INDEX IF NOT EXISTS rag_queries_created_idx ON rag_queries (created_at);
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Add to the `tests` module in `crates/mx-lib/src/corpus/store.rs` (inside the existing patterns — reuse `test_cfg()`, `meta()`, `sparse()`, `db_lock()`):
 
@@ -142,12 +142,12 @@ Add to the `tests` module in `crates/mx-lib/src/corpus/store.rs` (inside the exi
 
 Note: `include_str!` executes the whole migration file as one statement batch; if sqlx rejects multi-statement execution, split on `;` and execute each — implement whichever compiles, the intent is "recreate the table".
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `MX_RAG_TEST_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo test -p mx-lib corpus::store`
 Expected: FAIL — `tool` field and `flush_query_log` don't exist.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 In `store.rs`:
 
@@ -242,7 +242,7 @@ struct QueryLogEntry {
 
 7. Update the two existing store tests that construct `TechQuery` (`hybrid_search_ranks_and_filters`, `trigram_only_when_no_embeddings`) to include `tool: "test"`.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 ```bash
 docker start mx-rag-test 2>/dev/null; sleep 2
@@ -251,7 +251,7 @@ cargo build --workspace
 ```
 Expected: all store tests pass (6 now); workspace builds.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/mx-lib/migrations/0002_rag_queries.sql crates/mx-lib/src/corpus/store.rs crates/mx-mcp-server/src/tools/mod.rs
@@ -273,7 +273,7 @@ git commit -m "feat(corpus): log rag queries fire-and-forget for gap mining"
 **Interfaces:**
 - Produces: `pub struct GapTheme { pub theme: String, pub count: i64, pub avg_score: Option<f64>, pub last_seen: chrono::DateTime<chrono::Utc> }` and `CorpusStore::gaps(&self, days: i64, min_count: i64) -> anyhow::Result<Vec<GapTheme>>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
     #[tokio::test]
@@ -313,12 +313,12 @@ git commit -m "feat(corpus): log rag queries fire-and-forget for gap mining"
     }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `MX_RAG_TEST_DATABASE_URL=... cargo test -p mx-lib corpus::store gaps_aggregates`
 Expected: FAIL — `gaps` not defined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```rust
 /// One mined gap theme from weak-scoring queries.
@@ -358,12 +358,12 @@ impl CorpusStore {
 
 Export `GapTheme` from `corpus/mod.rs` (`pub use store::{... , GapTheme};`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `MX_RAG_TEST_DATABASE_URL=... cargo test -p mx-lib corpus::store`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/mx-lib/src/corpus/store.rs crates/mx-lib/src/corpus/mod.rs
@@ -384,7 +384,7 @@ git commit -m "feat(corpus): gap-theme aggregation over weak rag queries"
 **Files:**
 - Modify: `crates/mx-cli/src/commands/rag.rs`
 
-- [ ] **Step 1: Add the subcommand**
+- [x] **Step 1: Add the subcommand**
 
 To `RagSubcommand` add:
 
@@ -433,7 +433,7 @@ Import `GapTheme` implicitly via `store.gaps` (add `use mx_lib::corpus::{CorpusS
         println!("  {} Logged queries: {}", style("•").dim(), st["logged_queries"]);
 ```
 
-- [ ] **Step 2: Verify live**
+- [x] **Step 2: Verify live**
 
 ```bash
 cargo run -p mx-cli -- rag gaps --help
@@ -442,7 +442,7 @@ MX_RAG_FALLBACK_DATABASE_URL=postgres://postgres@localhost:55433/mx_rag cargo ru
 ```
 Expected: help exits 0; gaps prints seeded themes from Task 2's test data (re-seed via psql if the test cleaned up: `docker exec mx-rag-test psql -U postgres -d mx_rag -c "INSERT INTO rag_queries (query, tool, top_score, mode) VALUES ('graphql federation','manual',0.2,'hybrid'),('graphql federation','manual',0.3,'hybrid')"`); status shows the count.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add crates/mx-cli/src/commands/rag.rs
@@ -465,7 +465,7 @@ git commit -m "feat(mx-cli): mx rag gaps — mine weak-query research themes"
 - Create: `docs/development/RESEARCH_LOG.md`
 - Modify: `docs/development/INDEX.md`
 
-- [ ] **Step 1: Create RESEARCH_BACKLOG.md**
+- [x] **Step 1: Create RESEARCH_BACKLOG.md**
 
 ```markdown
 ---
@@ -482,16 +482,16 @@ summary: Topic queue for the technique-research skill; humans and agents append,
 
 Topics awaiting a research pass. The `technique-research` skill's autonomous mode pops the **top unchecked** entry. Anyone (human or agent) may append; the techniques skill appends here when `rag_context` returns weak results.
 
-Format: `- [ ] <topic> — <one-line why> (added YYYY-MM-DD by <who>)`
+Format: `- [x] <topic> — <one-line why> (added YYYY-MM-DD by <who>)`
 
 ## Queue
 
-- [ ] Rust async cancellation and graceful shutdown patterns — corpus covers concurrency primitives but not structured cancellation (added 2026-07-18 by design)
-- [ ] Supply-chain security for dependency ecosystems (cargo/npm) — security category is thin on tooling practice (added 2026-07-18 by design)
-- [ ] Local-first sync engines (CRDTs in practice) — emerging pattern, no coverage (added 2026-07-18 by design)
+- [x] Rust async cancellation and graceful shutdown patterns — corpus covers concurrency primitives but not structured cancellation (added 2026-07-18 by design)
+- [x] Supply-chain security for dependency ecosystems (cargo/npm) — security category is thin on tooling practice (added 2026-07-18 by design)
+- [x] Local-first sync engines (CRDTs in practice) — emerging pattern, no coverage (added 2026-07-18 by design)
 ```
 
-- [ ] **Step 2: Create RESEARCH_LOG.md**
+- [x] **Step 2: Create RESEARCH_LOG.md**
 
 ```markdown
 ---
@@ -512,7 +512,7 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 |---|---|---|---|---|
 ```
 
-- [ ] **Step 3: Add the provenance section to INDEX.md**
+- [x] **Step 3: Add the provenance section to INDEX.md**
 
 Append after the existing "Frontmatter Authoring" section:
 
@@ -528,7 +528,7 @@ Docs written or updated by the `technique-research` skill carry additional front
 Sourced claims cite inline (`[1]`-style keyed to `sources`). The agent's own contributions appear ONLY under `## Synthesis (inferred)` headings — never blended into sourced text. An improvement pass updates sections and appends sources; it does not silently delete prior content.
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```bash
 cargo run -p mx-cli -- rag ingest --dry-run
@@ -556,7 +556,7 @@ git commit -m "docs(development): research backlog, log, and provenance conventi
 - Create: `skills/technique-research/SKILL.md` (snapshot)
 - Create: `skills/technique-research/references/source-providers.md` (snapshot)
 
-- [ ] **Step 1: Write SKILL.md**
+- [x] **Step 1: Write SKILL.md**
 
 ```markdown
 ---
@@ -622,7 +622,7 @@ The autonomous run is a local Claude Code cron job. On request:
 - Never block or fail on corpus unavailability; never merge your own PR; never edit docs outside docs/development + the backlog/log.
 ```
 
-- [ ] **Step 2: Write references/source-providers.md**
+- [x] **Step 2: Write references/source-providers.md**
 
 ```markdown
 # Source Providers — Registry & Contract
@@ -704,7 +704,7 @@ Every entry defines:
 - **Cost note:** third-party API key + rate limits
 ```
 
-- [ ] **Step 3: Snapshot into the repo, verify, commit**
+- [x] **Step 3: Snapshot into the repo, verify, commit**
 
 ```bash
 mkdir -p skills/technique-research/references
@@ -730,7 +730,7 @@ Expected: both diffs exit 0.
 - Modify: `~/.claude/skills/techniques/SKILL.md`
 - Modify: `skills/techniques/SKILL.md` (snapshot)
 
-- [ ] **Step 1: Edit the core loop**
+- [x] **Step 1: Edit the core loop**
 
 In the `## Core loop` section, replace item 4's text:
 
@@ -742,10 +742,10 @@ with:
 
 ```markdown
 4. **Never block on the corpus.** If tools return the offline message or nothing relevant: note it in one line and proceed with your own judgment. `mcp__mx__rag_health` diagnoses; `mx rag ingest` re-ingests; do NOT stop work to repair the corpus unless the user asks.
-5. **Feed the backlog when you find a gap.** If `rag_context` returned nothing relevant (or only weak, off-topic chunks) for a topic worth knowing, append one line to the mech-crate research backlog so research mode picks it up later: `- [ ] <topic> — <one-line why> (added YYYY-MM-DD by techniques-skill)` in `docs/development/RESEARCH_BACKLOG.md` (repo located via $MECH_CRATE_ROOT, then ~/.mech-crate/config/source-root, then ~/dev/dev916/mech-crate). If the repo isn't reachable, skip silently. Then continue your task — never block on this.
+5. **Feed the backlog when you find a gap.** If `rag_context` returned nothing relevant (or only weak, off-topic chunks) for a topic worth knowing, append one line to the mech-crate research backlog so research mode picks it up later: `- [x] <topic> — <one-line why> (added YYYY-MM-DD by techniques-skill)` in `docs/development/RESEARCH_BACKLOG.md` (repo located via $MECH_CRATE_ROOT, then ~/.mech-crate/config/source-root, then ~/dev/dev916/mech-crate). If the repo isn't reachable, skip silently. Then continue your task — never block on this.
 ```
 
-- [ ] **Step 2: Snapshot, verify, commit**
+- [x] **Step 2: Snapshot, verify, commit**
 
 ```bash
 cp ~/.claude/skills/techniques/SKILL.md skills/techniques/SKILL.md
@@ -769,13 +769,13 @@ Expected: grep ≥ 1, diff exit 0.
 **Files:**
 - Modify: `~/.claude/skills/technique-research/SKILL.md` + repo snapshot (job id note)
 
-- [ ] **Step 1: Create the job**
+- [x] **Step 1: Create the job**
 
 Load the cron tools via ToolSearch (`select:CronCreate,CronList`). Create:
 - schedule: weekly, Monday 09:00 local (cron expression `0 9 * * 1`)
 - prompt: `Invoke the technique-research skill (Skill tool, skill: technique-research) in autonomous mode: no topic given — follow its Phase 0 autonomous ladder. Follow the skill exactly.`
 
-- [ ] **Step 2: Verify + record**
+- [x] **Step 2: Verify + record**
 
 CronList shows the job. Append to the Schedule management section of SKILL.md (home + snapshot):
 
@@ -798,11 +798,11 @@ git commit -m "chore(research): schedule weekly autonomous technique-research ru
 
 **Verify via:** cli
 
-- [ ] **Step 1: Create the issues**
+- [x] **Step 1: Create the issues**
 
 For each, `gh issue create --repo Dev916/mech-crate --title "<title>" --body "<2-5 sentence body referencing docs/superpowers/specs/2026-07-18-self-growing-techniques-design.md and, for providers, the contract in skills/technique-research/references/source-providers.md>"`. The cloud-routine issue body must include the provisioning checklist: repo clone, mx toolchain build, Neon connection string, OPENAI_API_KEY, GitHub credentials for PR creation.
 
-- [ ] **Step 2: Verify + commit nothing**
+- [x] **Step 2: Verify + commit nothing**
 
 `gh issue list --repo Dev916/mech-crate --limit 10` shows all 7. No repo files change (no commit).
 
@@ -817,19 +817,19 @@ For each, `gh issue create --repo Dev916/mech-crate --title "<title>" --body "<2
 
 **Verify via:** cli
 
-- [ ] **Step 1: Directed run**
+- [x] **Step 1: Directed run**
 
 Dispatch/execute the skill exactly as written with the topic above (it is backlog item #1, so this also exercises check-off). Capture the PR URL. ONE override for this verification only (the backlog/log files exist only on the feature branch, not on main yet): cut `research/<slug>` from `feat/technique-research-mode` instead of the default branch, and open the PR with `--base feat/technique-research-mode` so the research diff stays isolated.
 
-- [ ] **Step 2: FRESH no-op run**
+- [x] **Step 2: FRESH no-op run**
 
 Run the skill on "Rust atomics memory ordering (Acquire/Release/SeqCst) selection"; confirm no PR is created and the log row says FRESH.
 
-- [ ] **Step 3: Autonomous selection dry check**
+- [x] **Step 3: Autonomous selection dry check**
 
 Invoke the skill in autonomous mode with the explicit instruction "run Phase 0 only, report the selected topic and stop." Expect it to name the (new) top unchecked backlog entry.
 
-- [ ] **Step 4: Record + commit**
+- [x] **Step 4: Record + commit**
 
 The directed run's log/backlog changes live in ITS research PR. The FRESH row from Step 2 is committed on the feature branch:
 
