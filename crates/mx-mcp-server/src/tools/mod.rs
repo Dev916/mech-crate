@@ -1822,6 +1822,7 @@ Actions:
                         category,
                         language,
                         limit,
+                        tool: "rag_context",
                     })
                     .await
                 {
@@ -1849,6 +1850,7 @@ Actions:
                         category: None,
                         language: None,
                         limit,
+                        tool: "rag_search",
                     })
                     .await
                 {
@@ -1882,6 +1884,7 @@ Actions:
                         category: Some(category),
                         language: None,
                         limit,
+                        tool: "rag_search_category",
                     })
                     .await
                 {
@@ -1912,6 +1915,7 @@ Actions:
                         category: None,
                         language,
                         limit: 8,
+                        tool: "rag_find_implementation",
                     })
                     .await
                 {
@@ -1975,6 +1979,7 @@ Actions:
                         category: None,
                         language: None,
                         limit: 7,
+                        tool: "rag_get_guidance",
                     })
                     .await
                 {
@@ -2023,6 +2028,7 @@ Actions:
                             category: None,
                             language: None,
                             limit: 3,
+                            tool: "rag_compare_approaches",
                         })
                         .await
                     {
@@ -2060,6 +2066,7 @@ Actions:
                         category: None,
                         language: None,
                         limit: (max_results + 5) as i64,
+                        tool: "rag_find_related",
                     })
                     .await
                 {

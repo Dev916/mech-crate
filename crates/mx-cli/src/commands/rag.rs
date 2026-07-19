@@ -37,6 +37,15 @@ enum RagSubcommand {
     },
     /// Show corpus status (backend, counts, model)
     Status,
+    /// Mine research-gap themes from weak-scoring rag queries
+    Gaps {
+        /// Look-back window in days
+        #[arg(long, default_value_t = 30)]
+        days: i64,
+        /// Minimum occurrences for a theme to report
+        #[arg(long, default_value_t = 2)]
+        min_count: i64,
+    },
 }
 
 impl RagCommand {
@@ -53,6 +62,7 @@ impl RagCommand {
                     .await
             }
             RagSubcommand::Status => self.status().await,
+            RagSubcommand::Gaps { days, min_count } => self.gaps(*days, *min_count).await,
         }
     }
 
@@ -156,6 +166,45 @@ impl RagCommand {
             println!("  {} Last ingest: {}", style("•").dim(), t);
         }
         println!("  {} By category: {}", style("•").dim(), st["by_category"]);
+        println!(
+            "  {} Logged queries: {}",
+            style("•").dim(),
+            st["logged_queries"]
+        );
+        Ok(())
+    }
+
+    async fn gaps(&self, days: i64, min_count: i64) -> Result<()> {
+        let cfg = RagConfig::load();
+        let store = CorpusStore::connect(&cfg).await?;
+        let gaps = store.gaps(days, min_count).await?;
+        if gaps.is_empty() {
+            println!(
+                "{} No gap themes in the last {} days (min count {}).",
+                style("✓").green().bold(),
+                days,
+                min_count
+            );
+            return Ok(());
+        }
+        println!(
+            "{}",
+            style(format!("Research gaps — last {} days", days)).bold()
+        );
+        for g in gaps {
+            let avg = g
+                .avg_score
+                .map(|s| format!("{:.2}", s))
+                .unwrap_or_else(|| "n/a".into());
+            println!(
+                "  {} {} — {} hits, avg score {}, last {}",
+                style("•").dim(),
+                g.theme,
+                g.count,
+                avg,
+                g.last_seen.format("%Y-%m-%d")
+            );
+        }
         Ok(())
     }
 }

@@ -45,6 +45,7 @@ pub struct CorpusStore {
     backend: BackendKind,
     embedder: Option<Arc<dyn EmbeddingProvider>>,
     model: String,
+    last_log_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 /// Hex-encoded SHA-256 of `data`.
@@ -73,6 +74,7 @@ impl CorpusStore {
             backend,
             embedder,
             model: cfg.embedding_model.clone(),
+            last_log_task: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -209,6 +211,18 @@ pub struct TechQuery<'a> {
     pub category: Option<&'a str>,
     pub language: Option<&'a str>,
     pub limit: i64,
+    /// Name of the MCP tool / caller issuing this query (for gap-mining attribution).
+    pub tool: &'a str,
+}
+
+/// One fire-and-forget row destined for `rag_queries`.
+struct QueryLogEntry {
+    query: String,
+    tool: String,
+    category: Option<String>,
+    language: Option<String>,
+    top_score: Option<f64>,
+    mode: String,
 }
 
 /// How the search was executed.
@@ -246,7 +260,51 @@ impl CorpusStore {
             },
             None => None,
         };
-        self.search_with_embedding(q, embedding).await
+        let (hits, mode) = self.search_with_embedding(q, embedding).await?;
+
+        // Fire-and-forget query logging for gap mining. This is an edge effect:
+        // it runs in a spawned task, and every failure is mapped to a trace and
+        // dropped — logging must never fail or slow a search (no panics in domain
+        // paths; fail fast only at process boundaries).
+        let log_pool = self.pool.clone();
+        let entry = QueryLogEntry {
+            query: q.text.to_string(),
+            tool: q.tool.to_string(),
+            category: q.category.map(String::from),
+            language: q.language.map(String::from),
+            top_score: hits.first().map(|h| h.score),
+            mode: match mode {
+                SearchMode::Hybrid => "hybrid",
+                SearchMode::TrigramOnly => "trigram_only",
+            }
+            .to_string(),
+        };
+        let handle = tokio::spawn(async move {
+            if let Err(e) = sqlx::query(
+                "INSERT INTO rag_queries (query, tool, category, language, top_score, mode)
+                 VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(&entry.query)
+            .bind(&entry.tool)
+            .bind(&entry.category)
+            .bind(&entry.language)
+            .bind(entry.top_score)
+            .bind(&entry.mode)
+            .execute(&log_pool)
+            .await
+            {
+                tracing::debug!("rag query log insert failed (ignored): {e}");
+            }
+        });
+        *self.last_log_task.lock().await = Some(handle);
+        Ok((hits, mode))
+    }
+
+    /// Await the most recent spawned query-log insert (deterministic tests).
+    pub async fn flush_query_log(&self) {
+        if let Some(h) = self.last_log_task.lock().await.take() {
+            let _ = h.await;
+        }
     }
 
     /// Search with a pre-computed query embedding (testable without an embedder).
@@ -342,6 +400,11 @@ impl CorpusStore {
         .await?;
         let model_mismatch =
             !stored_models.is_empty() && stored_models.iter().any(|m| m != &self.model);
+        // Query-log count is best-effort: a missing table must never fail status.
+        let logged_queries: i64 = sqlx::query_scalar("SELECT count(*) FROM rag_queries")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
         let mut by_category = serde_json::Map::new();
         for (cat, n) in by_cat {
             by_category.insert(cat, serde_json::Value::from(n));
@@ -355,6 +418,7 @@ impl CorpusStore {
             "model_mismatch": model_mismatch,
             "last_ingest": last.map(|t| t.to_rfc3339()),
             "by_category": serde_json::Value::Object(by_category),
+            "logged_queries": logged_queries,
         }))
     }
 
@@ -386,6 +450,46 @@ impl CorpusStore {
             }
         }
         Ok(updated)
+    }
+}
+
+/// One mined gap theme from weak-scoring queries.
+#[derive(Debug, Clone)]
+pub struct GapTheme {
+    pub theme: String,
+    pub count: i64,
+    pub avg_score: Option<f64>,
+    pub last_seen: chrono::DateTime<chrono::Utc>,
+}
+
+impl CorpusStore {
+    /// Themes from queries in the last `days` whose top_score < 0.45 (or NULL),
+    /// grouped by normalized text (lowercase + whitespace-collapsed), needing at
+    /// least `min_count` occurrences. Ordered by count descending.
+    pub async fn gaps(&self, days: i64, min_count: i64) -> anyhow::Result<Vec<GapTheme>> {
+        let rows: Vec<(String, i64, Option<f64>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+            "SELECT lower(regexp_replace(trim(query), '\\s+', ' ', 'g')) AS theme,
+                    count(*) AS cnt, avg(top_score) AS avg_score, max(created_at) AS last_seen
+               FROM rag_queries
+              WHERE created_at > now() - ($1 || ' days')::interval
+                AND (top_score IS NULL OR top_score < 0.45)
+              GROUP BY theme
+             HAVING count(*) >= $2
+              ORDER BY cnt DESC, last_seen DESC",
+        )
+        .bind(days.to_string())
+        .bind(min_count)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(theme, count, avg_score, last_seen)| GapTheme {
+                theme,
+                count,
+                avg_score,
+                last_seen,
+            })
+            .collect())
     }
 }
 
@@ -521,6 +625,7 @@ mod tests {
                     category: None,
                     language: None,
                     limit: 5,
+                    tool: "test",
                 },
                 Some(sparse(0)),
             )
@@ -537,6 +642,7 @@ mod tests {
                     category: Some("frp"),
                     language: None,
                     limit: 5,
+                    tool: "test",
                 },
                 Some(sparse(1)),
             )
@@ -553,6 +659,7 @@ mod tests {
                     category: None,
                     language: Some("php"),
                     limit: 5,
+                    tool: "test",
                 },
                 Some(sparse(1)),
             )
@@ -587,10 +694,158 @@ mod tests {
                 category: None,
                 language: None,
                 limit: 5,
+                tool: "test",
             })
             .await
             .unwrap();
         assert!(matches!(mode, SearchMode::TrigramOnly)); // no embedder configured in test_cfg
         assert_eq!(hits.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn search_logs_query_with_top_score() {
+        let Some(cfg) = test_cfg() else { return };
+        let _guard = db_lock().lock().await;
+        let store = CorpusStore::connect(&cfg).await.unwrap();
+        store.clear().await.unwrap();
+        sqlx::query("DELETE FROM rag_queries")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        let m = meta("docs/log.md");
+        let id = store.upsert_doc(&m, &sha256_hex("l")).await.unwrap();
+        let c = Chunk {
+            heading_path: "T > L".into(),
+            content: "T > L\n\nlogging telemetry".into(),
+        };
+        store.insert_chunk(id, &c, &m, None).await.unwrap();
+
+        let (hits, _) = store
+            .search(&TechQuery {
+                text: "logging telemetry",
+                category: None,
+                language: None,
+                limit: 5,
+                tool: "rag_search",
+            })
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        store.flush_query_log().await; // deterministic: await the spawned insert
+
+        let (query, tool, mode, score): (String, String, String, Option<f64>) = sqlx::query_as(
+            "SELECT query, tool, mode, top_score FROM rag_queries ORDER BY created_at DESC LIMIT 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(query, "logging telemetry");
+        assert_eq!(tool, "rag_search");
+        assert_eq!(mode, "trigram_only");
+        assert!(score.is_some());
+    }
+
+    #[tokio::test]
+    async fn empty_search_logs_null_score_and_drop_table_never_fails_search() {
+        let Some(cfg) = test_cfg() else { return };
+        let _guard = db_lock().lock().await;
+        let store = CorpusStore::connect(&cfg).await.unwrap();
+        store.clear().await.unwrap();
+        sqlx::query("DELETE FROM rag_queries")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        let (hits, _) = store
+            .search(&TechQuery {
+                text: "zz nonexistent zz",
+                category: None,
+                language: None,
+                limit: 5,
+                tool: "rag_context",
+            })
+            .await
+            .unwrap();
+        assert!(hits.is_empty());
+        store.flush_query_log().await;
+        let score: Option<f64> = sqlx::query_scalar(
+            "SELECT top_score FROM rag_queries ORDER BY created_at DESC LIMIT 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert!(score.is_none());
+
+        // status carries the count (this test logged exactly one query after its
+        // own DELETE, so the count reflects that single logged query).
+        let st = store.status().await.unwrap();
+        assert!(st["logged_queries"].as_i64().unwrap() >= 1);
+
+        // never-fail: drop the table, search still succeeds
+        sqlx::query("DROP TABLE rag_queries")
+            .execute(store.pool())
+            .await
+            .unwrap();
+        let res = store
+            .search(&TechQuery {
+                text: "still works",
+                category: None,
+                language: None,
+                limit: 5,
+                tool: "rag_search",
+            })
+            .await;
+        assert!(res.is_ok());
+        store.flush_query_log().await; // insert fails silently
+
+        // Restore the table for subsequent tests. sqlx's prepared-query path
+        // rejects multi-statement SQL, and sqlx::migrate! won't re-run the
+        // already-applied migration, so recreate by executing each statement.
+        for stmt in include_str!("../../migrations/0002_rag_queries.sql").split(';') {
+            if stmt.trim().is_empty() {
+                continue;
+            }
+            sqlx::query(stmt).execute(store.pool()).await.ok();
+        }
+    }
+
+    #[tokio::test]
+    async fn gaps_aggregates_weak_queries() {
+        let Some(cfg) = test_cfg() else { return };
+        let _guard = db_lock().lock().await;
+        let store = CorpusStore::connect(&cfg).await.unwrap();
+        sqlx::query("DELETE FROM rag_queries")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        let seed = |q: &str, score: Option<f64>| {
+            let pool = store.pool().clone();
+            let q = q.to_string();
+            async move {
+                sqlx::query(
+                    "INSERT INTO rag_queries (query, tool, top_score, mode) VALUES ($1, 'test', $2, 'hybrid')",
+                )
+                .bind(q)
+                .bind(score)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+        };
+        seed("GraphQL  Federation", Some(0.30)).await; // weak
+        seed("graphql federation", Some(0.20)).await; // same theme, different case/spacing
+        seed("graphql federation", None).await; // NULL counts as weak
+        seed("solid rust patterns", Some(0.90)).await; // strong: excluded
+        seed("lonely topic", Some(0.10)).await; // weak but singleton
+
+        let gaps = store.gaps(30, 2).await.unwrap();
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].theme, "graphql federation");
+        assert_eq!(gaps[0].count, 3);
+        let with_singletons = store.gaps(30, 1).await.unwrap();
+        assert_eq!(with_singletons.len(), 2);
+        assert_eq!(with_singletons[0].theme, "graphql federation"); // count desc
     }
 }
