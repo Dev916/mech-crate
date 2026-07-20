@@ -14,6 +14,7 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 
 | Date | Topic | Verdict | Sources | Outcome |
 |---|---|---|---|---|
+| 2026-07-19 | mx cloudflare infra: scaffolding, credentials, worker+container deploy | NEW | 9 repo sources | Authored `mx-cloudflare-deploy.md` (8-item drift inventory incl. phantom `mx cf` command and credential env-var mismatch) |
 | 2026-07-19 | mx recipes/blueprints lifecycle + image build pipeline | NEW | 12 repo sources | Authored `mx-recipes-and-build.md` (internal codebase research; 10-item gaps inventory incl. missing consumer-update provenance) |
 | 2026-07-19 | mx framework app playbook: anatomy, scaffolding, migration, always-use-router | NEW | 9 repo sources | Authored `mx-app-playbook.md` (internal codebase research; web/x/hn providers skipped — proprietary topic) |
 | 2026-07-18 | Rust async cancellation and graceful shutdown patterns | NEW | 9 | Authored `rust-async-cancellation-graceful-shutdown.md` — [PR #14](https://github.com/Dev916/mech-crate/pull/14) |
