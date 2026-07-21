@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "mech_crate",
+  "project_id": "708072b6-e3f9-40c3-bd47-4a0e6b0cdf71"
+}
