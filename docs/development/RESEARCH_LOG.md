@@ -14,6 +14,7 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 
 | Date | Topic | Verdict | Sources | Outcome |
 |---|---|---|---|---|
+| 2026-07-28 | Tries/radix trees + trie-path dispatch (forst pattern) | NEW | 19 | Authored `tries-and-radix-dispatch.md` (web research + forst repo as primary source; ART paper read in full, 68-claim report) |
 | 2026-07-26 | pgvector in Rust + concurrent batch embedding pipelines | NEW | 20 | Authored `pgvector-rust-batch-embedding.md` (web research; incl. Neon-pooler statement-cache trap and HNSW filtered-recall trap both live in our corpus) |
 | 2026-07-26 | RAG retrieval quality: hybrid fusion + chunking for code corpora | NEW | 16 | Authored `rag-retrieval-fusion-and-chunking.md` (web research; incl. empirically verified finding that our pg_trgm lexical arm is inert) |
 | 2026-07-19 | mx cloudflare infra: scaffolding, credentials, worker+container deploy | NEW | 9 repo sources | Authored `mx-cloudflare-deploy.md` (8-item drift inventory incl. phantom `mx cf` command and credential env-var mismatch) |
