@@ -16,9 +16,9 @@ Every entry defines:
 ### web
 - **Status:** active
 - **Use when:** always (default provider)
-- **Query:** invoke the `deep-research` skill with the topic plus Phase 1's gap list as the research question
-- **Returns:** cited, adversarially-verified claims from web sources (docs, papers, engineering blogs)
-- **Cost note:** token-heavy (multi-agent fan-out); at most one invocation per run
+- **Query:** dispatch ONE research subagent (Agent tool) instructed to: run 8-15 varied WebSearch queries, WebFetch the strongest primary sources, corroborate each key claim with 2+ independent sources or an authoritative primary, and return numbered claims with citation URLs + HIGH/MEDIUM/LOW confidence tags plus a recommendations section. (The `deep-research` skill is user-invocable only — `disable-model-invocation` — so agents cannot call it; if the USER launches the run via /deep-research, use that instead.)
+- **Returns:** cited, confidence-tagged claims from web sources (docs, papers, engineering blogs)
+- **Cost note:** token-heavy (~150k subagent tokens); at most one invocation per run
 
 ### x
 - **Status:** active
