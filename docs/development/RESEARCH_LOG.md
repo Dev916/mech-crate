@@ -14,6 +14,7 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 
 | Date | Topic | Verdict | Sources | Outcome |
 |---|---|---|---|---|
+| 2026-07-26 | pgvector in Rust + concurrent batch embedding pipelines | NEW | 20 | Authored `pgvector-rust-batch-embedding.md` (web research; incl. Neon-pooler statement-cache trap and HNSW filtered-recall trap both live in our corpus) |
 | 2026-07-26 | RAG retrieval quality: hybrid fusion + chunking for code corpora | NEW | 16 | Authored `rag-retrieval-fusion-and-chunking.md` (web research; incl. empirically verified finding that our pg_trgm lexical arm is inert) |
 | 2026-07-19 | mx cloudflare infra: scaffolding, credentials, worker+container deploy | NEW | 9 repo sources | Authored `mx-cloudflare-deploy.md` (8-item drift inventory incl. phantom `mx cf` command and credential env-var mismatch) |
 | 2026-07-19 | mx recipes/blueprints lifecycle + image build pipeline | NEW | 12 repo sources | Authored `mx-recipes-and-build.md` (internal codebase research; 10-item gaps inventory incl. missing consumer-update provenance) |
