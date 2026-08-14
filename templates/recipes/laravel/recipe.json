@@ -109,7 +109,7 @@
   ],
   
   "post_install": {
-    "renames": [
+    "rename": [
       { "from": "apps/{{SERVICE_NAME}}/env.template", "to": "apps/{{SERVICE_NAME}}/.env.example" }
     ],
     "chmod": [

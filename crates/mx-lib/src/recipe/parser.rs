@@ -62,6 +62,10 @@ pub struct Recipe {
     /// Next steps to show after installation
     #[serde(default)]
     pub next_steps: Vec<String>,
+
+    /// Free-form authoring notes carried in the recipe for documentation
+    #[serde(default)]
+    pub notes: Vec<String>,
 }
 
 /// A service defined by the recipe
@@ -213,6 +217,9 @@ pub struct RunAction {
     pub command: String,
     #[serde(default)]
     pub cwd: Option<String>,
+    /// Human-readable description shown while the command runs
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 impl Recipe {

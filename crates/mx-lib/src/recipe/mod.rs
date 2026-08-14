@@ -4,6 +4,7 @@
 
 mod installer;
 mod parser;
+pub mod validate;
 
 pub use installer::{InstallResult, RecipeInstaller};
 pub use parser::{
