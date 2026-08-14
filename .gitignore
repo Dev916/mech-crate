@@ -3,6 +3,7 @@ CODING_RULES.md
 .cursor/config.json
 reference/
 test-*
+!scripts/test-e2e.sh
 workbench/
 target/
 dist/

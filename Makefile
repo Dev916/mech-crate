@@ -92,6 +92,12 @@ test-known-broken:
 coverage:
 	./scripts/coverage-ratchet.sh $(if $(BUMP),--bump,)
 
+## E2E smoke: scaffold -> make dev -> router URL -> teardown (real Docker)
+# E2E_RECIPES selects recipes (default rust-api); CI dispatches "rust-api laravel".
+# Reuses an already-running mx-router and leaves it exactly as found.
+test-e2e:
+	./scripts/test-e2e.sh
+
 ## Run bash smoke tests
 test-smoke: init
 	@echo "Running smoke tests..."
@@ -167,6 +173,7 @@ help:
 	@echo "  make test-int       Full suite against the local pgvector container"
 	@echo "  make test-known-broken  Known-broken TDD lane (expected red)"
 	@echo "  make coverage       Coverage ratchet (BUMP=1 raises the floor)"
+	@echo "  make test-e2e       E2E smoke: scaffold -> router -> URL (real Docker)"
 	@echo "  make test-smoke     Run bash smoke tests"
 	@echo ""
 	@echo "Quality:"

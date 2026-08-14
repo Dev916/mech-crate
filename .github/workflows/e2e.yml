@@ -1,0 +1,66 @@
+name: E2E (scaffold → router → URL)
+
+# Dispatch-only: this tier boots real Docker stacks and takes the host's port 80
+# via the mx router, so it never runs on PR/push. The PR gate is ci.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      # NOTE: `mx add --recipe=laravel` currently dies with
+      # "Template error: Failed to parse '__tera_one_off'" — the recipe ships Blade/Vue
+      # sources whose `{{ ... }}` expressions the Tera renderer tries to parse. Until
+      # that recipe defect is fixed, dispatch with recipes="rust-api" for a green run.
+      recipes:
+        description: Space-separated recipes to smoke
+        required: false
+        default: rust-api laravel
+      url_timeout:
+        description: Seconds to retry the router URL before failing
+        required: false
+        default: "900"
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e:
+    name: e2e (${{ inputs.recipes }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # Mirrors `make test-e2e` exactly — zero CI/local drift.
+      E2E_RECIPES: ${{ inputs.recipes }}
+      E2E_URL_TIMEOUT: ${{ inputs.url_timeout }}
+      E2E_LOG_DIR: ${{ github.workspace }}/e2e-logs
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Docker + port 80 preflight
+        run: |
+          docker version
+          docker compose version
+          # The runner must own :80 for the router; fail loudly if it does not.
+          if sudo lsof -nP -iTCP:80 -sTCP:LISTEN 2>/dev/null | grep -q LISTEN; then
+            echo "::error::something already listens on port 80 — the mx router cannot start"
+            sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
+            exit 1
+          fi
+          echo "port 80 is free"
+
+      - name: E2E smoke
+        run: make test-e2e
+
+      - name: Upload E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: ${{ github.workspace }}/e2e-logs
+          if-no-files-found: warn
