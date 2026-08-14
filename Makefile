@@ -98,6 +98,30 @@ coverage:
 test-e2e:
 	./scripts/test-e2e.sh
 
+## Mutation testing on mx-lib (report, never a gate)
+# cargo-mutants re-runs mx-lib's suite once per mutant, so a full-package run is
+# an hours-long job — it lives on a weekly cron (.github/workflows/mutants.yml),
+# not in the PR gate. Scope it locally with MUTANTS_ARGS, e.g.
+#   make test-mutants MUTANTS_ARGS='--file crates/mx-lib/src/corpus/chunk.rs'
+# Exclusions (test_support, generated code) and test scope live in
+# .cargo/mutants.toml. Missed mutants are a test-backlog signal, not a failure,
+# so this target always exits 0 (leading `-` on the run, summary line last).
+MUTANTS_ARGS ?=
+test-mutants:
+	@command -v cargo-mutants >/dev/null 2>&1 || $(CARGO) install cargo-mutants
+	-$(CARGO) mutants --package mx-lib --timeout 300 $(MUTANTS_ARGS)
+	@echo ""
+	@echo "── mutants summary ──────────────────────────────────────────────"
+	@for f in caught missed timeout unviable; do \
+		if [ -f mutants.out/$$f.txt ]; then \
+			printf '%-9s %s\n' "$$f" "$$(wc -l < mutants.out/$$f.txt | tr -d ' ')"; \
+		fi; \
+	done
+	@echo "full report: mutants.out/ (outcomes.json, missed.txt)"
+	@if [ -s mutants.out/missed.txt ]; then \
+		echo "note: missed mutants are backlog items (file bd issues), not a build failure"; \
+	fi
+
 ## Run bash smoke tests
 test-smoke: init
 	@echo "Running smoke tests..."
@@ -174,6 +198,7 @@ help:
 	@echo "  make test-known-broken  Known-broken TDD lane (expected red)"
 	@echo "  make coverage       Coverage ratchet (BUMP=1 raises the floor)"
 	@echo "  make test-e2e       E2E smoke: scaffold -> router -> URL (real Docker)"
+	@echo "  make test-mutants   Mutation testing on mx-lib (report, never a gate)"
 	@echo "  make test-smoke     Run bash smoke tests"
 	@echo ""
 	@echo "Quality:"

@@ -14,6 +14,10 @@ artifacts/
 docs/unyform/output/
 .DS_Store
 
+# cargo-mutants reports (regenerated per run; CI uploads them as an artifact)
+mutants.out/
+mutants.out.old/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
