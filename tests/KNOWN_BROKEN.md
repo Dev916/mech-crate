@@ -52,6 +52,12 @@ a fix landed without bookkeeping — surfaced, not silently green.
 14 lane tests, 13 named `kb_*`; the `z5i` test predates the naming convention
 (written in the upgrade task) and is left as-is rather than churned.
 
+**Baseline scoreboard** (ci.yml `known-broken`, the run that established this
+lane): `14 tests run: 0 passed, 14 failed, 162 skipped` — 14 rows above, 14 red,
+zero bookkeeping debt. The gate suite in the same run: `162 passed, 14 skipped`.
+Those two numbers partition the workspace; if they stop summing to 176, either a
+lane test lost its `#[ignore]` or a gate test grew one.
+
 ## Notes on placement deviations
 
 - **rnj** lives in `mx-mcp-server` rather than `mx-lib`: that is the only crate
