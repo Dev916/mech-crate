@@ -44,7 +44,7 @@
 **Interfaces:**
 - Produces: `make test|test-unit|test-int` — the commands every later task and CI job invokes.
 
-- [ ] **Step 1: nextest config**
+- [x] **Step 1: nextest config**
 
 `.config/nextest.toml`:
 
@@ -59,7 +59,7 @@ failure-output = "immediate-final"
 fail-fast = false
 ```
 
-- [ ] **Step 2: Makefile targets**
+- [x] **Step 2: Makefile targets**
 
 Append to the root `Makefile`:
 
@@ -96,14 +96,14 @@ coverage:
 
 (`test-e2e` and `test-mutants` are added in Tasks 14/15; declare them `.PHONY` now, define later.)
 
-- [ ] **Step 3: deps + verify**
+- [x] **Step 3: deps + verify**
 
 Add `proptest = "1"` to `[workspace.dependencies]` and to mx-lib `[dev-dependencies]` (`proptest = { workspace = true }`). Confirm mx-cli dev-deps include `assert_cmd` + `predicates` (they power tests/cli_tests.rs; if referenced only as direct versions, normalize to workspace deps).
 
 Run: `which cargo-nextest || cargo install cargo-nextest` then `make test` / `make test-unit` / `make test-int`.
 Expected: all exit 0; nextest banner visible; current counts (≥83 tests) pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .config/nextest.toml Makefile Cargo.toml crates/mx-lib/Cargo.toml crates/mx-cli/Cargo.toml Cargo.lock
@@ -147,7 +147,7 @@ git commit -m "feat(test): nextest bootstrap + make test targets"
   }
   ```
 
-- [ ] **Step 1: Write the failing self-tests**
+- [x] **Step 1: Write the failing self-tests**
 
 `crates/mx-lib/src/test_support/mod.rs` bottom (tests compile only with the feature; `cargo nextest run -p mx-lib --features test-support` — note nextest passes features through):
 
@@ -212,9 +212,9 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — `cargo nextest run -p mx-lib --features test-support test_support` → compile error (types missing).
+- [x] **Step 2: Run to verify failure** — `cargo nextest run -p mx-lib --features test-support test_support` → compile error (types missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `stub_bin.rs` — each `stub()` writes `<dir>/<name>`:
 
@@ -229,9 +229,9 @@ chmod 0755; `invocations()` reads the calls file; `path_env()` = `format!("{}:{}
 
 Wire the feature/deps per the Files list.
 
-- [ ] **Step 4: Run to verify pass** — the four self-tests green; cross-crate `cargo check`s green.
+- [x] **Step 4: Run to verify pass** — the four self-tests green; cross-crate `cargo check`s green.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(test): shared test-support fixtures (stub-bin, scaffolder, embed server)"`
+- [x] **Step 5: Commit** — `git add -A && git commit -m "feat(test): shared test-support fixtures (stub-bin, scaffolder, embed server)"`
 
 ---
 
@@ -253,7 +253,7 @@ Wire the feature/deps per the Files list.
 **Interfaces:**
 - Produces: `pub fn validate_recipe_json(raw: &serde_json::Value) -> Vec<Finding>` and `pub struct Finding { pub path: String, pub message: String }`. Allowed-key sets mirror `parser.rs` structs exactly (Recipe, options, placeholders {source, transform ∈ slug|upper|rust_crate|ssr_bool}, init_app, templates {from,to,condition}, post_install {create_files, rename, chmod, gitkeep, run, gitignore}, next_steps).
 
-- [ ] **Step 1: failing tests** — validate.rs unit tests: clean minimal recipe → `[]`; recipe with `post_install.npm_install` → finding mentioning `npm_install`; placeholder `transform: "kebab"` → finding; template `from` referencing `common://nope` → finding when the resolved path is absent (validator takes an optional recipes-root for that check). `recipes_conformance.rs`:
+- [x] **Step 1: failing tests** — validate.rs unit tests: clean minimal recipe → `[]`; recipe with `post_install.npm_install` → finding mentioning `npm_install`; placeholder `transform: "kebab"` → finding; template `from` referencing `common://nope` → finding when the resolved path is absent (validator takes an optional recipes-root for that check). `recipes_conformance.rs`:
 
 ```rust
 #[test]
@@ -272,13 +272,13 @@ fn every_shipped_recipe_validates_clean() {
 }
 ```
 
-- [ ] **Step 2: red** — compile failure. Also run the conformance test AFTER implementing but BEFORE fixing astro to watch it fail on the real defect (evidence for the commit message), then fix astro.
+- [x] **Step 2: red** — compile failure. Also run the conformance test AFTER implementing but BEFORE fixing astro to watch it fail on the real defect (evidence for the commit message), then fix astro.
 
-- [ ] **Step 3: implement** — walk the JSON with per-object allowlists; unknown key → Finding; placeholder transform not in the four → Finding; `templates[].from` with `common://` prefix and root provided → check existence. Keep it pure (no fs unless root given).
+- [x] **Step 3: implement** — walk the JSON with per-object allowlists; unknown key → Finding; placeholder transform not in the four → Finding; `templates[].from` with `common://` prefix and root provided → check existence. Keep it pure (no fs unless root given).
 
-- [ ] **Step 4: green** — validator units + conformance sweep pass with astro fixed.
+- [x] **Step 4: green** — validator units + conformance sweep pass with astro fixed.
 
-- [ ] **Step 5: Commit** — `"feat(recipe): strict validator + on-disk conformance sweep (fix astro recipe)"`
+- [x] **Step 5: Commit** — `"feat(recipe): strict validator + on-disk conformance sweep (fix astro recipe)"`
 
 ---
 
@@ -296,7 +296,7 @@ fn every_shipped_recipe_validates_clean() {
 - Modify: `crates/mx-mcp-server/src/tools/mod.rs` (append `#[cfg(test)] mod tests`)
 - Modify: `crates/mx-mcp-server/Cargo.toml` (dev-deps: tokio-test present; add `mx-lib` test-support feature)
 
-- [ ] **Step 1: failing tests** — representative code (full set enumerated below):
+- [x] **Step 1: failing tests** — representative code (full set enumerated below):
 
 ```rust
 #[cfg(test)]
@@ -355,7 +355,7 @@ Full enumerated set (each its own test fn, same patterns): offline for all 8 rag
 
 NOTE: env-var PATH mutation in tests → keep all PATH-mutating tests in ONE `#[tokio::test]`-per-case module and set PATH inside each test through `Command` env instead where the code allows; where `execute()` spawns via inherited env, serialize with a module-level `std::sync::Mutex` guard (same pattern as corpus `db_lock`).
 
-- [ ] **Step 2: red** → **Step 3: implement seams if needed** (expected: none — these paths validate before spawning; if a path DOES spawn pre-validation, fix the ordering as part of this task and note it) → **Step 4: green** → **Step 5: Commit** `"test(mcp): registry/dispatch/offline coverage for the tool surface"`
+- [x] **Step 2: red** → **Step 3: implement seams if needed** (expected: none — these paths validate before spawning; if a path DOES spawn pre-validation, fix the ordering as part of this task and note it) → **Step 4: green** → **Step 5: Commit** `"test(mcp): registry/dispatch/offline coverage for the tool surface"`
 
 ---
 
@@ -374,7 +374,7 @@ NOTE: env-var PATH mutation in tests → keep all PATH-mutating tests in ONE `#[
 **Interfaces:**
 - Produces: `struct McpChild` harness (spawn via `assert_cmd`-located binary or `env!("CARGO_BIN_EXE_mx-mcp")`, line-delimited JSON-RPC write/read with timeout, `Drop` = kill + wait).
 
-- [ ] **Step 1: failing test skeleton** (representative — the harness struct + three tests):
+- [x] **Step 1: failing test skeleton** (representative — the harness struct + three tests):
 
 ```rust
 use std::io::{BufRead, BufReader, Write};
@@ -454,7 +454,7 @@ fn offline_rag_health_is_graceful() {
 
 CAVEAT for the implementer: `MX_RAG_DATABASE_URL` env overrides the user's rag.toml (config precedence from Task 5 of the corpus build) — the harness always pins BOTH URLs so a dev machine's Neon config can't leak in. `rag_health` with a reachable test-DB URL as PRIMARY reports backend "neon" per BackendKind labeling — accept either label, assert on reachability not label.
 
-- [ ] **Step 2: red** (file compiles, binary path resolves, initial run may hang → fix protocol assumptions) → **Step 3: adjust harness until green with and without env** → **Step 4: `pgrep -f mx-mcp` clean after run** → **Step 5: Commit** `"test(mcp): stdio integration harness (handshake, health, offline)"`
+- [x] **Step 2: red** (file compiles, binary path resolves, initial run may hang → fix protocol assumptions) → **Step 3: adjust harness until green with and without env** → **Step 4: `pgrep -f mx-mcp` clean after run** → **Step 5: Commit** `"test(mcp): stdio integration harness (handshake, health, offline)"`
 
 ---
 
@@ -468,7 +468,7 @@ CAVEAT for the implementer: `MX_RAG_DATABASE_URL` env overrides the user's rag.t
 **Files:**
 - Modify: `crates/mx-lib/src/router/mod.rs` (append tests; introduce a small `home_override` seam ONLY if the config path resolution cannot be redirected via `HOME`/env in tests — prefer env redirection)
 
-- [ ] Steps follow the standard TDD cycle. Key mechanics: tests create a tempdir fake `~/.mech-crate/router` (write `docker-compose.yml`, `.dashboard-port` with an out-of-range value like `9999`), point the router's home resolution at it (set `HOME` to the tempdir parent — serialize env-mutating tests with a module mutex), stub `docker` with recorded invocations. Assert: port re-allocation warns+reallocates into range; `docker compose -p mx-router up -d`-shaped invocation recorded on start; network ensure invokes `docker network` commands. Commit: `"test(router): port allocation, install detection, docker invocation contracts"`
+- [x] Steps follow the standard TDD cycle. Key mechanics: tests create a tempdir fake `~/.mech-crate/router` (write `docker-compose.yml`, `.dashboard-port` with an out-of-range value like `9999`), point the router's home resolution at it (set `HOME` to the tempdir parent — serialize env-mutating tests with a module mutex), stub `docker` with recorded invocations. Assert: port re-allocation warns+reallocates into range; `docker compose -p mx-router up -d`-shaped invocation recorded on start; network ensure invokes `docker network` commands. Commit: `"test(router): port allocation, install detection, docker invocation contracts"`
 
 ---
 
@@ -483,7 +483,7 @@ CAVEAT for the implementer: `MX_RAG_DATABASE_URL` env overrides the user's rag.t
 **Files:**
 - Modify: `crates/mx-lib/src/upgrade/mod.rs` (append tests)
 
-- [ ] Steps: standard TDD for the green set (synthetic `templates/project/` trees in tempdirs exercise categorize/backup/remap logic as pure-ish units); the known-broken test uses the real templates dir via `CARGO_MANIFEST_DIR` and asserts `Ok` + non-empty upgrade set — currently `Err("Project templates not found…")`. Fetch the real bd id: `bd list | grep -i "mx upgrade"` → use its id in the ignore reason. Commit: `"test(upgrade): categorization matrix + known-broken discovery test (bd)"`
+- [x] Steps: standard TDD for the green set (synthetic `templates/project/` trees in tempdirs exercise categorize/backup/remap logic as pure-ish units); the known-broken test uses the real templates dir via `CARGO_MANIFEST_DIR` and asserts `Ok` + non-empty upgrade set — currently `Err("Project templates not found…")`. Fetch the real bd id: `bd list | grep -i "mx upgrade"` → use its id in the ignore reason. Commit: `"test(upgrade): categorization matrix + known-broken discovery test (bd)"`
 
 ---
 
@@ -500,7 +500,7 @@ CAVEAT for the implementer: `MX_RAG_DATABASE_URL` env overrides the user's rag.t
 - Create: `crates/mx-cli/tests/cli_surface.rs`
 - Create: `crates/mx-cli/tests/fixtures/ragdocs/{a.md,b.md}` (valid frontmatter, tiny bodies)
 
-- [ ] **Step 1: the loop-driven help sweep + targeted tests:**
+- [x] **Step 1: the loop-driven help sweep + targeted tests:**
 
 ```rust
 use assert_cmd::Command;
@@ -539,7 +539,7 @@ fn doctor_on_scaffolded_project() {
 
 (Adjust the SUBCOMMANDS list to the actual enum in main.rs — read it first; login/logout/whoami/cc-plugin included if present. `doctor` may need the stub-bin PATH for docker checks — wire `sb.path_env()` if it probes the daemon.)
 
-- [ ] Steps 2-4 standard. Commit: `"test(cli): full subcommand surface + dry-run/doctor fixtures"`
+- [x] Steps 2-4 standard. Commit: `"test(cli): full subcommand surface + dry-run/doctor fixtures"`
 
 ---
 
@@ -556,7 +556,7 @@ fn doctor_on_scaffolded_project() {
 **Files:**
 - Create: `crates/mx-lib/tests/prop_chunker.rs`, `crates/mx-lib/tests/prop_frontmatter.rs`, `crates/mx-lib/tests/prop_transforms.rs`
 
-- [ ] **Step 1: representative property (chunker bound; others follow the same shape):**
+- [x] **Step 1: representative property (chunker bound; others follow the same shape):**
 
 ```rust
 use proptest::prelude::*;
@@ -581,7 +581,7 @@ Frontmatter round-trip renders a `TechniqueMeta` to YAML between `---` fences an
 
 Spec deviation, noted: the spec lists "gaps query normalization equivalence" under proptest — that normalization lives in SQL (`lower + regexp_replace`), so a 256-case property against the DB is disproportionate; it is already covered by the existing `gaps_aggregates_weak_queries` DB test's case/whitespace variants. No new proptest file for it.
 
-- [ ] Steps 2-4 standard (red on compile, implement visibility seams minimally, green). Commit: `"test(prop): chunker/frontmatter/transform property suites"`
+- [x] Steps 2-4 standard (red on compile, implement visibility seams minimally, green). Commit: `"test(prop): chunker/frontmatter/transform property suites"`
 
 ---
 
@@ -631,7 +631,7 @@ fn kb_make_rebuild_exists() {
 }
 ```
 
-- [ ] Steps: write all lane tests (they must COMPILE and FAIL when run with `--run-ignored only`; a lane test that errors on missing fixtures instead of failing on the assertion is a bug — arrange must succeed); author `tests/KNOWN_BROKEN.md`; verify gate stays green; commit `"test(kb): known-broken TDD lane — 14 bd-linked ignored tests"`
+- [x] Steps: write all lane tests (they must COMPILE and FAIL when run with `--run-ignored only`; a lane test that errors on missing fixtures instead of failing on the assertion is a bug — arrange must succeed); author `tests/KNOWN_BROKEN.md`; verify gate stays green; commit `"test(kb): known-broken TDD lane — 14 bd-linked ignored tests"`
 
 ---
 
@@ -648,7 +648,7 @@ fn kb_make_rebuild_exists() {
 - Create: `scripts/coverage-ratchet.sh`
 - Create: `.coverage-floor`
 
-- [ ] **Step 1: the script:**
+- [x] **Step 1: the script:**
 
 ```bash
 #!/usr/bin/env bash
@@ -670,7 +670,7 @@ echo "coverage: ${current}% (floor: ${floor}%)"
 
 (Column position of the TOTAL line percentage varies by llvm-cov version — implementer verifies against actual output and adjusts the awk; that's part of Step 2's red→green.)
 
-- [ ] Steps: install llvm-cov if absent; run `--bump` once to record the true baseline; demonstrate the failure path; commit `.coverage-floor` with the real number. Commit: `"feat(test): coverage ratchet script + baseline floor"`
+- [x] Steps: install llvm-cov if absent; run `--bump` once to record the true baseline; demonstrate the failure path; commit `.coverage-floor` with the real number. Commit: `"feat(test): coverage ratchet script + baseline floor"`
 
 ---
 
@@ -687,7 +687,7 @@ echo "coverage: ${current}% (floor: ${floor}%)"
 - Create: `.github/workflows/ci.yml`
 - Modify: whatever clippy flags (small, mechanical fixes; each `#[allow]` needs a reason comment)
 
-- [ ] **Step 1: the workflow:**
+- [x] **Step 1: the workflow:**
 
 ```yaml
 name: CI
@@ -774,7 +774,7 @@ jobs:
           echo "Passing known-broken tests should be un-ignored and their bd issues closed."
 ```
 
-- [ ] Steps: clippy cleanup first (own commit ok), workflow, push, `gh run watch` until green. Commit(s): `"fix: clippy -D warnings cleanup"` + `"ci: lint/test/coverage/known-broken gate"`
+- [x] Steps: clippy cleanup first (own commit ok), workflow, push, `gh run watch` until green. Commit(s): `"fix: clippy -D warnings cleanup"` + `"ci: lint/test/coverage/known-broken gate"`
 
 ---
 
@@ -790,7 +790,7 @@ jobs:
 **Files:**
 - Modify: `.github/workflows/release.yml`
 
-- [ ] Steps: READ the full existing workflow first (jobs + needs graph), insert the `test` job mirroring ci.yml's test+lint (no known-broken/coverage), rewire `needs:`. For verification prefer `actionlint` + a dispatch run cancelled immediately after the test job starts the dependency chain (`gh run cancel`); note in the commit that no artifact was published. Commit: `"ci(release): gate tag builds on the test suite"`
+- [x] Steps: READ the full existing workflow first (jobs + needs graph), insert the `test` job mirroring ci.yml's test+lint (no known-broken/coverage), rewire `needs:`. For verification prefer `actionlint` + a dispatch run cancelled immediately after the test job starts the dependency chain (`gh run cancel`); note in the commit that no artifact was published. Commit: `"ci(release): gate tag builds on the test suite"`
 
 ---
 
@@ -808,7 +808,7 @@ jobs:
 - Modify: `Makefile` (`test-e2e: ; ./scripts/test-e2e.sh`)
 - Modify (likely): `tests/testbed/*.sh` — parameterize hardcoded paths if any; keep changes minimal
 
-- [ ] Steps: read `tests/testbed/testbed.sh` + the rust-api smoke first; wrap rather than rewrite; local green run is the hard part (router owns port 80 — the script must detect an already-running mx-router and REUSE it locally, only installing on CI); e2e profile in nextest unused here (shell script), retries = one scripted re-curl loop (30s). Commit: `"test(e2e): scaffold->router->URL smoke, local + dispatch workflow"`
+- [x] Steps: read `tests/testbed/testbed.sh` + the rust-api smoke first; wrap rather than rewrite; local green run is the hard part (router owns port 80 — the script must detect an already-running mx-router and REUSE it locally, only installing on CI); e2e profile in nextest unused here (shell script), retries = one scripted re-curl loop (30s). Commit: `"test(e2e): scaffold->router->URL smoke, local + dispatch workflow"`
 
 ---
 
@@ -825,7 +825,7 @@ jobs:
 - Modify: `Makefile` (define `test-mutants`)
 - Create: `.cargo/mutants.toml` (exclude test_support + generated code from mutation)
 
-- [ ] Steps standard; local proof on the chunker file only (minutes, not hours); full-package left to the scheduled job. Commit: `"test(mutants): scheduled mutation testing on mx-lib"`
+- [x] Steps standard; local proof on the chunker file only (minutes, not hours); full-package left to the scheduled job. Commit: `"test(mutants): scheduled mutation testing on mx-lib"`
 
 ---
 
@@ -838,4 +838,4 @@ jobs:
 
 **Verify via:** cli
 
-- [ ] Steps: three scratch-branch demonstrations (commit → push → `gh run watch` → capture URL → delete branch), final green run, then open the PR (base main) with the evidence table. Do NOT merge — the user merges. Commit: `"docs(test): gate-proof evidence + KNOWN_BROKEN index"`
+- [x] Steps: three scratch-branch demonstrations (commit → push → `gh run watch` → capture URL → delete branch), final green run, then open the PR (base main) with the evidence table. Do NOT merge — the user merges. Commit: `"docs(test): gate-proof evidence + KNOWN_BROKEN index"`
