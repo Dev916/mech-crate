@@ -38,3 +38,11 @@ pub use paths::{
     source_templates_dir, templates_dir,
 };
 pub use project::{Project, ProjectDetector};
+
+// scratch: deliberate gate-proof break — DO NOT MERGE.
+// `format!("{}", &str)` is `clippy::useless_format`, so
+// `cargo clippy --workspace --all-targets -- -D warnings` fails. Proves ci.yml's
+// `lint` job gates on clippy. Branch is deleted after the run URL is captured.
+pub fn scratch_gate_proof_clippy_warning() -> String {
+    format!("{}", "scratch: deliberate gate-proof break")
+}
