@@ -77,7 +77,7 @@ impl Router {
             let content = std::fs::read_to_string(&port_file)?;
             if let Ok(port) = content.trim().parse::<u16>() {
                 // Validate cached port is within the expected range
-                if port >= DASHBOARD_PORT_START && port <= DASHBOARD_PORT_END {
+                if (DASHBOARD_PORT_START..=DASHBOARD_PORT_END).contains(&port) {
                     return Ok(port);
                 }
                 // Stale port outside expected range -- re-allocate

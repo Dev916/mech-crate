@@ -322,8 +322,7 @@ impl Recipe {
     /// Transform to slug (kebab-case)
     fn transform_slug(s: &str) -> String {
         s.to_lowercase()
-            .replace(' ', "-")
-            .replace('_', "-")
+            .replace([' ', '_'], "-")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '-')
             .collect()
@@ -332,8 +331,7 @@ impl Recipe {
     /// Transform to UPPER_SNAKE_CASE
     fn transform_upper(s: &str) -> String {
         s.to_uppercase()
-            .replace('-', "_")
-            .replace(' ', "_")
+            .replace(['-', ' '], "_")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '_')
             .collect()
@@ -342,8 +340,7 @@ impl Recipe {
     /// Transform to rust_crate_name
     fn transform_rust_crate(s: &str) -> String {
         s.to_lowercase()
-            .replace('-', "_")
-            .replace(' ', "_")
+            .replace(['-', ' '], "_")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '_')
             .collect()

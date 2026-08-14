@@ -276,7 +276,7 @@ impl UnyformClient {
 
         let response = self
             .client
-            .post(&format!("{}/v1/auth/login", base_url))
+            .post(format!("{}/v1/auth/login", base_url))
             .header("Content-Type", "application/json")
             .json(&serde_json::json!({
                 "api_key": api_key
@@ -319,7 +319,7 @@ impl UnyformClient {
             if let Ok(auth) = self.get_auth_header() {
                 let _ = self
                     .client
-                    .post(&format!("{}/v1/auth/logout", url))
+                    .post(format!("{}/v1/auth/logout", url))
                     .header("Authorization", auth)
                     .send()
                     .await;
@@ -335,7 +335,7 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(&format!("{}/v1/auth/me", url))
+            .get(format!("{}/v1/auth/me", url))
             .header("Authorization", &auth)
             .send()
             .await?;
@@ -361,7 +361,7 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(&format!("{}/v1/orgs/{}/recipes", url, org))
+            .get(format!("{}/v1/orgs/{}/recipes", url, org))
             .header("Authorization", &auth)
             .send()
             .await?;
@@ -388,7 +388,7 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(&format!(
+            .get(format!(
                 "{}/v1/orgs/{}/recipes/{}/versions",
                 url, org, recipe_name
             ))
@@ -433,7 +433,7 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(&format!(
+            .get(format!(
                 "{}/v1/orgs/{}/recipes/{}/versions/{}",
                 url, org, recipe_name, version
             ))
