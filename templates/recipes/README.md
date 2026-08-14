@@ -65,7 +65,7 @@ recipes/
   ],
   
   "post_install": {
-    "renames": [{ "from": "...", "to": "..." }],
+    "rename": [{ "from": "...", "to": "..." }],
     "chmod": [{ "path": "...", "mode": "+x" }],
     "gitkeep": ["apps/{{SERVICE_NAME}}/storage"]
   },

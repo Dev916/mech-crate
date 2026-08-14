@@ -59,6 +59,13 @@ clap = { workspace = true }
 [dev-dependencies]
 tokio-test = "0.4"
 
+# Shared fixtures: stub-bin PATH, project scaffolder, embedding server
+mx-lib = { path = "../mx-lib", features = ["test-support"] }
+
+# HTTP mocking + tempdirs for the known-broken Unyform client parity test
+wiremock = { workspace = true }
+tempfile = { workspace = true }
+
 [[bin]]
 name = "mx-mcp"
 path = "src/main.rs"

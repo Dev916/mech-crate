@@ -848,4 +848,144 @@ mod tests {
         assert_eq!(with_singletons.len(), 2);
         assert_eq!(with_singletons[0].theme, "graphql federation"); // count desc
     }
+
+    // ── Known-broken lane (bd:mech-crate-4jw) ────────────────────────────
+
+    /// The 0.15-weighted `pg_trgm similarity()` arm contributes ~0.003 of score
+    /// separation against the vector arm's ~0.2, so `rag search` is effectively
+    /// vector-only (PR #19, rag-retrieval-fusion-and-chunking.md).
+    ///
+    /// Both chunks below carry the SAME embedding, orthogonal to the query
+    /// vector, so the vector arm contributes identically (cosine 0) and every
+    /// bit of separation in the final score comes from the lexical arm. One
+    /// chunk is written about the query's subject, the other is not.
+    ///
+    /// Asserts the FIXED behavior — clean relevant-vs-irrelevant lexical
+    /// separation (≥5×), which lands with `strict_word_similarity` /
+    /// `ts_rank_cd` / BM25. Expected RED until bd:mech-crate-4jw.
+    ///
+    /// The DB gate lives INSIDE the test on purpose: `#[ignore]` is reserved
+    /// for the known-broken lane, so DB-less runs skip by early return (and
+    /// therefore report as passing — `make test-known-broken` supplies
+    /// `MX_RAG_TEST_DATABASE_URL`).
+    #[tokio::test]
+    #[ignore = "bd:mech-crate-4jw pg_trgm lexical arm is inert (~0.003 separation)"]
+    async fn kb_lexical_arm_separates_relevant_from_irrelevant() {
+        let Some(cfg) = test_cfg() else { return };
+        let _guard = db_lock().lock().await;
+        let store = CorpusStore::connect(&cfg)
+            .await
+            .expect("setup: connect to the test database");
+        store.clear().await.unwrap();
+
+        let query = "circuit breaker retry budget exponential backoff";
+
+        // ~1.2KB of ordinary prose apiece — corpus-sized chunks, not keyword
+        // soup. The relevant one names the query's subject once, the way a
+        // real technique doc does, then elaborates in its own vocabulary.
+        let relevant = "Resilience patterns for a service mesh. A circuit breaker with a \
+             retry budget and exponential backoff protects a struggling dependency from a \
+             stampede of impatient clients. Bulkheads isolate connection pools so one \
+             saturated downstream cannot starve unrelated work. Deadlines propagate with \
+             each request, and every hop subtracts the elapsed time, so a slow tail never \
+             pins a worker thread forever. Health probes drive load shedding before \
+             queueing delay turns into memory pressure. Hedged calls trade a little \
+             duplicated work for a much shorter ninety-ninth percentile. Idempotency keys \
+             make replays safe when the caller cannot tell a timeout from a lost response. \
+             Bounded queues expose saturation early instead of hiding it behind unbounded \
+             memory growth, and admission control decides which traffic is worth admitting \
+             once the system is already past its knee. Failure injection during business \
+             hours proves the fallbacks work before a real outage does. Cache the last good \
+             answer where a stale value beats an error page, and mark it clearly so nobody \
+             mistakes it for fresh data. Every one of these knobs belongs in configuration, \
+             measured by a dashboard nobody has to interpret under pressure."
+            .to_string();
+        let irrelevant = "Typographic scale and vertical rhythm in editorial layout. \
+             Baseline grids align descenders across adjacent columns, while optical kerning \
+             trims the awkward gaps that surround punctuation at large display sizes. \
+             Choose a modular scale first, then let line height carry the rhythm down the \
+             page rather than nudging paragraphs by hand. Measure the line length in \
+             characters, not pixels, because a comfortable measure survives a change of \
+             viewport far better than a fixed width. Hyphenation and justification settings \
+             deserve real attention in print, where the reader cannot reflow the column. \
+             Small caps, oldstyle figures and a considered set of ligatures do more for \
+             texture than any decorative face. Keep the palette of weights small, and \
+             reserve italics for emphasis rather than ornament, so the page reads as one \
+             voice instead of a catalogue of the foundry. Pair a workhorse text face with a \
+             display cut of the same family before reaching for contrast, and let the \
+             margins breathe: white space is the cheapest legibility you will ever buy."
+            .to_string();
+        assert!(
+            relevant.len() > 1000 && irrelevant.len() > 1000,
+            "setup: both chunks should be ~1.2KB, got {} and {}",
+            relevant.len(),
+            irrelevant.len()
+        );
+
+        let m_rel = meta("docs/relevant.md");
+        let m_irr = meta("docs/irrelevant.md");
+        let id_rel = store.upsert_doc(&m_rel, &sha256_hex("rel")).await.unwrap();
+        let id_irr = store.upsert_doc(&m_irr, &sha256_hex("irr")).await.unwrap();
+
+        // Identical vectors, orthogonal to the query vector below.
+        let shared_vec = sparse(7);
+        store
+            .insert_chunk(
+                id_rel,
+                &Chunk {
+                    heading_path: "T > Resilience".into(),
+                    content: relevant,
+                },
+                &m_rel,
+                Some(shared_vec.clone()),
+            )
+            .await
+            .unwrap();
+        store
+            .insert_chunk(
+                id_irr,
+                &Chunk {
+                    heading_path: "T > Typography".into(),
+                    content: irrelevant,
+                },
+                &m_irr,
+                Some(shared_vec),
+            )
+            .await
+            .unwrap();
+
+        let q = TechQuery {
+            text: query,
+            category: None,
+            language: None,
+            limit: 10,
+            tool: "known_broken_lane",
+        };
+        let (hits, _mode) = store
+            .search_with_embedding(&q, Some(sparse(0)))
+            .await
+            .expect("setup: search must succeed");
+
+        let score_of = |path: &str| {
+            hits.iter()
+                .find(|h| h.path == path)
+                .unwrap_or_else(|| panic!("setup: {path} missing from hits"))
+                .score
+        };
+        let rel = score_of("docs/relevant.md");
+        let irr = score_of("docs/irrelevant.md");
+        assert!(
+            rel > 0.0 && irr > 0.0,
+            "setup: expected positive scores, got rel={rel} irr={irr}"
+        );
+
+        let ratio = rel / irr;
+        let separation = rel - irr;
+        assert!(
+            ratio >= 5.0 && separation >= 0.05,
+            "with the vector arm held equal, the lexical arm must separate a relevant \
+             chunk from an irrelevant one by >=5x and >=0.05 of final score; got \
+             {ratio:.2}x / {separation:.4} (rel={rel:.6}, irr={irr:.6})"
+        );
+    }
 }

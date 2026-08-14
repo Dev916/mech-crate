@@ -1,9 +1,13 @@
 //! YAML frontmatter parser for technique docs.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Metadata parsed from a technique doc's YAML frontmatter.
-#[derive(Debug, Clone, Default, Deserialize)]
+///
+/// `Serialize`/`PartialEq` exist so the frontmatter round-trip property test
+/// can render metadata back to YAML and compare; nothing in the library
+/// serializes this type.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct TechniqueMeta {
     pub title: Option<String>,

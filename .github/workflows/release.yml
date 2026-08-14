@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, e.g. 0.1.1 (no leading v)'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASES_REPO: unyform-ai/mech-crate-releases
+  # TAP_REPO is consumed by a future tap-bump job (see TODO at the bottom).
+  TAP_REPO: unyform-ai/homebrew-tap
+  APPLE_TEAM_ID: T6L7MKBUHZ
+  APPLE_SIGNING_IDENTITY: "Developer ID Application: PRICELOVE, LLC (T6L7MKBUHZ)"
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set.outputs.version }}
+      tag: ${{ steps.set.outputs.tag }}
+    steps:
+      - id: set
+        # Untrusted/external inputs are read via env, never interpolated
+        # directly into the run script (workflow-injection mitigation).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            version="${tag#v}"
+          else
+            version="$INPUT_VERSION"
+            tag="v${version}"
+          fi
+          # Constrain to expected shape: digits.dots, optional pre-release suffix.
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "error: invalid version '$version'" >&2
+            exit 1
+          fi
+          echo "tag=$tag"         >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # The release gate. Mirrors ci.yml's lint + test + coverage jobs (the
+  # known-broken scoreboard lane is deliberately excluded — it is expected-red
+  # and non-blocking, so it has no business in a release decision).
+  #
+  # Every build/publish job below MUST list this job in `needs:` so a tag can
+  # never ship binaries from a commit whose suite is red.
+  test:
+    name: test gate (fmt + clippy + nextest + coverage)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: mx_rag
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-test-gate
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-llvm-cov
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: make test
+      - run: make coverage
+
+  macos:
+    needs: [resolve-version, test]
+    runs-on: macos-14
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain + macOS targets
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-release
+
+      - name: Build (aarch64-apple-darwin)
+        run: cargo build --release --target aarch64-apple-darwin -p mx-cli -p mx-mcp-server
+
+      - name: Build (x86_64-apple-darwin)
+        run: cargo build --release --target x86_64-apple-darwin -p mx-cli -p mx-mcp-server
+
+      - name: Lipo into universal binaries
+        run: |
+          set -euo pipefail
+          mkdir -p target/universal-apple-darwin/release
+          for bin in mx mx-mcp mx-ingest; do
+            lipo -create -output "target/universal-apple-darwin/release/$bin" \
+              "target/aarch64-apple-darwin/release/$bin" \
+              "target/x86_64-apple-darwin/release/$bin"
+            file "target/universal-apple-darwin/release/$bin"
+          done
+
+      - name: Import Developer ID Application certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+
+      - name: Codesign binaries
+        run: |
+          set -euo pipefail
+          for bin in mx mx-mcp mx-ingest; do
+            codesign --force --options runtime --timestamp \
+              --sign "$APPLE_SIGNING_IDENTITY" \
+              "target/universal-apple-darwin/release/$bin"
+            codesign --verify --strict --verbose=2 \
+              "target/universal-apple-darwin/release/$bin"
+          done
+
+      - name: Notarize
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p notarize
+          # App Store Connect API key for notarytool (no Apple ID password).
+          echo "$APPLE_API_KEY_BASE64" | base64 --decode > notarize/AuthKey.p8
+
+          # Bare Mach-O binaries can't be stapled, so we submit a zip and let
+          # the notarization ticket attach server-side. Gatekeeper verifies the
+          # ticket online when the file has the quarantine xattr.
+          ditto -c -k --keepParent target/universal-apple-darwin/release notarize/binaries.zip
+
+          xcrun notarytool submit notarize/binaries.zip \
+            --key notarize/AuthKey.p8 \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+
+          rm -f notarize/AuthKey.p8
+
+      - name: Package tarball
+        run: |
+          set -euo pipefail
+          scripts/package.sh \
+            universal-apple-darwin \
+            "$VERSION" \
+            target/universal-apple-darwin/release
+
+      - name: Upload artifact (kept on the Actions run for debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mx-universal-apple-darwin
+          path: |
+            dist/mx-v*-universal-apple-darwin.tar.gz
+            dist/mx-v*-universal-apple-darwin.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Publish to releases repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset="dist/mx-v${VERSION}-universal-apple-darwin.tar.gz"
+
+          # Idempotent: create the release on first upload, reuse otherwise.
+          if ! gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$RELEASES_REPO" \
+              --title "$TAG" \
+              --notes "Automated release for $TAG."
+          fi
+
+          gh release upload "$TAG" "$asset" "${asset}.sha256" \
+            --repo "$RELEASES_REPO" --clobber
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTE: every job added below must keep `test` in its `needs:` (directly, or
+# transitively through the first job of its chain) — that is the release gate.
+#
+# TODO (Linux): mirror the macos job for x86_64 + aarch64 unknown-linux-musl
+#   - needs: [resolve-version, test]
+#   - runs-on: ubuntu-latest
+#   - install `cross` (taiki-e/install-action@v2 with tool: cross)
+#   - cross build --release --target <triple> -p mx-cli -p mx-mcp-server
+#   - scripts/package.sh <triple> "$VERSION" target/<triple>/release
+#   - upload to RELEASES_REPO via the same gh release flow
+#
+# TODO (Homebrew tap): after macos job finishes, open a PR to TAP_REPO that
+#   updates Formula/mx.rb with the new version + sha256. Either hand-roll a
+#   workflow or use mislav/bump-homebrew-formula-action@v3.
+#
+# TODO (publish flow): once Linux is added, create the GH release as a draft,
+#   have each platform job upload to the draft, then add a final `publish` job
+#   (needs: [macos, linux]) that flips it published so users never see a
+#   half-uploaded release.

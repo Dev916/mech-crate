@@ -1,0 +1,26 @@
+# Test groups
+#
+# The corpus tests share ONE Postgres database: each `clear()`s global state and
+# then asserts exact row counts. They serialize in-process via `db_lock()`, but
+# nextest runs every test in its own process, so that mutex cannot see its
+# peers. Pin them to a single-slot group instead — the process-model equivalent
+# of the same lock.
+[test-groups]
+db-serial = { max-threads = 1 }
+
+[profile.default]
+retries = 0
+failure-output = "immediate-final"
+
+[[profile.default.overrides]]
+filter = 'package(mx-lib) & test(/^corpus::(store|ingest)::tests::/)'
+test-group = 'db-serial'
+
+[profile.ci]
+retries = 0
+failure-output = "immediate-final"
+fail-fast = false
+
+[[profile.ci.overrides]]
+filter = 'package(mx-lib) & test(/^corpus::(store|ingest)::tests::/)'
+test-group = 'db-serial'

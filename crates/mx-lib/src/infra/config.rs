@@ -36,8 +36,8 @@ impl InfraProvider {
         }
     }
 
-    /// Parse a provider from a string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse a provider from its name or a known alias
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "cloudflare" | "cf" => Some(InfraProvider::Cloudflare),
             "digitalocean" | "do" => Some(InfraProvider::DigitalOcean),

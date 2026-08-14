@@ -74,7 +74,7 @@ impl InfraCommand {
 
     async fn setup(&self, infra: &InfraConfig, provider_name: Option<&str>) -> Result<()> {
         let provider = match provider_name {
-            Some(name) => InfraProvider::from_str(name)
+            Some(name) => InfraProvider::parse_name(name)
                 .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", name))?,
             None => {
                 // Prompt for provider selection
@@ -278,7 +278,7 @@ impl InfraCommand {
     }
 
     async fn inspect(&self, infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        let provider = InfraProvider::from_str(provider_name)
+        let provider = InfraProvider::parse_name(provider_name)
             .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
 
         let config = infra.load_config(provider)?;
@@ -305,7 +305,7 @@ impl InfraCommand {
     }
 
     async fn link(&self, _infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        let _provider = InfraProvider::from_str(provider_name)
+        let _provider = InfraProvider::parse_name(provider_name)
             .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
 
         // Linking requires being in a project
@@ -333,7 +333,7 @@ impl InfraCommand {
     }
 
     async fn remove(&self, infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        let provider = InfraProvider::from_str(provider_name)
+        let provider = InfraProvider::parse_name(provider_name)
             .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
 
         let path = infra.global_config_path(provider);

@@ -62,6 +62,10 @@ pub struct Recipe {
     /// Next steps to show after installation
     #[serde(default)]
     pub next_steps: Vec<String>,
+
+    /// Free-form authoring notes carried in the recipe for documentation
+    #[serde(default)]
+    pub notes: Vec<String>,
 }
 
 /// A service defined by the recipe
@@ -213,6 +217,9 @@ pub struct RunAction {
     pub command: String,
     #[serde(default)]
     pub cwd: Option<String>,
+    /// Human-readable description shown while the command runs
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 impl Recipe {
@@ -315,8 +322,7 @@ impl Recipe {
     /// Transform to slug (kebab-case)
     fn transform_slug(s: &str) -> String {
         s.to_lowercase()
-            .replace(' ', "-")
-            .replace('_', "-")
+            .replace([' ', '_'], "-")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '-')
             .collect()
@@ -325,8 +331,7 @@ impl Recipe {
     /// Transform to UPPER_SNAKE_CASE
     fn transform_upper(s: &str) -> String {
         s.to_uppercase()
-            .replace('-', "_")
-            .replace(' ', "_")
+            .replace(['-', ' '], "_")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '_')
             .collect()
@@ -335,8 +340,7 @@ impl Recipe {
     /// Transform to rust_crate_name
     fn transform_rust_crate(s: &str) -> String {
         s.to_lowercase()
-            .replace('-', "_")
-            .replace(' ', "_")
+            .replace(['-', ' '], "_")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '_')
             .collect()

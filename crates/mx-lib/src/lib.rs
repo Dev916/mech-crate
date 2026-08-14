@@ -20,6 +20,12 @@ pub mod project;
 pub mod recipe;
 pub mod router;
 pub mod template;
+// Other crates get the fixtures through the `test-support` feature; this
+// crate's own `#[cfg(test)]` modules get them unconditionally, since the
+// fixtures' dependencies (`wiremock`, `tempfile`) are already dev-deps here.
+// Neither path exists in a release build.
+#[cfg(any(feature = "test-support", test))]
+pub mod test_support;
 pub mod unyform;
 pub mod upgrade;
 

@@ -236,14 +236,7 @@ impl UpgradeCommand {
 
                     if update_file {
                         // Backup original file
-                        let backup_path = entry.project_path.with_extension(format!(
-                            "{}.bak",
-                            entry
-                                .project_path
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .unwrap_or("")
-                        ));
+                        let backup_path = upgrader.backup_path(&entry.project_path);
                         std::fs::copy(&entry.project_path, &backup_path)?;
 
                         upgrader.copy_file(&entry.template_path, &entry.project_path)?;
