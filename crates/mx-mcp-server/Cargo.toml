@@ -59,6 +59,9 @@ clap = { workspace = true }
 [dev-dependencies]
 tokio-test = "0.4"
 
+# Shared fixtures: stub-bin PATH, project scaffolder, embedding server
+mx-lib = { path = "../mx-lib", features = ["test-support"] }
+
 [[bin]]
 name = "mx-mcp"
 path = "src/main.rs"

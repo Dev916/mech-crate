@@ -20,6 +20,8 @@ pub mod project;
 pub mod recipe;
 pub mod router;
 pub mod template;
+#[cfg(feature = "test-support")]
+pub mod test_support;
 pub mod unyform;
 pub mod upgrade;
 

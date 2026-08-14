@@ -73,9 +73,17 @@ toml = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 
+# Test fixtures (optional; activated by the `test-support` feature only, so
+# neither crate is linked into a release binary).
+wiremock = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+
 [features]
 default = []
 cli = ["dialoguer", "console", "indicatif"]
+# Shared test fixtures (stub-bin PATH, project scaffolder, embedding server)
+# consumable cross-crate as a dev-dependency. Never enabled by default.
+test-support = ["dep:wiremock", "dep:tempfile"]
 
 [dev-dependencies]
 tokio-test = "0.4"

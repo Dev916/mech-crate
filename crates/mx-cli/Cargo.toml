@@ -50,6 +50,9 @@ walkdir = "2.5"
 reqwest = { workspace = true }
 
 [dev-dependencies]
+# Shared fixtures: stub-bin PATH, project scaffolder, embedding server
+mx-lib = { path = "../mx-lib", features = ["test-support"] }
+
 # HTTP mocking for cc-plugin session integration tests
 wiremock = { workspace = true }
 tokio = { workspace = true }
