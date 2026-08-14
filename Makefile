@@ -83,8 +83,10 @@ test-int:
 	MX_RAG_TEST_DATABASE_URL=$(TEST_DB_URL) $(CARGO) test --workspace --doc
 
 ## Known-broken TDD lane (expected red; scoreboard)
+# --profile ci: fail-fast off, so the scoreboard reports every lane test rather
+# than cancelling at the first red.
 test-known-broken:
-	-MX_RAG_TEST_DATABASE_URL=$(TEST_DB_URL) $(CARGO) nextest run --workspace --run-ignored only
+	-MX_RAG_TEST_DATABASE_URL=$(TEST_DB_URL) $(CARGO) nextest run --workspace --profile ci --run-ignored only
 
 ## Coverage with ratchet check (BUMP=1 to raise the floor)
 coverage:
