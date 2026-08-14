@@ -83,7 +83,8 @@ floor="$(tr -d '[:space:]%' < "$FLOOR_FILE")"
 [ -n "$floor" ] || { echo "$FLOOR_FILE is empty — record it with: make coverage BUMP=1" >&2; exit 2; }
 
 echo "coverage: ${current}% (floor: ${floor}%)"
-if [ "$(echo "$current >= $floor - $EPSILON" | bc -l)" != "1" ]; then
+# awk, not bc: `bc` is not installed on GitHub's ubuntu-latest runner image.
+if ! awk -v c="$current" -v f="$floor" -v e="$EPSILON" 'BEGIN { exit !(c >= f - e) }'; then
   echo "COVERAGE DROP: ${current}% < floor ${floor}% - ${EPSILON}" >&2
   exit 1
 fi
