@@ -38,3 +38,14 @@ pub use paths::{
     source_templates_dir, templates_dir,
 };
 pub use project::{Project, ProjectDetector};
+
+// scratch: deliberate gate-proof break — DO NOT MERGE.
+// Proves ci.yml's `test` job fails on a red unit test. Branch is deleted after
+// the failing run URL is captured (Task 16 evidence).
+#[cfg(test)]
+mod scratch_gate_proof {
+    #[test]
+    fn scratch_deliberate_gate_proof_break() {
+        assert_eq!(2 + 2, 5, "scratch: deliberate gate-proof break");
+    }
+}
