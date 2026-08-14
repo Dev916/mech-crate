@@ -79,5 +79,6 @@ cli = ["dialoguer", "console", "indicatif"]
 
 [dev-dependencies]
 tokio-test = "0.4"
-tempfile = "3.10"
+tempfile = { workspace = true }
 wiremock = { workspace = true }
+proptest = { workspace = true }

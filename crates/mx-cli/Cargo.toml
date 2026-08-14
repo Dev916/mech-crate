@@ -54,6 +54,11 @@ reqwest = { workspace = true }
 wiremock = { workspace = true }
 tokio = { workspace = true }
 
+# CLI assertion harness (tests/cli_tests.rs, tests/cli_surface.rs)
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tempfile = { workspace = true }
+
 [[bin]]
 name = "mx"
 path = "src/main.rs"

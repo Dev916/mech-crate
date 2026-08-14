@@ -5,7 +5,8 @@ ROOT_DIR := $(shell pwd)
 CARGO := cargo
 PREFIX ?= /usr/local
 
-.PHONY: build build-release install install-local uninstall init test test-unit test-integration lint fmt clean help
+.PHONY: build build-release install install-local uninstall init lint fmt clean help
+.PHONY: test test-unit test-int test-known-broken coverage test-e2e test-mutants test-smoke
 
 # Include documentation module
 -include make/docs.mk
@@ -60,21 +61,34 @@ init: build-release
 	@MECH_CRATE_ROOT=$(ROOT_DIR) ./target/release/mx init --force
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test
+# Testing
 # ─────────────────────────────────────────────────────────────────────────────
 
-## Run all tests
-test: test-unit test-integration
+TEST_DB_URL ?= postgres://postgres@localhost:55433/mx_rag
 
-## Run unit tests
+## Run the full gate suite (what CI runs)
+test:
+	$(CARGO) nextest run --workspace --profile ci
+	$(CARGO) test --workspace --doc
+
+## Fast unit-only loop (no DB)
 test-unit:
-	@echo "Running unit tests..."
-	$(CARGO) test -p mx-lib
+	$(CARGO) nextest run --workspace --lib --bins
 
-## Run CLI integration tests
-test-integration: build-release init
-	@echo "Running integration tests..."
-	$(CARGO) test -p mx-cli
+## Integration with the local pgvector container
+test-int:
+	@docker start mx-rag-test 2>/dev/null || docker run -d --name mx-rag-test -p 55433:5432 -e POSTGRES_DB=mx_rag -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17
+	@sleep 2
+	MX_RAG_TEST_DATABASE_URL=$(TEST_DB_URL) $(CARGO) nextest run --workspace --profile ci
+	MX_RAG_TEST_DATABASE_URL=$(TEST_DB_URL) $(CARGO) test --workspace --doc
+
+## Known-broken TDD lane (expected red; scoreboard)
+test-known-broken:
+	-MX_RAG_TEST_DATABASE_URL=$(TEST_DB_URL) $(CARGO) nextest run --workspace --run-ignored only
+
+## Coverage with ratchet check (BUMP=1 to raise the floor)
+coverage:
+	./scripts/coverage-ratchet.sh $(if $(BUMP),--bump,)
 
 ## Run bash smoke tests
 test-smoke: init
@@ -146,9 +160,11 @@ help:
 	@echo "  make init           Initialize templates (~/.mech-crate)"
 	@echo ""
 	@echo "Test:"
-	@echo "  make test           Run all tests"
-	@echo "  make test-unit      Run unit tests"
-	@echo "  make test-integration Run integration tests"
+	@echo "  make test           Run the full gate suite (nextest + doc-tests)"
+	@echo "  make test-unit      Fast unit-only loop (no DB)"
+	@echo "  make test-int       Full suite against the local pgvector container"
+	@echo "  make test-known-broken  Known-broken TDD lane (expected red)"
+	@echo "  make coverage       Coverage ratchet (BUMP=1 raises the floor)"
 	@echo "  make test-smoke     Run bash smoke tests"
 	@echo ""
 	@echo "Quality:"
