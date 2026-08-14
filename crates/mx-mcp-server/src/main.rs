@@ -1,17 +1,10 @@
 //! MechCrate MCP Server
 
-mod error;
-mod mcp;
-mod mx;
-mod project;
-mod tools;
-mod unyform;
-
 use clap::Parser;
 use tracing::{info, Level};
 use tracing_subscriber::{fmt, EnvFilter};
 
-use crate::mcp::server::McpServer;
+use mx_mcp_server::mcp::server::McpServer;
 
 #[derive(Parser, Debug)]
 #[command(name = "mx-mcp")]
