@@ -10,7 +10,7 @@ use_cases:
   - deciding when an ANN index is worth having at all
 summary: Evidence-based operational guidance for pgvector from Rust — HNSW/halfvec/filtered-search mechanics with vendor benchmarks, the pooler gotchas, and the correct tokio pipeline shape for batch embedding (buffer_unordered + two-axis governor + bounded-channel writer), with the OpenAI API's real limits.
 provenance: researched
-researched: 2026-07-26
+researched: 2026-08-14
 sources:
   - https://github.com/pgvector/pgvector/blob/master/README.md
   - https://github.com/pgvector/pgvector-rust/blob/master/README.md
@@ -32,6 +32,9 @@ sources:
   - https://www.baseten.co/blog/your-client-code-matters-10x-higher-embedding-throughput-with-python-and-rust/
   - https://docs.rs/tokio/latest/tokio/sync/mpsc/index.html
   - https://supabase.com/blog/matryoshka-embeddings
+  - https://github.com/pgvector/pgvector/blob/master/CHANGELOG.md
+  - https://cve.threatint.com/CVE/CVE-2026-18022
+  - https://github.com/pgvector/pgvector/pull/989
 ---
 
 # pgvector in Rust: Operations + Batch Embedding Pipelines
@@ -56,12 +59,12 @@ The `pgvector` crate (0.4.x for sqlx 0.8/0.9) exposes `Vector`/`HalfVector`/`Spa
 - **Index eligibility**: the query must have `ORDER BY <distance-op> ASC` + `LIMIT`, with the ORDER BY directly on the operator — `ORDER BY 1 - (embedding <=> $1) DESC` silently skips the index [1].
 - **When NOT to index**: exact search is fine below ~10k–100k rows (parallel seq scan, 100% recall — `SET max_parallel_workers_per_gather = 4`). Start without an index; add HNSW when queries actually slow [4].
 - **Churn degrades recall, not just space**: MVCC re-embeds leave dead tuples in the graph; documented failure path to near-0% recall until vacuum. pgvector's own advice: `REINDEX INDEX CONCURRENTLY` first, then `VACUUM` (HNSW vacuum is slow) [1]. Always `CREATE INDEX CONCURRENTLY` on live tables.
-- **Versions**: 0.8.5 is current (2026-07); **CVE-2026-3172** (buffer overflow in parallel HNSW builds, can leak other relations' data) affects 0.8.0/0.8.1 — check `SELECT extversion FROM pg_extension WHERE extname='vector'` and be ≥0.8.2 [10].
+- **Versions**: **0.8.6 is current** (2026-07-29): fixes an IVFFlat build buffer overflow on 32-bit systems, an array→`sparsevec` cast not limiting non-zero elements, and IVFFlat scan memory usage under nested-loop joins [21]. **CVE-2026-3172** (buffer overflow in parallel HNSW builds, can leak other relations' data) affects 0.8.0/0.8.1 — check `SELECT extversion FROM pg_extension WHERE extname='vector'` and be ≥0.8.2 [10]. **CVE-2026-18022** (integer wraparound → out-of-bounds write during IVFFlat index build; ≤0.8.5, fixed 0.8.6) is rated CVSS High but **only 32-bit builds are affected** — 64-bit deployments (Neon, RDS, standard x86-64/arm64) are not practically vulnerable; upgrade as hygiene, not urgency [22]. Watch item: PostgreSQL 19 GA lands Sept 2026 — verify pgvector compatibility before moving.
 
 ## 3. Quantization: what's proven
 
 - **halfvec (fp16) is the near-free win at 1536 dims**: ~50% storage, ~23% faster builds, 50% faster prewarm, equivalent recall/latency — confirmed independently by Neon and a pgvector maintainer [5][6]. Try it via expression index first (`USING hnsw ((embedding::halfvec(1536)) halfvec_cosine_ops)`) — queries must use the identical cast to hit the index [1].
-- **Binary quantization is dataset-dependent and contested**: Katz measured 91.6% recall at 1536-dim with 4× over-fetch rescoring; Neon measured ~50% on the same dimensionality and recommends against. Measure on your data or skip [5][6].
+- **Binary quantization is dataset-dependent and contested**: Katz measured 91.6% recall at 1536-dim with 4× over-fetch rescoring; Neon measured ~50% on the same dimensionality and recommends against. Measure on your data or skip [5][6]. Reinforcing signal: the TurboQuant proposal ("10× smaller vector indexes", PR #989) was **closed unmerged** in 2026-07 — upstream still ships nothing beyond `binary_quantize` [23].
 - **Matryoshka dimensions**: `text-embedding-3-small` was trained at {512, 1024, 1536} — the API `dimensions` param gives a 3× storage cut *before* halfvec and cheaper distance math; requires re-embedding, so decide while the corpus is small [20].
 
 ## 4. Filtered vector search: the recall trap
