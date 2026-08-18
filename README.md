@@ -231,6 +231,36 @@ make lint
 make install-local
 ```
 
+### Testing
+
+| Command | Tier | Runs in CI |
+|---|---|---|
+| `make test` | unit + integration (nextest + doc-tests) — **the gate** | yes, every PR |
+| `make test-unit` | fast lib/bin loop, no database | no |
+| `make test-int` | the gate suite against the local pgvector container (55433) | yes (service container) |
+| `make coverage` | line coverage vs the `.coverage-floor` ratchet (`BUMP=1` raises it) | yes, every PR |
+| `make test-known-broken` | the [known-broken TDD lane](tests/KNOWN_BROKEN.md) — expected red | yes, non-blocking scoreboard |
+| `make test-e2e` | scaffold → router → URL, real Docker | `e2e.yml`, dispatch only |
+| `make test-mutants` | `cargo-mutants` on mx-lib | `mutants.yml`, weekly cron |
+
+Database-backed tests skip themselves when `MX_RAG_TEST_DATABASE_URL` is unset,
+so a laptop without Docker still runs green; CI always supplies the container.
+`#[ignore]` is reserved **exclusively** for the known-broken lane — every open,
+testable defect has a red test asserting its fixed behavior, and un-ignoring it
+is that fix's definition of done. See [`tests/KNOWN_BROKEN.md`](tests/KNOWN_BROKEN.md).
+
+**The gates are proven, not assumed.** Each was demonstrated failing on a
+throwaway branch before the baseline landed:
+
+| Deliberate break | Job that failed | Evidence |
+|---|---|---|
+| red unit test | `test` | [run 31819711713](https://github.com/Dev916/mech-crate/actions/runs/31819711713) |
+| `clippy::useless_format` warning | `lint` | [run 31819749340](https://github.com/Dev916/mech-crate/actions/runs/31819749340) |
+| `.coverage-floor` raised 49.5 → 54.5 | `coverage` | [run 31819764638](https://github.com/Dev916/mech-crate/actions/runs/31819764638) |
+
+`release.yml` cannot ship a tag whose commit fails these: its build/publish jobs
+`needs:` a `test` job running the same lint + test + coverage steps.
+
 ---
 
 🦝 **Crate Raccoon says: Happy building!**

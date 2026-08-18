@@ -1,0 +1,95 @@
+name: Mutation testing (mx-lib)
+
+# Report, never a gate. cargo-mutants re-runs mx-lib's suite once per mutant, so a
+# full-package sweep is an hours-long job that would be absurd on a PR — the PR gate
+# is ci.yml. This runs weekly (and on demand) and publishes a report; missed mutants
+# become test-backlog bd entries, they never fail anyone's build.
+on:
+  workflow_dispatch:
+    inputs:
+      file_glob:
+        description: >-
+          Restrict mutation to files matching this glob (empty = the whole mx-lib
+          package). Example: crates/mx-lib/src/corpus/chunk.rs
+        required: false
+        default: ""
+  schedule:
+    # Saturdays 06:00 UTC — off the weekday critical path, results waiting Monday.
+    - cron: "0 6 * * 6"
+
+concurrency:
+  group: mutants-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  mutants:
+    name: cargo-mutants (mx-lib)
+    runs-on: ubuntu-latest
+    # Generous: a full mx-lib sweep is long by nature. The job is scheduled, not
+    # blocking, so a long run costs nobody. Individual mutants are capped at 300s
+    # by `make test-mutants`, so a hang cannot eat the whole budget.
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # .cargo/mutants.toml sets test_tool = "nextest" to match the PR gate's runner.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-mutants
+
+      - name: Mutation run
+        # `make test-mutants` owns the flags (--package mx-lib --timeout 300) and
+        # already exits 0 on missed mutants — zero CI/local drift. No DB service
+        # container: the corpus DB tests early-return when
+        # MX_RAG_TEST_DATABASE_URL is unset, and everything mutated here is pure.
+        # The dispatch input goes through env, never interpolated into the script.
+        env:
+          FILE_GLOB: ${{ inputs.file_glob }}
+        run: |
+          if [ -n "$FILE_GLOB" ]; then
+            make test-mutants MUTANTS_ARGS="--file $FILE_GLOB"
+          else
+            make test-mutants
+          fi
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## cargo-mutants — mx-lib"
+            echo ""
+            echo "| outcome | count |"
+            echo "| --- | --- |"
+            for f in caught missed timeout unviable; do
+              if [ -f "mutants.out/$f.txt" ]; then
+                echo "| $f | $(wc -l < "mutants.out/$f.txt" | tr -d ' ') |"
+              fi
+            done
+            if [ -s mutants.out/missed.txt ]; then
+              echo ""
+              echo "### Missed mutants (test-backlog candidates)"
+              echo ""
+              echo '```'
+              head -n 100 mutants.out/missed.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-out
+          path: mutants.out
+          if-no-files-found: warn
+          retention-days: 30

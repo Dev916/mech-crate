@@ -356,3 +356,56 @@ impl SelfUpdateCommand {
         path.join("Cargo.toml").exists() && path.join("crates/mx-cli").exists()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Known-broken lane (bd:mech-crate-gjl) ────────────────────────────
+
+    /// `mx init` records the source repo root through
+    /// [`mx_lib::paths::save_source_root`], which writes
+    /// `~/.mech-crate/config/source-root`. `find_source_dir`'s marker fallback
+    /// reads `~/.mech-crate/source` instead, so it can never see what init
+    /// recorded — the two ends of one seam disagree on the path.
+    ///
+    /// Asserts the FIXED behavior: the resolver finds the root that `mx init`
+    /// recorded. Expected RED until bd:mech-crate-gjl lands.
+    #[test]
+    #[ignore = "bd:mech-crate-gjl self-update reads ~/.mech-crate/source, init writes config/source-root"]
+    fn kb_self_update_finds_the_source_root_recorded_by_init() {
+        let home = tempfile::tempdir().expect("setup: home tempdir");
+        let repo = tempfile::tempdir().expect("setup: repo tempdir");
+        std::fs::write(repo.path().join("Cargo.toml"), "[workspace]\n")
+            .expect("setup: write fake Cargo.toml");
+        std::fs::create_dir_all(repo.path().join("crates/mx-cli"))
+            .expect("setup: create fake crates/mx-cli");
+
+        // Isolate from the developer's real environment: no MECH_CRATE_ROOT
+        // short-circuit, and a home that holds nothing but what init records.
+        // nextest runs one process per test, so these mutations are contained.
+        env::set_var("HOME", home.path());
+        env::remove_var("MECH_CRATE_ROOT");
+
+        mx_lib::paths::save_source_root(repo.path()).expect("setup: record source root");
+        assert!(
+            mx_lib::paths::recorded_source_root().is_some(),
+            "setup: mx init's recording did not round-trip"
+        );
+
+        let cmd = SelfUpdateCommand {
+            pull: false,
+            yes: false,
+            dry_run: true,
+        };
+
+        let found = cmd
+            .find_source_dir()
+            .expect("self-update must find the source root that mx init recorded");
+        assert_eq!(
+            found.canonicalize().unwrap(),
+            repo.path().canonicalize().unwrap(),
+            "self-update resolved a different source root than mx init recorded"
+        );
+    }
+}

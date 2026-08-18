@@ -81,7 +81,7 @@ impl InitCommand {
                 println!(
                     "  {} Created: {}",
                     style("•").dim(),
-                    dir.is_empty().then(|| ".mech-crate/").unwrap_or(dir)
+                    if dir.is_empty() { ".mech-crate/" } else { dir }
                 );
             }
         }

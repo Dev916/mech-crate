@@ -57,7 +57,7 @@
 
   "placeholders": {
     "SERVICE_NAME": { "source": "name" },
-    "SERVICE_SLUG": { "source": "name", "transform": "kebab" },
+    "SERVICE_SLUG": { "source": "name", "transform": "slug" },
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
     "DOMAIN": { "source": "option:domain" },
     "INIT_CMD": { "source": "option:init_cmd" }
@@ -101,10 +101,6 @@
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
     { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
   ],
-
-  "post_install": {
-    "npm_install": true
-  },
 
   "next_steps": [
     "cd apps/{{SERVICE_NAME}}",

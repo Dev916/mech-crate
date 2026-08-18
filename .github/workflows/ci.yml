@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: lint (fmt + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: test (nextest + doc-tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: mx_rag
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: make test
+
+  coverage:
+    name: coverage (ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: mx_rag
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-llvm-cov
+      - run: make coverage
+
+  known-broken:
+    name: known-broken (scoreboard, non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: mx_rag
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Known-broken scoreboard
+        run: |
+          set -o pipefail
+          make test-known-broken 2>&1 | tee kb.log || true
+
+          # CARGO_TERM_COLOR=always means nextest writes ANSI escapes even when
+          # piped; strip them before parsing (the raw colored log is kept as-is).
+          perl -pe 's/\e\[[0-9;]*m//g' kb.log > kb-plain.log
+
+          # nextest's Summary line: "N tests run: P passed, F failed, S skipped"
+          summary="$(grep -E '^ *Summary' kb-plain.log | tail -1 || true)"
+          passed="$(printf '%s' "$summary" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo 0)"
+          failed="$(printf '%s' "$summary" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo 0)"
+
+          {
+            echo "## Known-broken lane scoreboard"
+            echo ""
+            echo "| state | count | meaning |"
+            echo "| --- | --- | --- |"
+            echo "| still broken | ${failed:-0} | expected — the defect is still open |"
+            echo "| now passing | ${passed:-0} | a fix landed: un-ignore the test and close its bd issue |"
+            echo ""
+            echo '```'
+            printf '%s\n' "${summary:-(no nextest summary line found)}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "== SCOREBOARD =="
+          printf '%s\n' "${summary:-(no nextest summary line found)}"
+          echo "still broken: ${failed:-0}  |  now passing: ${passed:-0}"
+          if [ "${passed:-0}" -gt 0 ]; then
+            echo "Known-broken tests that PASS should be un-ignored and their bd issues closed:"
+            grep -E '^ *PASS' kb-plain.log || true
+          fi
+      - name: Upload known-broken log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: known-broken-log
+          path: kb.log
+          if-no-files-found: warn

@@ -58,7 +58,7 @@
 
   "placeholders": {
     "SERVICE_NAME": { "source": "name" },
-    "SERVICE_SLUG": { "source": "name", "transform": "kebab" },
+    "SERVICE_SLUG": { "source": "name", "transform": "slug" },
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
     "DOMAIN": { "source": "option:domain" },
     "INIT_CMD": { "source": "option:init_cmd" },
@@ -103,7 +103,7 @@
   ],
 
   "post_install": {
-    "renames": [
+    "rename": [
       { "from": "apps/{{SERVICE_NAME}}/gitignore.template", "to": "apps/{{SERVICE_NAME}}/.gitignore" }
     ],
     "chmod": [

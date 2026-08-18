@@ -1,0 +1,61 @@
+# cargo-mutants configuration — mutation testing for the mx workspace.
+# Read by default from `.cargo/mutants.toml` (verified against cargo-mutants 27.1.0;
+# `cargo mutants --help` documents this path under `--config` / `--no-config`).
+#
+# Mutation testing is a REPORT, never a PR gate: it runs from
+# `.github/workflows/mutants.yml` on workflow_dispatch + a weekly cron, and locally
+# via `make test-mutants`. Missed mutants become test-backlog bd entries, they do
+# not fail anyone's build.
+
+# ── Test scope ───────────────────────────────────────────────────────────────
+# cargo-mutants re-runs a test suite once per surviving mutant, so the suite it
+# picks dominates wall-clock time. We mutate mx-lib only (see the Makefile target
+# and mutants.yml), so run mx-lib's own tests and nothing else: mx-cli's
+# assert_cmd suite rebuilds and re-spawns the `mx` binary per test and would
+# multiply the run time for no extra mutant-killing power.
+test_workspace = false
+test_package = ["mx-lib"]
+
+# Match the project's gate runner (`make test` uses nextest) so a mutant that
+# survives here is a real gap in the suite CI actually runs, not a runner artifact.
+test_tool = "nextest"
+
+# No `features` override: mx-lib's test fixtures are gated on
+# `cfg(any(feature = "test-support", test))` and wiremock/tempfile are also
+# dev-dependencies, so the default feature set under `cfg(test)` already builds
+# them. Leaving this at the default keeps the mutants build identical to the one
+# `make test` produces — no separate feature-unification rebuild.
+
+# The DB-backed corpus tests early-return when MX_RAG_TEST_DATABASE_URL is unset,
+# and mutants runs without that env var, so those tests skip rather than fail.
+# Everything mutated below (chunker, transforms, categorization) is pure.
+
+# ── Exclusions ───────────────────────────────────────────────────────────────
+exclude_globs = [
+    # Test fixtures/harness code: mutating the harness proves nothing about the
+    # product, and a mutated stub-bin/wiremock fixture just breaks unrelated tests.
+    "crates/mx-lib/src/test_support/**",
+    "**/tests/**",
+    "**/benches/**",
+    # Generated / vendored code is not hand-written behavior to test.
+    "**/generated/**",
+    "**/*.generated.rs",
+    "**/target/**",
+]
+
+exclude_re = [
+    # Derived and boilerplate impls: `Default::default()`, `Display` for error
+    # enums and friends carry no logic worth a test assertion.
+    "impl Default",
+    "impl Display",
+    "impl std::fmt::Display",
+    "impl Debug",
+]
+
+# ── Timeouts ─────────────────────────────────────────────────────────────────
+# A mutant can turn a bounded loop into an unbounded one; without a floor,
+# cargo-mutants' auto-derived timeout can be too tight on a cold/loaded runner
+# and report spurious timeouts. 300s mirrors the explicit `--timeout` that
+# `make test-mutants` passes, and is what applies when `cargo mutants` is invoked
+# directly without that flag.
+minimum_test_timeout = 300.0

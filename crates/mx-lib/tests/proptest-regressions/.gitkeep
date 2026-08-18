@@ -1,0 +1,6 @@
+# proptest failure-persistence corpus.
+#
+# When a property in crates/mx-lib/tests/prop_*.rs fails, proptest writes the
+# shrunk counterexample's seed here (one <test-file>.txt per property file).
+# Those seeds are committed so the exact failing case is replayed first on
+# every subsequent run — keep this directory in git even while it is empty.

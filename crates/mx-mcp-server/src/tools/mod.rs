@@ -1804,15 +1804,20 @@ Actions:
             }
 
             ToolHandler::RagContext => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Required arguments are validated BEFORE the corpus
+                // availability check: a malformed call is a client bug and must
+                // surface as InvalidArguments whether or not the corpus is
+                // reachable. Reporting "offline" for a call that was never valid
+                // hides the real fault (fail fast at the boundary).
                 let working_on =
                     args.get("working_on")
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| {
                             McpError::InvalidArguments("'working_on' is required".to_string())
                         })?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let language = args.get("language").and_then(|v| v.as_str());
                 let category = args.get("category").and_then(|v| v.as_str());
                 let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as i64;
@@ -1836,13 +1841,14 @@ Actions:
             }
 
             ToolHandler::RagSearch => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Validate before the offline short-circuit (see RagContext).
                 let query = args
                     .get("query")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::InvalidArguments("'query' is required".to_string()))?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as i64;
                 match corpus
                     .search(&TechQuery {
@@ -1864,9 +1870,7 @@ Actions:
             }
 
             ToolHandler::RagSearchCategory => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Validate before the offline short-circuit (see RagContext).
                 let query = args
                     .get("query")
                     .and_then(|v| v.as_str())
@@ -1877,6 +1881,9 @@ Actions:
                     .ok_or_else(|| {
                         McpError::InvalidArguments("'category' is required".to_string())
                     })?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as i64;
                 match corpus
                     .search(&TechQuery {
@@ -1898,15 +1905,16 @@ Actions:
             }
 
             ToolHandler::RagFindImplementation => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Validate before the offline short-circuit (see RagContext).
                 let pattern = args
                     .get("pattern")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| {
                         McpError::InvalidArguments("'pattern' is required".to_string())
                     })?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let language = args.get("language").and_then(|v| v.as_str());
                 let query = format!("code implementation example {}", pattern);
                 match corpus
@@ -1942,15 +1950,16 @@ Actions:
             }
 
             ToolHandler::RagGetGuidance => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Validate before the offline short-circuit (see RagContext).
                 let problem = args
                     .get("problem")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| {
                         McpError::InvalidArguments("'problem' is required".to_string())
                     })?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let constraints: Vec<String> = args
                     .get("constraints")
                     .and_then(|v| v.as_array())
@@ -1989,9 +1998,7 @@ Actions:
             }
 
             ToolHandler::RagCompareApproaches => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Validate before the offline short-circuit (see RagContext).
                 let approaches: Vec<String> = args
                     .get("approaches")
                     .and_then(|v| v.as_array())
@@ -2003,6 +2010,9 @@ Actions:
                     .ok_or_else(|| {
                         McpError::InvalidArguments("'approaches' is required".to_string())
                     })?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let criteria: Vec<String> = args
                     .get("criteria")
                     .and_then(|v| v.as_array())
@@ -2048,13 +2058,14 @@ Actions:
             }
 
             ToolHandler::RagFindRelated => {
-                let Some(corpus) = corpus else {
-                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
-                };
+                // Validate before the offline short-circuit (see RagContext).
                 let topic = args
                     .get("topic")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::InvalidArguments("'topic' is required".to_string()))?;
+                let Some(corpus) = corpus else {
+                    return Ok(ToolCallResult::text(CORPUS_OFFLINE.to_string()));
+                };
                 let max_results = args
                     .get("max_results")
                     .and_then(|v| v.as_u64())
@@ -2519,5 +2530,269 @@ Actions:
 impl Default for ToolRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mcp::protocol::ToolResultContent;
+    use mx_lib::test_support::StubBin;
+    use std::path::PathBuf;
+
+    fn reg() -> ToolRegistry {
+        ToolRegistry::new()
+    }
+
+    /// An executor pointed at a root that cannot exist, so a handler that
+    /// (wrongly) reached the spawn path would fail loudly rather than run
+    /// anything real.
+    fn mx_exec() -> MxExecutor {
+        MxExecutor::new(PathBuf::from("/nonexistent-root"))
+    }
+
+    fn detector() -> ProjectDetector {
+        ProjectDetector::new()
+    }
+
+    /// Put recording no-op `mx`/`make`/`docker` stubs first on `PATH`.
+    ///
+    /// Defence in depth: `MxExecutor` resolves an absolute binary path, but a
+    /// `MakeExecutor` path would resolve through `PATH`. Any accidental spawn
+    /// lands in the stub's log instead of the developer's real toolchain.
+    ///
+    /// Mutating `PATH` here is safe because nextest runs every test in its own
+    /// process — there is no other test in this process to race with, and the
+    /// override dies with the process. (Under a plain `cargo test` thread pool
+    /// these would need serializing; the suite is nextest-only per the plan's
+    /// Global Constraints.)
+    fn stub_path() -> StubBin {
+        let sb = StubBin::new();
+        sb.stub("mx", 0, "")
+            .stub("make", 0, "")
+            .stub("docker", 0, "");
+        std::env::set_var("PATH", sb.path_env());
+        sb
+    }
+
+    /// The acceptance criterion: no real subprocess ran.
+    fn assert_nothing_spawned(sb: &StubBin) {
+        for bin in ["mx", "make", "docker"] {
+            let calls = sb.invocations(bin);
+            assert!(calls.is_empty(), "{bin} was invoked: {calls:?}");
+        }
+    }
+
+    fn result_text(res: &ToolCallResult) -> String {
+        res.content
+            .iter()
+            .map(|c| match c {
+                ToolResultContent::Text { text } => text.clone(),
+                other => format!("{other:?}"),
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Run a rag tool with a `None` corpus and return its user-facing text.
+    async fn offline_text(tool: &str, args: Value) -> String {
+        let sb = stub_path();
+        let res = reg()
+            .execute(tool, args, &mx_exec(), &detector(), None)
+            .await
+            .unwrap_or_else(|e| panic!("{tool} should degrade gracefully offline, got {e:?}"));
+        assert_nothing_spawned(&sb);
+        result_text(&res)
+    }
+
+    fn assert_offline_hint(tool: &str, text: &str) {
+        assert!(
+            text.contains("offline"),
+            "{tool} offline text missing \"offline\": {text}"
+        );
+        assert!(
+            text.contains("rag.toml"),
+            "{tool} offline text missing the rag.toml hint: {text}"
+        );
+    }
+
+    // ── Registry shape ──────────────────────────────────────────────────────
+
+    #[test]
+    fn registry_lists_all_rag_tools() {
+        let names: Vec<String> = reg().list_all().into_iter().map(|t| t.name).collect();
+        for n in [
+            "rag_context",
+            "rag_search",
+            "rag_search_category",
+            "rag_find_implementation",
+            "rag_get_guidance",
+            "rag_compare_approaches",
+            "rag_find_related",
+            "rag_health",
+        ] {
+            assert!(names.contains(&n.to_string()), "missing {n}");
+        }
+        assert!(names.len() >= 40, "tool surface shrank: {}", names.len());
+    }
+
+    #[test]
+    fn registry_has_no_duplicate_names() {
+        let names: Vec<String> = reg().list_all().into_iter().map(|t| t.name).collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        let mut deduped = sorted.clone();
+        deduped.dedup();
+        assert_eq!(
+            sorted.len(),
+            deduped.len(),
+            "duplicate tool names registered: {:?}",
+            sorted
+                .iter()
+                .enumerate()
+                .filter(|(i, n)| *i > 0 && sorted[i - 1] == **n)
+                .map(|(_, n)| n.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn every_tool_declares_an_object_schema() {
+        for tool in reg().list_all() {
+            assert_eq!(
+                tool.input_schema.schema_type, "object",
+                "{} declares schema_type {:?}, MCP requires \"object\"",
+                tool.name, tool.input_schema.schema_type
+            );
+            assert!(
+                !tool.description.trim().is_empty(),
+                "{} has an empty description",
+                tool.name
+            );
+        }
+    }
+
+    // ── Dispatch ────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn unknown_tool_is_tool_not_found() {
+        let sb = stub_path();
+        let err = reg()
+            .execute("nope", json!({}), &mx_exec(), &detector(), None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, McpError::ToolNotFound(_)),
+            "expected ToolNotFound, got {err:?}"
+        );
+        assert_nothing_spawned(&sb);
+    }
+
+    // ── Argument validation happens before any side effect ──────────────────
+
+    /// Assert `tool` rejects `args` as `InvalidArguments` without spawning.
+    async fn assert_invalid_arguments(tool: &str, args: Value) {
+        let sb = stub_path();
+        let err = reg()
+            .execute(tool, args, &mx_exec(), &detector(), None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, McpError::InvalidArguments(_)),
+            "{tool}: expected InvalidArguments, got {err:?}"
+        );
+        assert_nothing_spawned(&sb);
+    }
+
+    #[tokio::test]
+    async fn mx_new_without_name_is_invalid_arguments() {
+        assert_invalid_arguments("mx_new", json!({})).await;
+    }
+
+    #[tokio::test]
+    async fn mx_recipe_info_without_recipe_is_invalid_arguments() {
+        assert_invalid_arguments("mx_recipe_info", json!({})).await;
+    }
+
+    #[tokio::test]
+    async fn mx_build_without_service_is_invalid_arguments() {
+        assert_invalid_arguments("mx_build", json!({"project_path": "/tmp"})).await;
+    }
+
+    #[tokio::test]
+    async fn rag_context_without_working_on_is_invalid_arguments() {
+        assert_invalid_arguments("rag_context", json!({})).await;
+    }
+
+    #[tokio::test]
+    async fn rag_search_category_without_category_is_invalid_arguments() {
+        assert_invalid_arguments("rag_search_category", json!({"query": "x"})).await;
+    }
+
+    // ── Offline corpus paths (corpus: None) ─────────────────────────────────
+
+    #[tokio::test]
+    async fn rag_context_offline_message() {
+        assert_offline_hint(
+            "rag_context",
+            &offline_text("rag_context", json!({"working_on": "x"})).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_search_offline_message() {
+        assert_offline_hint(
+            "rag_search",
+            &offline_text("rag_search", json!({"query": "x"})).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_search_category_offline_message() {
+        assert_offline_hint(
+            "rag_search_category",
+            &offline_text(
+                "rag_search_category",
+                json!({"query": "x", "category": "patterns"}),
+            )
+            .await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_find_implementation_offline_message() {
+        assert_offline_hint(
+            "rag_find_implementation",
+            &offline_text("rag_find_implementation", json!({"pattern": "retry"})).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_get_guidance_offline_message() {
+        assert_offline_hint(
+            "rag_get_guidance",
+            &offline_text("rag_get_guidance", json!({"problem": "x"})).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_compare_approaches_offline_message() {
+        assert_offline_hint(
+            "rag_compare_approaches",
+            &offline_text("rag_compare_approaches", json!({"approaches": ["a", "b"]})).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_find_related_offline_message() {
+        assert_offline_hint(
+            "rag_find_related",
+            &offline_text("rag_find_related", json!({"topic": "x"})).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn rag_health_offline_message() {
+        assert_offline_hint("rag_health", &offline_text("rag_health", json!({})).await);
     }
 }

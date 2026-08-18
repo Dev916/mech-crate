@@ -177,7 +177,7 @@ impl NewCommand {
             for entry in std::fs::read_dir(&make_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "mk") {
+                if path.extension().is_some_and(|ext| ext == "mk") {
                     let filename = path.file_name().unwrap();
                     std::fs::copy(&path, project_path.join("make").join(filename))?;
                 }
@@ -199,7 +199,7 @@ impl NewCommand {
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
-                        if path.extension().map_or(false, |ext| ext == "sh") {
+                        if path.extension().is_some_and(|ext| ext == "sh") {
                             let mut perms = std::fs::metadata(&dest)?.permissions();
                             perms.set_mode(0o755);
                             std::fs::set_permissions(&dest, perms)?;
