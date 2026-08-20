@@ -217,6 +217,55 @@ fn install_leaves_app_source_template_syntax_untouched() {
     );
 }
 
+/// bd:mech-crate-290 — every shipped recipe defaults `domain` to
+/// `{{SERVICE_NAME}}.localhost`. That default is itself a placeholder, so unless
+/// option values are expanded against the placeholder map the generated Traefik
+/// rule ships the literal token and the service is unroutable.
+#[test]
+fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
+    for (recipe, service) in [
+        ("rust-api", "api"),
+        ("rust-leptos", "ui"),
+        ("nuxt", "site"),
+        ("astro", "docs"),
+        ("laravel", "web"),
+        ("zola", "blog"),
+    ] {
+        let (project, _) = install_into_tempdir(recipe, service, &HashMap::new());
+        let compose = project.path().join(format!("docker/compose/{service}.yml"));
+        let text = std::fs::read_to_string(&compose)
+            .unwrap_or_else(|e| panic!("setup: {recipe} ships {}: {e}", compose.display()));
+
+        assert!(
+            text.contains(&format!("Host(`{service}.localhost`)")),
+            "{recipe}: expected Host(`{service}.localhost`) in {}:\n{text}",
+            compose.display()
+        );
+        assert!(
+            !text.contains("{{"),
+            "{recipe}: unexpanded placeholder survived into {}:\n{text}",
+            compose.display()
+        );
+    }
+}
+
+/// An explicitly supplied option value gets the same treatment — a caller may
+/// pass `--domain '{{SERVICE_NAME}}.example.com'` and expect it resolved.
+#[test]
+fn explicit_domain_option_is_expanded_too() {
+    let options = HashMap::from([(
+        "domain".to_string(),
+        "{{SERVICE_NAME}}.example.com".to_string(),
+    )]);
+    let (project, _) = install_into_tempdir("rust-api", "api", &options);
+    let text = std::fs::read_to_string(project.path().join("docker/compose/api.yml"))
+        .expect("setup: rust-api ships docker/compose/<svc>.yml");
+    assert!(
+        text.contains("Host(`api.example.com`)"),
+        "explicit --domain not expanded:\n{text}"
+    );
+}
+
 // ── Known-broken lane (bd:mech-crate-ten) ────────────────────────────────────
 
 /// `make release app=<app>` shells into `apps/<app>` and runs `yarn release*`,

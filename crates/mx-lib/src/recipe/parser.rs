@@ -266,33 +266,84 @@ impl Recipe {
     }
 
     /// Build placeholder values from service name and option values
+    ///
+    /// Option values — both the caller's and the `recipe.json` defaults — may
+    /// themselves contain placeholders: every shipped recipe defaults `domain`
+    /// to `{{SERVICE_NAME}}.localhost`. Those are expanded against the
+    /// name-derived placeholders (and against each other, to a fixpoint) before
+    /// any transform runs, so the literal token never reaches a generated file.
+    /// The service name itself is user input, never a template.
     pub fn build_placeholders(
         &self,
         service_name: &str,
         option_values: &HashMap<String, String>,
     ) -> HashMap<String, String> {
-        let mut values = HashMap::new();
+        // Values that cannot reference anything else: resolved once, up front.
+        let mut base: HashMap<String, String> = HashMap::new();
+        // Option-sourced values, kept raw so each fixpoint pass re-expands them.
+        let mut deferred: Vec<(&String, String, Option<&str>)> = Vec::new();
 
         for (key, def) in &self.placeholders {
-            let raw_value = self.resolve_source(&def.source, service_name, option_values);
-
-            let value = match def.transform.as_deref() {
-                Some("slug") => Self::transform_slug(&raw_value),
-                Some("upper") => Self::transform_upper(&raw_value),
-                Some("rust_crate") => Self::transform_rust_crate(&raw_value),
-                Some("ssr_bool") => Self::transform_ssr_bool(&raw_value),
-                _ => raw_value,
-            };
-
-            values.insert(key.clone(), value);
+            let raw = self.resolve_source(&def.source, service_name, option_values);
+            if def.source.starts_with("option:") {
+                deferred.push((key, raw, def.transform.as_deref()));
+            } else {
+                base.insert(
+                    key.clone(),
+                    Self::apply_transform(def.transform.as_deref(), raw),
+                );
+            }
         }
 
         // Always include SERVICE_NAME
-        values
-            .entry("SERVICE_NAME".to_string())
+        base.entry("SERVICE_NAME".to_string())
             .or_insert_with(|| service_name.to_string());
 
+        if deferred.is_empty() {
+            return base;
+        }
+
+        // Seed with the unexpanded values, then iterate to a fixpoint. Each pass
+        // reads the previous snapshot, so the result does not depend on map
+        // iteration order; the bound makes a self-referential default terminate.
+        let mut values = base.clone();
+        for (key, raw, transform) in &deferred {
+            values.insert(
+                (*key).clone(),
+                Self::apply_transform(*transform, raw.clone()),
+            );
+        }
+
+        const MAX_PASSES: usize = 8;
+        for _ in 0..MAX_PASSES {
+            let mut next = base.clone();
+            let mut changed = false;
+            for (key, raw, transform) in &deferred {
+                let expanded = crate::template::expand_placeholders(raw, &values);
+                let value = Self::apply_transform(*transform, expanded);
+                if values.get(*key) != Some(&value) {
+                    changed = true;
+                }
+                next.insert((*key).clone(), value);
+            }
+            values = next;
+            if !changed {
+                break;
+            }
+        }
+
         values
+    }
+
+    /// Apply a named placeholder transform, if any.
+    fn apply_transform(transform: Option<&str>, value: String) -> String {
+        match transform {
+            Some("slug") => Self::transform_slug(&value),
+            Some("upper") => Self::transform_upper(&value),
+            Some("rust_crate") => Self::transform_rust_crate(&value),
+            Some("ssr_bool") => Self::transform_ssr_bool(&value),
+            _ => value,
+        }
     }
 
     /// Resolve a source reference
@@ -384,6 +435,93 @@ mod tests {
         assert_eq!(recipe.name, "test");
         assert_eq!(recipe.display_title(), "Test Recipe");
         assert_eq!(recipe.templates.len(), 1);
+    }
+
+    /// bd:mech-crate-290 — an option default may itself contain placeholders.
+    /// Every shipped recipe defaults `domain` to `{{SERVICE_NAME}}.localhost`,
+    /// so an unexpanded default lands verbatim in the generated Traefik rule.
+    #[test]
+    fn option_defaults_are_expanded_against_the_placeholder_map() {
+        let json = r#"{
+            "name": "test",
+            "options": { "domain": { "default": "{{SERVICE_NAME}}.localhost" } },
+            "placeholders": {
+                "SERVICE_NAME": { "source": "name" },
+                "DOMAIN": { "source": "option:domain" }
+            }
+        }"#;
+        let recipe = Recipe::parse(json).unwrap();
+        let values = recipe.build_placeholders("api", &HashMap::new());
+        assert_eq!(values["DOMAIN"], "api.localhost");
+    }
+
+    /// A caller-supplied option value gets the same expansion.
+    #[test]
+    fn provided_option_values_are_expanded_too() {
+        let json = r#"{
+            "name": "test",
+            "options": { "domain": { "default": "{{SERVICE_NAME}}.localhost" } },
+            "placeholders": {
+                "SERVICE_NAME": { "source": "name" },
+                "SERVICE_SLUG": { "source": "name", "transform": "slug" },
+                "DOMAIN": { "source": "option:domain" }
+            }
+        }"#;
+        let recipe = Recipe::parse(json).unwrap();
+        let provided = HashMap::from([(
+            "domain".to_string(),
+            "{{SERVICE_SLUG}}.example.com".to_string(),
+        )]);
+        let values = recipe.build_placeholders("My Api", &provided);
+        assert_eq!(values["DOMAIN"], "my-api.example.com");
+    }
+
+    /// Expansion happens *before* the transform, so a transform never has to
+    /// cope with brace syntax.
+    #[test]
+    fn option_values_are_expanded_before_transforming() {
+        let json = r#"{
+            "name": "test",
+            "options": { "host": { "default": "{{SERVICE_NAME}}-Edge" } },
+            "placeholders": {
+                "SERVICE_NAME": { "source": "name" },
+                "HOST_UPPER": { "source": "option:host", "transform": "upper" }
+            }
+        }"#;
+        let recipe = Recipe::parse(json).unwrap();
+        let values = recipe.build_placeholders("api", &HashMap::new());
+        assert_eq!(values["HOST_UPPER"], "API_EDGE");
+    }
+
+    /// A self-referential default must terminate rather than spin.
+    #[test]
+    fn self_referential_option_default_terminates() {
+        let json = r#"{
+            "name": "test",
+            "options": { "domain": { "default": "{{DOMAIN}}" } },
+            "placeholders": {
+                "SERVICE_NAME": { "source": "name" },
+                "DOMAIN": { "source": "option:domain" }
+            }
+        }"#;
+        let recipe = Recipe::parse(json).unwrap();
+        let values = recipe.build_placeholders("api", &HashMap::new());
+        assert_eq!(values["DOMAIN"], "{{DOMAIN}}");
+    }
+
+    /// The service name is user input, not a template: it is never re-expanded.
+    #[test]
+    fn the_service_name_itself_is_not_treated_as_a_template() {
+        let json = r#"{
+            "name": "test",
+            "placeholders": {
+                "SERVICE_NAME": { "source": "name" },
+                "SERVICE_UPPER": { "source": "name", "transform": "upper" }
+            }
+        }"#;
+        let recipe = Recipe::parse(json).unwrap();
+        let values = recipe.build_placeholders("{{SERVICE_UPPER}}", &HashMap::new());
+        assert_eq!(values["SERVICE_NAME"], "{{SERVICE_UPPER}}");
     }
 
     #[test]
