@@ -52,11 +52,16 @@ a fix landed without bookkeeping — surfaced, not silently green.
 14 lane tests, 13 named `kb_*`; the `z5i` test predates the naming convention
 (written in the upgrade task) and is left as-is rather than churned.
 
-**Baseline scoreboard** (ci.yml `known-broken`, the run that established this
-lane): `14 tests run: 0 passed, 14 failed, 162 skipped` — 14 rows above, 14 red,
-zero bookkeeping debt. The gate suite in the same run: `162 passed, 14 skipped`.
-Those two numbers partition the workspace; if they stop summing to 176, either a
-lane test lost its `#[ignore]` or a gate test grew one.
+**Scoreboard** (`make test-known-broken`): `14 tests run: 0 passed, 14 failed,
+189 skipped` — 14 rows above, 14 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `189 passed, 14 skipped`. Those two numbers
+partition the workspace; if they stop summing to 203, either a lane test lost
+its `#[ignore]` or a gate test grew one.
+
+The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
+bd:mech-crate-0tj, bd:mech-crate-290, bd:mech-crate-ads): none of those defects
+had a lane test, so they were fixed against fresh red tests that joined the gate
+directly, taking it from 162 to 189.
 
 ## Notes on placement deviations
 
