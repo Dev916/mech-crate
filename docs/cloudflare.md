@@ -1,3 +1,14 @@
+---
+title: "Cloudflare Infrastructure"
+category: framework-guides
+complexity: intermediate
+use_cases:
+  - "deploying multiple apps to Cloudflare Workers from one repo"
+  - "choosing between regular, cron and container workers"
+  - "wiring worker credentials and per-app deploy config"
+summary: "Multi-app deployment infrastructure for Cloudflare Workers — regular, cron and container worker types, directory layout and credentials."
+---
+
 # Cloudflare Infrastructure
 
 Multi-app deployment infrastructure for Cloudflare Workers.

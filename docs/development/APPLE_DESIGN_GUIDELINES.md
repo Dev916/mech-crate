@@ -9,6 +9,11 @@ use_cases:
   - "building refined, high-performance web UI"
   - "guiding LLM-generated UI toward Apple aesthetics"
 summary: "Comprehensive guidelines for implementing Apple's design principles (clarity, deference, depth) in web applications."
+# Held back from mechcrate.dev: derivative summary of Apple's Human Interface
+# Guidelines — little value beyond the original, and closest to republishing
+# someone else's content. Still ingested by `mx rag ingest` for agent retrieval.
+# See docs/superpowers/specs/2026-08-20-mechcrate-site-design.md → "Hold-backs".
+publish: false
 ---
 
 # Apple-Inspired UI/UX Design Guidelines for LLMs

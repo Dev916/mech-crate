@@ -1,0 +1,81 @@
+---
+/**
+ * Provenance footer for researched corpus docs.
+ *
+ * The research pipeline records `provenance`, `researched` and `sources` in the
+ * doc's frontmatter; this renders them as the spec's attestation line
+ * ("Researched 2026-08-14 · 24 sources") plus a link back to the source of
+ * truth on GitHub. Docs without `provenance` render nothing — most of the
+ * corpus predates the pipeline and has nothing to attest.
+ */
+import type { CorpusMeta } from './corpus.ts';
+import { provenanceSummary } from './corpus.ts';
+
+interface Props {
+  corpus: CorpusMeta;
+}
+
+const { corpus } = Astro.props;
+const summary = provenanceSummary(corpus);
+
+// Sources are usually URLs but the schema allows free text (book titles, papers
+// without a stable link), so linkability is decided here rather than in markup.
+const sources = (corpus.sources ?? []).map((source) => ({
+  text: source,
+  href: /^https?:\/\//.test(source) ? source : undefined,
+}));
+---
+
+{
+  summary && (
+    <footer class="corpus-provenance">
+      <p class="corpus-provenance__line">
+        <span>{summary}</span>
+        <span aria-hidden="true"> · </span>
+        <a href={corpus.sourceUrl}>view source</a>
+      </p>
+      {sources.length > 0 && (
+        <details class="corpus-provenance__sources">
+          <summary>Sources ({sources.length})</summary>
+          <ol>
+            {sources.map((source) => (
+              <li>{source.href ? <a href={source.href}>{source.text}</a> : source.text}</li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </footer>
+  )
+}
+
+<style>
+  .corpus-provenance {
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-gray-5);
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+
+  .corpus-provenance__line {
+    margin: 0;
+  }
+
+  .corpus-provenance__sources {
+    margin-top: 0.75rem;
+  }
+
+  .corpus-provenance__sources summary {
+    cursor: pointer;
+  }
+
+  .corpus-provenance__sources ol {
+    margin: 0.5rem 0 0;
+    padding-inline-start: 1.5rem;
+    overflow-wrap: anywhere;
+  }
+
+  .corpus-provenance__sources li {
+    margin-block: 0.2rem;
+  }
+</style>

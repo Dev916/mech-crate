@@ -1,0 +1,61 @@
+---
+/**
+ * The banner every corpus page carries, per the spec's IA section: it tells a
+ * human reader that the page they're on is not site-only prose — it is a
+ * document agents retrieve at runtime through the MCP `rag_context` tool.
+ *
+ * Rendered only for entries that carry `data.corpus`, so authored pages
+ * (Start / Framework / AI Layer / Project) never show it.
+ */
+import type { CorpusMeta } from './corpus.ts';
+import { categoryLabel } from './corpus.ts';
+
+interface Props {
+  corpus: CorpusMeta;
+}
+
+const { corpus } = Astro.props;
+---
+
+<aside class="corpus-banner" aria-label="Corpus document">
+  <p class="corpus-banner__text">
+    This doc ships inside mx's agent corpus — agents retrieve it via <code>rag_context</code>.
+  </p>
+  <p class="corpus-banner__meta">
+    <a href={`/docs/corpus/${corpus.category}/`}>{categoryLabel(corpus.category)}</a>
+    {corpus.complexity && <span class="corpus-banner__tag">{corpus.complexity}</span>}
+  </p>
+</aside>
+
+<style>
+  .corpus-banner {
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-inline-start: 3px solid var(--sl-color-accent);
+    border-radius: 0.25rem;
+    background-color: var(--sl-color-gray-6);
+  }
+
+  .corpus-banner__text {
+    margin: 0;
+    font-size: var(--sl-text-sm);
+    line-height: 1.5;
+  }
+
+  .corpus-banner__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.4rem 0 0;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+
+  .corpus-banner__tag {
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+  }
+</style>

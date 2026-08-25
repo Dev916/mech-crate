@@ -39,11 +39,28 @@ export default defineConfig({
       // Pagefind stays on (Starlight's default) — it is the human-facing search;
       // the RAG corpus is the agent-facing one.
       pagefind: true,
+      // Corpus pages get a banner ("…agents retrieve it via `rag_context`") and,
+      // where the research pipeline recorded one, a provenance footer. The
+      // override is gated on `data.corpus` so authored pages are untouched.
+      components: {
+        MarkdownContent: './src/components/MarkdownContent.astro',
+      },
       sidebar: [
         { label: 'Start', autogenerate: { directory: 'docs/start' } },
         { label: 'Framework', autogenerate: { directory: 'docs/framework' } },
         { label: 'AI Layer', autogenerate: { directory: 'docs/ai' } },
-        { label: 'Techniques Corpus', autogenerate: { directory: 'docs/corpus' } },
+        {
+          label: 'Techniques Corpus',
+          // The corpus documents are collection entries, so `autogenerate` groups
+          // them by their `category` directory for free. The overview is a
+          // generated Astro page (src/pages/docs/corpus/), not a collection
+          // entry, so it has to be linked explicitly; the per-category index
+          // pages are reached from it and from each doc's banner.
+          items: [
+            { label: 'Overview', link: '/docs/corpus/' },
+            { label: 'Categories', autogenerate: { directory: 'docs/corpus' } },
+          ],
+        },
         { label: 'Project', autogenerate: { directory: 'docs/project' } },
       ],
     }),
