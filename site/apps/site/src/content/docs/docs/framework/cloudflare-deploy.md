@@ -87,17 +87,42 @@ bundle with wrangler, plus a preview deploy on pull requests. The site job is
 independent of the Rust gates — it never blocks `ci.yml` and is never blocked by
 it.
 
-:::note[Not wired yet]
-As of this writing that workflow has not landed: there is no
-`.github/workflows/site.yml` in the repository, and `site/` was scaffolded
-without `--infra cloudflare`, so it has no `make/cloudflare.mk` either. The
-design is settled; the wiring is a later task. This note comes down when the
-workflow is green.
-:::
+That workflow is now `.github/workflows/site.yml`. `site/` was scaffolded without
+`--infra cloudflare`, so it has no `make/cloudflare.mk` — the workflow calls
+wrangler directly rather than through the `cf-*` targets.
 
-Locally the site is an ordinary mx project:
+:::tip[This site is an mx app]
+The page you are reading is not built by a bespoke docs pipeline. `site/` is an
+ordinary mx project — the same folder contract, the same compose layering, the
+same router — scaffolded from the `astro` recipe. You can clone the repository
+and run it exactly like any other mx service:
 
 ```bash
-cd site
+git clone https://github.com/Dev916/mech-crate.git
+cd mech-crate/site
+make doctor && make init
 make dev            # http://mechcrate.localhost through the mx router
+make down
 ```
+
+No ports to remember and nothing to configure: the container publishes no HTTP
+port, Traefik routes to it by the `Host(mechcrate.localhost)` label in
+`docker/compose/site.yml`, and the mx router serves it alongside every other
+project you have running.
+:::
+
+Two things about the dev container are specific to this site, and both are
+commented where they live:
+
+- **No database or cache.** The astro recipe's compose `include`s `db.yml` and
+  `redis.yml`; a static documentation build needs neither, so
+  `docker/compose/site.yml` drops them.
+- **The corpus lives outside the app.** The techniques corpus is read from the
+  repository's `docs/development/`, which is above `apps/site` and therefore
+  outside the container's source mount. `docker/compose/site.dev.yml` bind-mounts
+  `docs/` read-only at `/repo/docs` and sets `MECHCRATE_REPO_ROOT`, so `make dev`
+  renders the same 110 pages CI builds. Without it the site still comes up — it
+  just silently loses all 67 corpus pages.
+
+The production deploy does not use this container at all: CI runs `astro build`
+and ships the static `dist/` to Cloudflare.

@@ -39,9 +39,21 @@ const corpusMetadata = z
   })
   .optional();
 
+/**
+ * Repo root override for the containerised dev loop.
+ *
+ * `npm run build` / `npm run dev` on the host resolve the repo root by walking
+ * up from this file, which works because the app is nested inside the repo. The
+ * `make dev` container only bind-mounts `apps/site` at `/app`, so that walk ends
+ * at `/` and the corpus loads zero docs. `docker/compose/site.dev.yml` mounts the
+ * repo's `docs/` read-only and sets this variable so the container renders the
+ * same 110 pages CI builds. Unset everywhere else → `defaultRepoRoot()`.
+ */
+const repoRoot = process.env.MECHCRATE_REPO_ROOT;
+
 export const collections = {
   docs: defineCollection({
-    loader: corpusDocsLoader(),
+    loader: corpusDocsLoader(repoRoot ? { repoRoot } : {}),
     schema: docsSchema({ extend: z.object({ corpus: corpusMetadata }) }),
   }),
 };

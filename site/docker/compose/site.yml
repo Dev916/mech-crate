@@ -2,12 +2,13 @@
 # site - Production Docker Compose
 # ========================================
 # Traefik routes to this service via devmesh-traefik network
-
-include:
-  - path: ../../docker/compose/db.yml
-    optional: true
-  - path: ../../docker/compose/redis.yml
-    optional: true
+#
+# Deviation from the stock mx astro recipe: the recipe's compose `include:`s
+# db.yml + redis.yml and wires DATABASE_URL/REDIS_URL/depends_on. This site is a
+# static Starlight documentation build — no database, no cache — so those are
+# dropped. (Compose's `include:` has no `optional:` field, so the recipe's
+# `optional: true` is ignored and a missing db.yml is a hard error; see
+# docs/superpowers/specs for the dogfood note.)
 
 services:
   # ------------------------------------------
@@ -27,17 +28,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4321
-      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-      - REDIS_URL=redis://redis:6379
       - APP_URL=https://mechcrate.localhost
     networks:
       - default
       - devmesh-traefik
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4321/api/health"]
       interval: 30s

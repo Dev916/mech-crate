@@ -14,14 +14,18 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=4321
-      - DATABASE_URL=postgres://${DB_USER:-site}:${DB_PASSWORD:-secret}@db:5432/${DB_NAME:-site}
-      - REDIS_URL=redis://redis:6379
       - APP_URL=http://mechcrate.localhost
+      # The corpus loader reads the repo's docs/ from outside apps/site; see the
+      # /repo mount below and src/content.config.ts.
+      - MECHCRATE_REPO_ROOT=/repo
     # Mount source code for hot reload
     volumes:
       - ../../apps/site:/app
       - /app/node_modules
       - /app/.astro
+      # Techniques corpus source, read-only. Without this the container renders
+      # the authored pages only and `corpus: published 0 docs`.
+      - ../../../docs:/repo/docs:ro
     ports:
       - "24678:24678"  # Vite HMR
     healthcheck:
@@ -30,17 +34,5 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-  # ------------------------------------------
-  # PostgreSQL Database (Development)
-  # ------------------------------------------
-  db:
-    ports:
-      - "5432:5432"
-
-  # ------------------------------------------
-  # Redis Cache (Development)
-  # ------------------------------------------
-  redis:
-    ports:
-      - "6379:6379"
+# No db/redis overrides: this site is a static docs build with no datastores.
+# See docker/compose/site.yml for the deviation note.
