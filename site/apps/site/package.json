@@ -7,10 +7,16 @@
     "dev": "astro dev --host --port 4321",
     "build": "astro build",
     "preview": "astro preview --host --port 4321",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.37.7",
-    "astro": "^5.5.0"
+    "astro": "^5.5.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7"
   }
 }
