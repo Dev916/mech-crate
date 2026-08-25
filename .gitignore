@@ -22,3 +22,7 @@ mutants.out.old/
 .dolt/
 *.db
 .beads-credential-key
+
+# Secrets — never commit
+.env.secrets
+.env*.local
