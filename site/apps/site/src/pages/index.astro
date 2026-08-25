@@ -1,6 +1,10 @@
 ---
-// Placeholder landing page. Replaced by the Starlight site in a later task
-// (see docs/superpowers/specs/2026-08-20-mechcrate-site-design.md).
+// Custom landing page — deliberately NOT a Starlight doc. Starlight owns
+// /docs/**; this route stays a hand-authored Astro page so the hero, the four
+// problem sections, the AI-layer loop and the CTA can be laid out freely
+// (see docs/superpowers/specs/2026-08-20-mechcrate-site-design.md — IA).
+//
+// Content is still a skeleton; a later task builds the full landing page.
 const title = 'MechCrate';
 ---
 
@@ -9,11 +13,21 @@ const title = 'MechCrate';
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    <meta
+      name="description"
+      content="mx — run a subset of your service ecosystem locally, scaffold projects with wisdom, and feed your agents a curated techniques corpus."
+    />
   </head>
   <body>
-    <main>
+    <main class="landing">
       <h1>{title}</h1>
-      <p>Scaffold placeholder — the mechcrate.dev site lands here.</p>
+      <p>
+        Landing page skeleton — the hero, problem sections, AI-layer loop and CTA land here.
+      </p>
+      <p>
+        <a href="/docs/">Read the docs</a> ·
+        <a href="https://github.com/Dev916/mech-crate">GitHub</a>
+      </p>
     </main>
   </body>
 </html>
