@@ -1,0 +1,29 @@
+%% Folder contract — the layout every mx project shares. Mirrors the real tree
+%% of site/ (Makefile, make/*.mk, scripts/*.sh, apps/site, docker/{.config,
+%% compose,system,dockerfiles}), which was scaffolded by `mx new` + `mx add`.
+flowchart LR
+    accTitle: The mx folder contract
+    accDescr: An mx project root contains a thin Makefile dispatcher, a make directory with one include per verb, a scripts directory holding the actual bash, an apps directory with one directory per service that mx never edits, and a docker directory split into dot-config for env files, compose for the baseline and dev override, system for infrastructure you own, and dockerfiles for per-service build files.
+
+    root["<b>myproject/</b><br/><small>an mx project root</small>"]
+
+    root --> mk["<b>Makefile</b><br/><small>thin dispatcher — make dev · up · build · logs</small>"]
+    root --> mkdir["<b>make/</b><br/><small>one .mk include per verb<br/>dev.mk · build.mk · logs.mk · …</small>"]
+    root --> scripts["<b>scripts/</b><br/><small>the actual bash<br/>dev.sh · build.sh · doctor.sh · …</small>"]
+    root --> apps["<b>apps/</b>"]
+    root --> docker["<b>docker/</b>"]
+
+    apps --> svc["<b>{service}/</b><br/><small>your application source<br/>mx scaffolds it, then never edits it</small>"]
+
+    docker --> cfg["<b>.config/</b><br/><small>.env.shared · .env.{service}<br/>.env.secrets (gitignored)</small>"]
+    docker --> comp["<b>compose/</b><br/><small>{service}.yml — baseline<br/>{service}.dev.yml — dev override</small>"]
+    docker --> sys["<b>system/</b><br/><small>infrastructure you own<br/>proxies, certs, seed data</small>"]
+    docker --> dfiles["<b>dockerfiles/</b><br/><small>{service}/app — dev target<br/>{service}/app.prod — release target</small>"]
+
+    classDef rootNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#1e1b4b;
+    classDef contract fill:#f8fafc,stroke:#64748b,color:#0f172a;
+    classDef yours fill:#fef9c3,stroke:#ca8a04,color:#422006;
+
+    class root rootNode;
+    class mk,mkdir,scripts,apps,docker,cfg,comp,dfiles contract;
+    class svc,sys yours;

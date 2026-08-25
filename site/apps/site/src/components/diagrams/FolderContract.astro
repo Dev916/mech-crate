@@ -1,0 +1,22 @@
+---
+/**
+ * The layout every mx project shares, and who owns which part of it.
+ *
+ * A named handle on `./sources/folder-contract.mmd` so pages can embed it without
+ * remembering the slug. All the behaviour lives in `./Diagram.astro`.
+ *
+ *   import FolderContract from '@/components/diagrams/FolderContract.astro';
+ *   <FolderContract />
+ */
+import Diagram from './Diagram.astro';
+
+interface Props {
+  /** Override the registry caption, or pass `false` to render none. */
+  caption?: string | false;
+  class?: string;
+}
+
+const { caption, class: className } = Astro.props;
+---
+
+<Diagram name="folder-contract" caption={caption} class={className} />

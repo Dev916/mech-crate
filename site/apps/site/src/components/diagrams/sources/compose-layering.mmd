@@ -1,0 +1,34 @@
+%% Compose layering — baseline + dev override merge into the effective dev
+%% stack. Every bullet below is taken verbatim from site/docker/compose/
+%% site.yml and site.dev.yml.
+flowchart LR
+    accTitle: Compose layering, baseline plus dev override
+    accDescr: The baseline compose file for a service defines the release build target, env files, healthcheck, Traefik routing labels and networks. The dev override file re-targets the build at the development stage, bind-mounts the source for hot reload, masks node_modules with anonymous volumes, publishes the Vite HMR port and relaxes the healthcheck start period. Docker Compose merges the two files, and make dev brings up the merged result, reachable through the router.
+
+    base["<b>docker/compose/site.yml</b><br/><i>baseline — same everywhere</i><br/><small>build target: runner<br/>env_file: .env.secrets · .env.shared · .env.site<br/>healthcheck: curl /api/health<br/>labels: Host(mechcrate.localhost) → port 4321<br/>networks: default + devmesh-traefik</small>"]
+
+    over["<b>docker/compose/site.dev.yml</b><br/><i>dev override — merged on top</i><br/><small>build target: development<br/>volumes: ../../apps/site:/app<br/>masks /app/node_modules and /app/.astro<br/>ports: 24678 (Vite HMR)<br/>NODE_ENV=development<br/>healthcheck start_period: 30s</small>"]
+
+    merge{{"docker compose<br/>-f site.yml -f site.dev.yml"}}
+
+    eff["<b>effective dev stack</b><br/><small>container site-dev<br/>source mounted · hot reload on<br/>db and redis ports published locally</small>"]
+
+    url(["http://mechcrate.localhost<br/><small>via the mx router — no port juggling</small>"])
+
+    base --> merge
+    over --> merge
+    merge --> eff
+    eff --> url
+
+    prod["<b>make up</b> / release<br/><small>baseline only — no override</small>"]
+    base -.-> prod
+
+    classDef baseline fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b;
+    classDef override fill:#fef9c3,stroke:#ca8a04,color:#422006;
+    classDef result fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    classDef muted fill:#f8fafc,stroke:#94a3b8,color:#475569;
+
+    class base baseline;
+    class over override;
+    class eff,url result;
+    class merge,prod muted;

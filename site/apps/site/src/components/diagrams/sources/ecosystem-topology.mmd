@@ -1,0 +1,44 @@
+%% Ecosystem topology — one workstation-wide router, N mx projects, only a
+%% subset of services actually running. Grounded in docs/router.md and the
+%% traefik labels in site/docker/compose/site.yml.
+flowchart TB
+    accTitle: MechCrate ecosystem topology
+    accDescr: A browser reaches hostnames such as api.localhost and mechcrate.localhost. One workstation-wide Traefik router, installed by mx router install, reads Host rules from container labels on the shared devmesh-traefik Docker network and forwards each hostname to the running container that claims it. Several mx projects attach to that same network, and only the subset of services you started is up.
+
+    browser["Browser<br/><small>api.localhost · admin.localhost · mechcrate.localhost</small>"]
+
+    subgraph router["mx router — one per workstation"]
+        traefik["Traefik<br/><small>:80 · Host() rules read from container labels</small>"]
+    end
+
+    subgraph mesh["devmesh-traefik — shared external Docker network"]
+        direction LR
+
+        subgraph projA["project: acme"]
+            api["api<br/><small>Host: api.localhost</small>"]
+            admin["admin<br/><small>Host: admin.localhost</small>"]
+            worker(["worker<br/><small>not started</small>"])
+        end
+
+        subgraph projB["project: mech-crate/site"]
+            site["site<br/><small>Host: mechcrate.localhost</small>"]
+            infra(["db · redis<br/><small>not started</small>"])
+        end
+
+        subgraph projC["project: legacy-shop"]
+            allDown(["every service<br/><small>not started</small>"])
+        end
+    end
+
+    browser --> traefik
+    traefik -->|Host match| api
+    traefik -->|Host match| admin
+    traefik -->|Host match| site
+
+    classDef up fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef down fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:4 3,color:#64748b;
+    classDef entry fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#1e1b4b;
+
+    class api,admin,site up;
+    class worker,infra,allDown down;
+    class browser,traefik entry;
