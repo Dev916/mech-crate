@@ -11,7 +11,8 @@ The MechCrate docs are organised into five sections, mirrored by the sidebar:
 - **Techniques Corpus** — the published `docs/development/` corpus that ships inside mx's agent retrieval layer.
 - **Project** — research log, research backlog, the known-broken lane, license.
 
-:::note[Skeleton]
-This is the information-architecture skeleton. Each section currently holds a
-placeholder; the authored content lands in subsequent build tasks.
-:::
+Two things worth knowing before you start reading. Pages here stay short where a
+[corpus document](/docs/corpus/) already covers the topic in depth — the page
+links to it rather than restating it, so each document renders exactly once. And
+where something is broken, the page says so and points at the
+[known-broken lane](/docs/project/known-broken/) rather than writing around it.
