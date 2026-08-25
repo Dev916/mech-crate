@@ -1,0 +1,46 @@
+# ========================================
+# site - Development Docker Compose Override
+# ========================================
+# Traefik routes to this service via devmesh-traefik network (no direct port exposure needed)
+
+services:
+  # ------------------------------------------
+  # Astro SSR Application (Development)
+  # ------------------------------------------
+  site:
+    build:
+      target: development
+    container_name: site-dev
+    environment:
+      - NODE_ENV=development
+      - PORT=4321
+      - DATABASE_URL=postgres://${DB_USER:-site}:${DB_PASSWORD:-secret}@db:5432/${DB_NAME:-site}
+      - REDIS_URL=redis://redis:6379
+      - APP_URL=http://mechcrate.localhost
+    # Mount source code for hot reload
+    volumes:
+      - ../../apps/site:/app
+      - /app/node_modules
+      - /app/.astro
+    ports:
+      - "24678:24678"  # Vite HMR
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4321/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ------------------------------------------
+  # PostgreSQL Database (Development)
+  # ------------------------------------------
+  db:
+    ports:
+      - "5432:5432"
+
+  # ------------------------------------------
+  # Redis Cache (Development)
+  # ------------------------------------------
+  redis:
+    ports:
+      - "6379:6379"

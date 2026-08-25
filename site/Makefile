@@ -1,0 +1,49 @@
+# MechCrate Project Makefile
+# 🦝 Crate Raccoon is ready to serve
+
+.SILENT:
+SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
+ROOT_DIR := $(abspath $(CURDIR))
+PROJECT_NAME ?= $(notdir $(ROOT_DIR))
+# MK_MODULES (not MAKEFILES - that's reserved in GNU Make)
+MK_MODULES := $(wildcard make/*.mk)
+
+# Key generation utilities
+BYTES ?= 32
+FORMAT ?= hex
+
+.PHONY: make-key
+make-key: ## Generate a secret key (BYTES=32, FORMAT=hex|base64|uuid)
+	@case "$(FORMAT)" in \
+		hex)    openssl rand -hex $(BYTES) ;; \
+		base64) openssl rand -base64 $(BYTES) ;; \
+		uuid)   uuidgen | tr '[:upper:]' '[:lower:]' ;; \
+		*)      echo "Unknown format: $(FORMAT). Use hex, base64, or uuid" && exit 1 ;; \
+	esac
+
+# Include all make modules
+ifneq ($(strip $(MK_MODULES)),)
+include $(MK_MODULES)
+endif
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core Targets
+# ─────────────────────────────────────────────────────────────────────────────
+
+.PHONY: help init test ps doctor
+
+help: ## Show available commands
+	@./scripts/help.sh
+
+init: ## Initialize project environment
+	@./scripts/init.sh
+
+test: ## Run tests
+	@./scripts/test.sh
+
+ps: ## List running services
+	@./scripts/ps.sh
+
+doctor: ## Check project health
+	@./scripts/doctor.sh

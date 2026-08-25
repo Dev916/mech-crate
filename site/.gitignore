@@ -1,0 +1,35 @@
+# MechCrate
+tmp/
+docker/.compose/
+docker/.config/.env.secrets
+data/
+
+# Dependencies
+node_modules/
+vendor/
+target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+
+# Infrastructure secrets
+infra/**/.env
+infra/**/*.tfvars
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/.terraform/
