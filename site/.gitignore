@@ -26,6 +26,10 @@ logs/
 # Build artifacts
 dist/
 build/
+.astro/
+# wrangler's local workerd state (created by `wrangler dev` / `--dry-run`);
+# the committed deploy config is apps/site/wrangler.jsonc, not this.
+.wrangler/
 
 # Infrastructure secrets
 infra/**/.env

@@ -1,0 +1,353 @@
+# ============================================================================
+# mechcrate.dev — build, link-check, and deploy the docs site
+# ============================================================================
+#
+# The site lives at `site/apps/site` (an Astro 5 + Starlight app inside the
+# nested mx project `site/`). This workflow is deliberately INDEPENDENT of the
+# Rust gates: there is no `cargo` anywhere below, `ci.yml` never waits on this,
+# and this never waits on `ci.yml`. A red Rust build must not hold the docs
+# hostage, and a typo in a doc must not look like a compiler failure.
+#
+# ----------------------------------------------------------------------------
+# HANDOFF — the deploy is INERT until a human does these four things
+# ----------------------------------------------------------------------------
+# Nothing below deploys anything today, and nothing below FAILS because of that:
+# the `deploy` and `preview` jobs check for the Cloudflare secrets first and
+# skip with a `::notice` (exit 0) when they are absent. To switch them on:
+#
+#   1. Register `mechcrate.dev`.
+#   2. Add it as a zone in the Cloudflare account (Websites -> Add a domain)
+#      and point the registrar's nameservers at Cloudflare. `wrangler.jsonc`
+#      attaches the apex as a custom domain on deploy, which needs the zone to
+#      already exist in the account.
+#   3. Create a Cloudflare API token (My Profile -> API Tokens -> Create) with:
+#        - Account | Workers Scripts | Edit      (upload the Worker + assets)
+#        - Zone    | Workers Routes  | Edit      (attach mechcrate.dev)
+#        - Zone    | Zone            | Read      (resolve the zone id)
+#      scoped to the mech-crate account and the mechcrate.dev zone.
+#   4. Add two repository secrets (Settings -> Secrets and variables -> Actions):
+#        - CLOUDFLARE_API_TOKEN   = the token from step 3
+#        - CLOUDFLARE_ACCOUNT_ID  = Cloudflare dashboard -> Workers & Pages ->
+#                                   right sidebar "Account ID"
+#
+# The next push to `main` that touches `site/**` then deploys for real. Order
+# matters: adding the secrets before the zone exists makes `wrangler deploy`
+# fail loudly on the custom-domain attach rather than skip.
+#
+# NOTE (bd mech-crate-wd9): mx itself has a Cloudflare credential env-var drift
+# bug. This workflow calls `wrangler` directly and does not depend on that fix.
+#
+# ----------------------------------------------------------------------------
+# WHY WORKERS STATIC ASSETS — not Pages, not the astro recipe's container
+# ----------------------------------------------------------------------------
+# `templates/recipes/astro` is the full-stack recipe: SSR + Vue islands +
+# Drizzle, shipped as a Docker image to Cloudflare Containers. This site is a
+# fully static bundle (110 prerendered pages, no server routes), so a container
+# would be a permanently running process whose only job is to serve files.
+# We therefore use Cloudflare's current recommendation for static output — an
+# assets-only Worker (`wrangler.jsonc` has an `assets` block and no `main`),
+# which is also the forward path for new projects that would once have been
+# Pages. See the rationale block at the top of `site/apps/site/wrangler.jsonc`.
+#
+# Consequence worth knowing: Cloudflare's asset server sets `Content-Type` from
+# the file extension, so `/llms.txt` and `/llms-full.txt` are served as
+# `text/plain; charset=utf-8` and render in the browser instead of downloading.
+# No `_headers` file is required (that is a Pages mechanism). The `build` job
+# re-proves this on every run against a local workerd, so a future change to the
+# asset config cannot quietly turn the agent-facing artefacts into downloads.
+#
+# ----------------------------------------------------------------------------
+# WHY PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+# ----------------------------------------------------------------------------
+# `playwright` is a devDependency because `npm run diagrams` renders the Mermaid
+# sources to SVG through a headless Chromium. Those SVGs are COMMITTED, so
+# `astro build` never launches a browser and neither does `npm test` — only the
+# on-demand re-render does. Skipping the ~150MB browser download keeps `npm ci`
+# honest about what CI actually needs.
+# ============================================================================
+
+name: Site (mechcrate.dev)
+
+# The two path lists are duplicated on purpose: GitHub Actions does not support
+# YAML anchors/aliases, so `&x` / `*x` here would silently parse as a literal
+# path. Keep them in sync by hand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "tests/KNOWN_BROKEN.md"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "tests/KNOWN_BROKEN.md"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # 22, not 20, for two independent reasons — both worth stating because "just
+  # use the current LTS" is the kind of choice that silently rots:
+  #   1. It is what the site already runs on. `site/docker/dockerfiles/site/app`
+  #      and `app.prod` both pin `ARG NODE_VERSION=22`, so CI on 20 would mean
+  #      the container and the gate disagree about the toolchain.
+  #   2. wrangler >= 4.x refuses to start on anything below Node 22
+  #      ("Wrangler requires at least Node.js v22.0.0"), and this workflow runs
+  #      wrangler in three places.
+  NODE_VERSION: "22"
+  # See "WHY PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD" above.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  # Pinned so a wrangler release cannot change deploy behaviour under us.
+  # Bump deliberately, and re-run `npx wrangler@<new> deploy --dry-run` in
+  # site/apps/site first.
+  WRANGLER_VERSION: "4.125.0"
+  # Quiet wrangler's telemetry prompt in non-interactive runs.
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  # --------------------------------------------------------------------------
+  # build — always runs (push, PR, dispatch). This is the gate.
+  # --------------------------------------------------------------------------
+  build:
+    name: build (test + astro build + link check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: site/apps/site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: site/apps/site/package-lock.json
+
+      - name: Install (locked)
+        run: npm ci
+
+      # Redundant with `npm test` (diagrams.test.ts hashes the same manifest),
+      # but it runs in milliseconds and turns "a .mmd changed without a
+      # re-render" into its own named red step instead of one assertion buried
+      # in a 191-test run.
+      - name: Diagram drift gate
+        run: npm run diagrams:check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Offline: local files only, zero network. External links in the corpus
+      # are excluded by design — this gate exists to prove INTERNAL links
+      # resolve, and a flaky third-party host must never redden a docs PR.
+      # `--root-dir` is what lets root-absolute hrefs (`/docs/...`, which is all
+      # of Starlight's output) resolve against dist/ instead of the filesystem.
+      - name: Link check (lychee, offline)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --offline
+            --no-progress
+            --root-dir "${{ github.workspace }}/site/apps/site/dist"
+            "site/apps/site/dist/**/*.html"
+          fail: true
+
+      # Proves the two agent-facing artefacts are served as inline text/plain by
+      # Cloudflare's own asset server (workerd, local mode — no account, no
+      # secrets, no network). If someone later swaps the deploy mechanism for
+      # one that guesses wrong, this fails here rather than in production.
+      - name: Content-type check (/llms.txt as text/plain on workerd)
+        run: |
+          set -euo pipefail
+          npx --yes "wrangler@${WRANGLER_VERSION}" dev --port 8799 --ip 127.0.0.1 &
+          WRANGLER_PID=$!
+          trap 'kill "${WRANGLER_PID}" 2>/dev/null || true' EXIT
+          ready=""
+          for _ in $(seq 1 60); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:8799/"; then ready=1; break; fi
+            sleep 1
+          done
+          if [ -z "${ready}" ]; then
+            echo "::error::wrangler dev did not serve http://127.0.0.1:8799/ within 60s"
+            exit 1
+          fi
+          for path in /llms.txt /llms-full.txt; do
+            ctype=$(curl -fsS -o /dev/null -w '%{content_type}' "http://127.0.0.1:8799${path}")
+            echo "${path} -> ${ctype}"
+            case "${ctype}" in
+              text/plain*) ;;
+              *) echo "::error::${path} served as '${ctype}', expected text/plain"; exit 1 ;;
+            esac
+          done
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: site/apps/site/dist
+          retention-days: 7
+          if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # deploy — main only, and only once Cloudflare secrets exist
+  # --------------------------------------------------------------------------
+  deploy:
+    name: deploy (mechcrate.dev)
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site/apps/site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # The `secrets` context is not available in `if:` conditions, so secret
+      # presence has to become a step output. Absent secrets are a SKIP, not a
+      # failure: until the handoff at the top of this file is done, `main` must
+      # stay green.
+      - name: Check Cloudflare credentials
+        id: cf
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Cloudflare deploy skipped::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set. The site built and passed its gates; see the HANDOFF block in .github/workflows/site.yml to wire up deployment."
+          fi
+
+      - name: Download dist
+        if: steps.cf.outputs.ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: site/apps/site/dist
+
+      - name: Deploy to Cloudflare
+        if: steps.cf.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy
+
+  # --------------------------------------------------------------------------
+  # preview — PRs only. continue-on-error until Cloudflare is wired up.
+  # --------------------------------------------------------------------------
+  #
+  # `continue-on-error: true` is deliberate and NOT permanent: this job talks to
+  # an account that does not exist yet, and preview URLs additionally depend on
+  # a Cloudflare account setting (Workers -> Settings -> Preview URLs). PRs from
+  # forks also get neither secrets nor `pull-requests: write`. None of that
+  # should be able to block a docs PR. Once previews are confirmed working,
+  # drop the `continue-on-error` line and this becomes a real gate.
+  preview:
+    name: preview (PR deploy)
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: site/apps/site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Check Cloudflare credentials
+        id: cf
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Preview deploy skipped::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set (expected on fork PRs, and on every PR until the HANDOFF in .github/workflows/site.yml is done)."
+          fi
+
+      - name: Download dist
+        if: steps.cf.outputs.ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: site/apps/site/dist
+
+      # `versions upload` stages a new Worker version WITHOUT shifting
+      # production traffic, and prints a per-version preview URL. That is the
+      # static-assets equivalent of a Pages preview deploy.
+      - name: Upload preview version
+        id: preview
+        if: steps.cf.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes "wrangler@${WRANGLER_VERSION}" versions upload 2>&1 | tee upload.log
+          url=$(grep -Eo 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' upload.log | head -n 1 || true)
+          if [ -n "${url}" ]; then
+            echo "url=${url}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=No preview URL::The version uploaded but no preview URL was printed. Enable Workers -> Settings -> Preview URLs for mechcrate-site."
+          fi
+          rm -f upload.log
+
+      - name: Comment preview URL on PR
+        if: steps.preview.outputs.url != ''
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- mechcrate-site-preview -->';
+            const body = [
+              marker,
+              '### 📚 mechcrate.dev preview',
+              '',
+              `**${process.env.PREVIEW_URL}**`,
+              '',
+              `Built from ${context.sha.slice(0, 7)}. Static preview version — production traffic is untouched.`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
