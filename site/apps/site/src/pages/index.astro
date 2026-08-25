@@ -18,11 +18,13 @@ import RecipeInstallFlow from '@/components/diagrams/RecipeInstallFlow.astro';
 import FolderContract from '@/components/diagrams/FolderContract.astro';
 import AiLoop from '@/components/diagrams/AiLoop.astro';
 
+import { LANDING_DESCRIPTION, LANDING_TITLE } from '@/site-meta.ts';
 import '@/styles/landing.css';
 
-const title = 'MechCrate — an AI-native meta-framework for service ecosystems';
-const description =
-  'mx runs a subset of your service ecosystem locally, routes every project through one Traefik instance, scaffolds services that carry their wisdom, and feeds agents a techniques corpus you host yourself.';
+// Shared with /llms.txt, which quotes the same two strings for the `/` bullet —
+// see src/site-meta.ts.
+const title = LANDING_TITLE;
+const description = LANDING_DESCRIPTION;
 
 const repo = 'https://github.com/Dev916/mech-crate';
 
