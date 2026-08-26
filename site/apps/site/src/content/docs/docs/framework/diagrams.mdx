@@ -1,0 +1,83 @@
+---
+title: Architecture diagrams
+description: The five diagrams that explain MechCrate — ecosystem topology, the folder contract, compose layering, the AI loop, and the recipe install flow.
+sidebar:
+  order: 10
+---
+
+import EcosystemTopology from '@/components/diagrams/EcosystemTopology.astro';
+import FolderContract from '@/components/diagrams/FolderContract.astro';
+import ComposeLayering from '@/components/diagrams/ComposeLayering.astro';
+import AiLoop from '@/components/diagrams/AiLoop.astro';
+import RecipeInstallFlow from '@/components/diagrams/RecipeInstallFlow.astro';
+
+Five pictures that between them explain what MechCrate is. Each one is embedded
+elsewhere in the docs next to the prose it belongs to; this page collects them so
+you can see the whole system at once.
+
+They are authored as Mermaid in
+[`src/components/diagrams/sources/`](https://github.com/Dev916/mech-crate/tree/main/site/apps/site/src/components/diagrams/sources)
+and rendered to static SVG ahead of the build, so there is no diagramming
+JavaScript on this page — the pictures are in the HTML, which is also what
+`llms-full.txt` and any scraper sees.
+
+## Ecosystem topology
+
+The problem MechCrate starts from: you need three services from one repo and one
+from another, not all fourteen. One Traefik router runs per workstation. Projects
+attach to the shared `devmesh-traefik` network and declare a `Host()` rule in
+their compose labels, so a service is reachable at a hostname the moment it is
+up — and costs nothing when it is not.
+
+<EcosystemTopology />
+
+## The folder contract
+
+Every mx project has the same shape. That is what lets `make dev` mean the same
+thing in a Rust API, an Astro site and a Laravel app: the verbs live in
+`make/*.mk` and `scripts/*.sh`, which mx owns and can upgrade, while `apps/` and
+`docker/system/` stay yours.
+
+<FolderContract />
+
+## Compose layering
+
+There is one compose file per service describing what it *is*, and a `.dev.yml`
+override describing what it needs while you are working on it — the source mount,
+the HMR port, a healthcheck with room to boot. `make dev` merges both; `make up`
+uses the baseline alone, which is the same file that ships.
+
+<ComposeLayering />
+
+## The AI loop
+
+The techniques corpus is a Postgres + pgvector store that agents query through
+the MCP server's `rag_context` tool. What fills it is a research pipeline that
+opens a pull request — so the corpus only ever learns things a human agreed to
+merge. The same markdown is published here under
+[Techniques Corpus](/docs/corpus/).
+
+<AiLoop />
+
+## Recipe install flow
+
+`mx add` is not a file copier. A recipe manifest declares options, placeholders,
+directories, an optional framework scaffold command and a set of templates; mx
+resolves them in order, lands the compose files, dockerfiles and env file, writes
+the Traefik labels for your domain, and hands you a `make dev` that works.
+
+<RecipeInstallFlow />
+
+## Editing a diagram
+
+The sources are Mermaid flowcharts. Change one, then re-render and commit both:
+
+```bash
+cd site/apps/site
+npm run diagrams          # renders light + dark SVG pairs
+npm test                  # fails if a source drifted from its rendering
+```
+
+Rendering needs a Chromium build (`npx playwright install chromium`); nothing
+else does. `astro build` only inlines the committed SVGs, so CI and the deploy
+never touch a browser.

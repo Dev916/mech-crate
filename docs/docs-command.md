@@ -1,3 +1,14 @@
+---
+title: "MechCrate Documentation Compiler"
+category: framework-guides
+complexity: beginner
+use_cases:
+  - "compiling Markdown to PDF or HTML with `mx docs`"
+  - "rendering Mermaid diagrams inside generated documents"
+  - "batch-compiling a folder of docs without system dependencies"
+summary: "`mx docs` — a portable Markdown to PDF/HTML compiler with automatic Mermaid rendering that works with Node.js alone."
+---
+
 # MechCrate Documentation Compiler
 
 ## Overview

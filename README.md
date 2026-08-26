@@ -14,6 +14,8 @@
   <img src="https://img.shields.io/badge/rust-stable-orange" alt="Rust">
 </p>
 
+<p align="center"><a href="https://mechcrate.dev">mechcrate.dev</a> — docs, techniques corpus, and llms-full.txt</p>
+
 ---
 
 Modern development has two audiences: the people on your team, and the AI agents working alongside them. Both suffer from the same disease — **every project is shaped differently**. Every repo has its own layout, its own env-var loading order, its own half-documented way to start the stack. Humans burn onboarding time relearning it; agents burn tokens re-exploring it, on every single session.
@@ -136,14 +138,14 @@ make dev                             # develop at http://api.localhost
 | Recipe | Status | What it carries |
 |--------|--------|-----------------|
 | `astro` | ✅ | Full-stack Astro 5 with Vue 3 islands, SSR, shadcn-vue, PrimeVue, global state, Cloudflare deployment |
-| `laravel` | ⚠️ | Laravel 12 + Octane (Swoole) with Filament admin & Inertia.js SSR frontend |
+| `laravel` | ✅ | Laravel 12 + Octane (Swoole) with Filament admin & Inertia.js SSR frontend |
 | `nuxt` | ✅ | Nuxt 3 SSR/SSG application with Nitro server, Tailwind CSS |
 | `rust-api` | ✅ | Rust API service with Actix-web, SQLx, and hexagonal architecture |
 | `rust-leptos` | ✅ | Leptos SSR + Actix-web with shadcn-ui, actor model, PostgreSQL, and Redis |
-| `rust-worker` | ⚠️ | High-performance job worker with Redis pub/sub, PostgreSQL, and local LLM evaluation |
-| `zola` | ⚠️ | Zola static site generator — single binary, no dependencies |
+| `rust-worker` | ✅ | High-performance job worker with Redis pub/sub, PostgreSQL, and local LLM evaluation |
+| `zola` | ✅ | Zola static site generator — single binary, no dependencies |
 
-⚠️ = `mx add` for these recipes currently fails on a known templating defect (the Tera renderer parses `{{ }}` in the recipe's own app sources) — tracked in the issue index with red tests pending; fix in progress.
+All seven recipes are apply-verified by the test suite (installer round-trip conformance tests).
 
 `mx recipes list` and `mx recipes info <name>` show what's installed; the [Recipe Authoring Guide](docs/development/RECIPE_AUTHORING_GUIDE.md) covers writing your own.
 

@@ -1,3 +1,14 @@
+---
+title: "MechCrate Router"
+category: framework-guides
+complexity: intermediate
+use_cases:
+  - "running several projects at once without port juggling"
+  - "routing services by hostname through a shared Traefik proxy"
+  - "connecting a compose service to the workstation router"
+summary: "The workstation-wide Traefik reverse proxy that gives every local service a hostname (api.localhost, docs.localhost) instead of a port."
+---
+
 # MechCrate Router
 
 The MechCrate Router is a workstation-wide Traefik reverse proxy that enables running multiple projects simultaneously with hostname-based routing. Instead of juggling ports (`localhost:3000`, `localhost:8080`), access all your services via clean hostnames like `api.localhost`, `admin.localhost`, and `docs.localhost`.

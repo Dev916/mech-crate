@@ -1,0 +1,26 @@
+---
+/**
+ * Starlight `<MarkdownContent>` override — the corpus page chrome.
+ *
+ * Overriding this component (rather than `<Banner>` or `<Footer>`) puts the
+ * banner and the provenance footer immediately around the rendered document,
+ * inside the content column, and leaves Starlight's own page furniture (title,
+ * edit link, prev/next) untouched. The default component is rendered rather
+ * than reimplemented, so its markdown styles stay Starlight's problem.
+ *
+ * Chrome is gated on `data.corpus`, which only the corpus loader sets, so
+ * authored pages under Start / Framework / AI Layer / Project and the generated
+ * corpus index pages render exactly as Starlight ships them.
+ */
+import Default from '@astrojs/starlight/components/MarkdownContent.astro';
+
+import CorpusBanner from './CorpusBanner.astro';
+import CorpusProvenance from './CorpusProvenance.astro';
+import { corpusMetaOf } from './corpus.ts';
+
+const corpus = corpusMetaOf(Astro.locals.starlightRoute.entry);
+---
+
+{corpus && <CorpusBanner corpus={corpus} />}
+<Default><slot /></Default>
+{corpus && <CorpusProvenance corpus={corpus} />}

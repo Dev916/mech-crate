@@ -9,6 +9,11 @@ use_cases:
   - "styling buttons and cards consistently"
   - "generating UI with Apple design tokens"
 summary: "A fast, copy-paste implementation guide with Apple-style CSS variables and component patterns for UI generation."
+# Held back from mechcrate.dev: derivative summary of Apple's Human Interface
+# Guidelines — little value beyond the original, and closest to republishing
+# someone else's content. Still ingested by `mx rag ingest` for agent retrieval.
+# See docs/superpowers/specs/2026-08-20-mechcrate-site-design.md → "Hold-backs".
+publish: false
 ---
 
 # 🍎 Apple Design Quick Implementation Guide for LLMs

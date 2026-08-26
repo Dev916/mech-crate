@@ -1,0 +1,50 @@
+# ========================================
+# site - Production Docker Compose
+# ========================================
+# Traefik routes to this service via devmesh-traefik network
+#
+# Deviation from the stock mx astro recipe: the recipe's compose `include:`s
+# db.yml + redis.yml and wires DATABASE_URL/REDIS_URL/depends_on. This site is a
+# static Starlight documentation build — no database, no cache — so those are
+# dropped. (Compose's `include:` has no `optional:` field, so the recipe's
+# `optional: true` is ignored and a missing db.yml is a hard error; see
+# docs/superpowers/specs for the dogfood note.)
+
+services:
+  # ------------------------------------------
+  # Astro SSR Application
+  # ------------------------------------------
+  site:
+    build:
+      context: ../../apps/site
+      dockerfile: ../../docker/dockerfiles/site/app
+      target: runner
+    container_name: site
+    restart: unless-stopped
+    env_file:
+      - ../.config/.env.secrets
+      - ../.config/.env.shared
+      - ../.config/.env.site
+    environment:
+      - NODE_ENV=production
+      - PORT=4321
+      - APP_URL=https://mechcrate.localhost
+    networks:
+      - default
+      - devmesh-traefik
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4321/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.site.rule=Host(`mechcrate.localhost`)
+      - traefik.http.routers.site.entrypoints=web
+      - traefik.http.services.site.loadbalancer.server.port=4321
+      - traefik.docker.network=devmesh-traefik
+
+networks:
+  devmesh-traefik:
+    external: true

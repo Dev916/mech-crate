@@ -1,0 +1,22 @@
+---
+/**
+ * Agent to MCP to rag_context to corpus, and the PR-gated pipeline that fills it.
+ *
+ * A named handle on `./sources/ai-loop.mmd` so pages can embed it without
+ * remembering the slug. All the behaviour lives in `./Diagram.astro`.
+ *
+ *   import AiLoop from '@/components/diagrams/AiLoop.astro';
+ *   <AiLoop />
+ */
+import Diagram from './Diagram.astro';
+
+interface Props {
+  /** Override the registry caption, or pass `false` to render none. */
+  caption?: string | false;
+  class?: string;
+}
+
+const { caption, class: className } = Astro.props;
+---
+
+<Diagram name="ai-loop" caption={caption} class={className} />

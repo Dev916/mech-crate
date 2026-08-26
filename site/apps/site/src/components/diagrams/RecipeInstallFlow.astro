@@ -1,0 +1,22 @@
+---
+/**
+ * What `mx add --recipe` does, from manifest to `make dev`.
+ *
+ * A named handle on `./sources/recipe-install-flow.mmd` so pages can embed it without
+ * remembering the slug. All the behaviour lives in `./Diagram.astro`.
+ *
+ *   import RecipeInstallFlow from '@/components/diagrams/RecipeInstallFlow.astro';
+ *   <RecipeInstallFlow />
+ */
+import Diagram from './Diagram.astro';
+
+interface Props {
+  /** Override the registry caption, or pass `false` to render none. */
+  caption?: string | false;
+  class?: string;
+}
+
+const { caption, class: className } = Astro.props;
+---
+
+<Diagram name="recipe-install-flow" caption={caption} class={className} />
