@@ -1,0 +1,40 @@
+---
+title: AI Layer
+description: The mx AI layer — one MCP server that understands any mx project, a techniques corpus stored in a Postgres you control, and a PR-gated research pipeline that fills it.
+sidebar:
+  order: 1
+---
+
+import AiLoop from '@/components/diagrams/AiLoop.astro';
+
+Most "AI-native" tooling means a hosted assistant. Here it means something
+narrower and more checkable: an agent gets **tools that operate your ecosystem**
+and **retrieval over engineering documents you wrote**, through one server you
+run yourself.
+
+<AiLoop />
+
+Three moving parts, and they only connect in one direction: the research
+pipeline opens a pull request, a human merges it, `mx rag ingest` picks up the
+delta, and agents retrieve it. Nothing writes to the corpus without a merge.
+
+| Page | What it covers |
+|---|---|
+| [MCP server](/docs/ai/mcp-server/) | The 47 tools, grouped into four families; building the server and wiring a client |
+| [Techniques corpus &amp; RAG](/docs/ai/rag-setup/) | `rag.toml`, Neon or a local pgvector container, embeddings, and where your text actually goes |
+| [Research pipeline](/docs/ai/research-pipeline/) | How the corpus grows: weekly run, primary-source corroboration, PR gate, human merge |
+| [Agent execution rules](/docs/ai/agent-rules/) | The rules agents in this repository work under |
+
+The documents themselves are published under
+[Techniques Corpus](/docs/corpus/) — the same markdown that gets chunked,
+embedded and served to agents, rendered for humans.
+
+## What it is not
+
+- **Not a hosted service.** There is no MechCrate API. The MCP server is a local
+  binary; the corpus is a Postgres connection string you own.
+- **Not a model.** mx never runs inference. Your agent supplies the model; mx
+  supplies tools and retrieved text.
+- **Not magic retrieval.** The corpus is 66 documents that a human merged. It
+  answers well inside that surface and returns weak hits outside it — which is
+  what `mx rag gaps` exists to surface.

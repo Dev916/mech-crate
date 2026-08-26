@@ -1,0 +1,50 @@
+%% The AI loop — how a technique reaches an agent, and how the corpus grows.
+%% Grounded in crates/mx-mcp-server/src/tools (rag_context), crates/mx-lib/src/
+%% corpus (embed + store), docs/development/*.md and the technique-research
+%% skill's PR-gated workflow.
+%% Laid out top-to-bottom with each phase as a left-to-right band: the two bands
+%% are each about four nodes wide, which keeps the whole picture close to a
+%% readable 4:3 instead of one very long strip.
+flowchart TB
+    accTitle: The MechCrate AI loop
+    accDescr: A coding agent calls the mx MCP server, whose rag_context tool embeds the query and searches a pgvector store hosted on Neon or a local Postgres. The store is filled by mx rag ingest from the sixty-seven markdown docs under docs/development. Those docs are written and revised by a weekly research pipeline that opens a pull request; a human reviews and merges it, and only merged docs are ingested. The same docs are published to this site.
+
+    subgraph retrieve["retrieval — every agent turn"]
+        direction LR
+        agent["Coding agent<br/><small>any MCP client</small>"]
+        mcp["mx MCP server<br/><small>mx_· make_· project_· rag_</small>"]
+        tool["rag_context<br/><small>embed query → top-k</small>"]
+
+        agent -->|tool call| mcp --> tool
+    end
+
+    store[("techniques corpus<br/><small>Postgres + pgvector · Neon or local</small>")]
+
+    docs[/"docs/development/*.md<br/><small>67 frontmatter-typed docs</small>"/]
+
+    subgraph grow["growth — weekly, and PR-gated"]
+        direction LR
+        sched["Weekly run<br/><small>or /technique-research</small>"]
+        research["Research pass<br/><small>coverage → sources → draft</small>"]
+        pr["Pull request<br/><small>branch research/{slug}</small>"]
+        human{{"Human review"}}
+
+        sched --> research --> pr --> human
+        human -.->|rejected| research
+    end
+
+    tool -->|vector search| store
+    store -.->|ranked passages| agent
+    human ==>|merged| docs
+    docs -->|mx rag ingest| store
+    docs -->|corpus loader| site["mechcrate.dev/docs/corpus<br/><small>the same docs, for humans</small>"]
+
+    classDef agentNode fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b;
+    classDef data fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    classDef pipeline fill:#fef9c3,stroke:#ca8a04,color:#422006;
+    classDef gate fill:#fee2e2,stroke:#dc2626,color:#450a0a;
+
+    class agent,mcp,tool agentNode;
+    class store,docs,site data;
+    class sched,research,pr pipeline;
+    class human gate;

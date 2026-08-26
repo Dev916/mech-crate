@@ -1,3 +1,11 @@
+---
+# Held back from mechcrate.dev: this is a generated index and the site builds its
+# own navigation from frontmatter `category`. See
+# docs/superpowers/specs/2026-08-20-mechcrate-site-design.md → "Hold-backs".
+# `mx rag ingest` skips INDEX.md by filename, so this does not affect the corpus.
+publish: false
+---
+
 # Codex Index: Advanced Programming Theory & Patterns
 
 **Version**: 1.0

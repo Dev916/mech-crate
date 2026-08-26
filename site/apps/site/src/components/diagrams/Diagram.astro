@@ -1,0 +1,165 @@
+---
+/**
+ * Inlines one pre-rendered Mermaid diagram.
+ *
+ * Embeddable anywhere — a Starlight `.mdx` page, the custom landing `.astro`
+ * page, another component. That portability is the reason the SVGs are
+ * pre-rendered by `scripts/render-diagrams.mjs` and committed rather than
+ * produced by a remark/rehype plugin during the build: a rehype plugin only ever
+ * fires inside markdown, and the landing page is not markdown. The full
+ * rationale (and the two options that were rejected) is at the top of that script.
+ *
+ * Both a light and a dark rendering are inlined; CSS reveals the one that
+ * matches Starlight's `data-theme`, falling back to `prefers-color-scheme` on
+ * pages outside Starlight. No client JavaScript is involved, so the diagram is
+ * in the HTML for readers, for scrapers and for `llms-full.txt`.
+ *
+ * Usage:
+ *   import Diagram from '@/components/diagrams/Diagram.astro';
+ *   <Diagram name="ai-loop" />
+ *   <Diagram name="ai-loop" caption={false} />   // suppress the figcaption
+ */
+import { DIAGRAMS, type DiagramName } from './registry.ts';
+
+interface Props {
+  name: DiagramName;
+  /** Override the registry caption, or pass `false` to render none. */
+  caption?: string | false;
+  class?: string;
+}
+
+const { name, caption, class: className } = Astro.props;
+
+const meta = DIAGRAMS[name];
+if (!meta) {
+  throw new Error(
+    `<Diagram name="${name}"> — unknown diagram. Known: ${Object.keys(DIAGRAMS).join(', ')}`,
+  );
+}
+
+// Eager raw glob: Vite inlines the SVG text at build time, so nothing is fetched
+// at runtime and a missing rendering is a build error rather than a broken page.
+const svgs = import.meta.glob<string>('./rendered/*.svg', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+function svgFor(variant: 'light' | 'dark'): string {
+  const key = `./rendered/${name}.${variant}.svg`;
+  const svg = svgs[key];
+  if (!svg) {
+    throw new Error(
+      `<Diagram name="${name}"> — missing ${key}. Run \`npm run diagrams\`.`,
+    );
+  }
+  return svg;
+}
+
+const light = svgFor('light');
+const dark = svgFor('dark');
+const text = caption === undefined ? meta.caption : caption;
+
+/**
+ * The diagram's natural width in CSS pixels, taken from the `viewBox` the
+ * renderer left behind. Published as a custom property so the stylesheet can
+ * size the SVG against it — see the `clamp()` below for why that matters.
+ */
+function naturalWidth(svg: string): number {
+  const viewBox = svg.match(/\sviewBox="([\d.\s-]+)"/)?.[1];
+  const width = Number(viewBox?.trim().split(/\s+/)[2]);
+  return Number.isFinite(width) ? Math.round(width) : 0;
+}
+
+const width = naturalWidth(light);
+---
+
+<figure
+  class:list={['diagram', className]}
+  id={`diagram-${name}`}
+  data-diagram={name}
+  aria-label={meta.title}
+  style={width ? `--diagram-width: ${width}px` : undefined}
+>
+  <div class="diagram__frame">
+    <div class="diagram__svg diagram__svg--light" set:html={light} />
+    <div class="diagram__svg diagram__svg--dark" set:html={dark} />
+  </div>
+  {text && <figcaption class="diagram__caption">{text}</figcaption>}
+</figure>
+
+<style is:global>
+  .diagram {
+    margin: 1.5rem 0;
+  }
+
+  .diagram__frame {
+    /* Wide diagrams scroll inside their own box; the article never scrolls
+       sideways. */
+    overflow-x: auto;
+    padding: 0.75rem;
+    border: 1px solid var(--sl-color-gray-5, #cbd5e1);
+    border-radius: 0.5rem;
+    background-color: var(--sl-color-bg, transparent);
+  }
+
+  .diagram__svg svg {
+    display: block;
+    height: auto;
+    margin-inline: auto;
+    /*
+     * Sizing rule, in one line: fill the column, never upscale past the
+     * diagram's natural size, never shrink below 70% of it.
+     *
+     * `max-width: 100%` alone is wrong here — a 1400px-wide flowchart squeezed
+     * into a 600px article column renders its labels at ~6px and the picture
+     * becomes decoration. The clamp lets a diagram shrink a little to fit, and
+     * once it would have to shrink further it stops and the frame's
+     * `overflow-x` takes over, so the reader scrolls a legible diagram instead
+     * of squinting at an illegible one.
+     */
+    width: clamp(
+      calc(var(--diagram-width, 100%) * 0.7),
+      100%,
+      var(--diagram-width, 100%)
+    );
+    /* Starlight caps content media at `max-width: 100%`, which would silently
+       undo the clamp above — the diagram would still be squeezed to the column.
+       The clamp's own upper bound is the natural width, so nothing is upscaled
+       by lifting this. */
+    max-width: none;
+  }
+
+  .diagram__caption {
+    margin-top: 0.6rem;
+    font-size: var(--sl-text-xs, 0.8125rem);
+    line-height: 1.5;
+    color: var(--sl-color-gray-3, #64748b);
+    text-align: start;
+  }
+
+  /* Light is the default; an explicit dark theme flips the pair. */
+  .diagram__svg--dark {
+    display: none;
+  }
+
+  :root[data-theme='dark'] .diagram__svg--light {
+    display: none;
+  }
+
+  :root[data-theme='dark'] .diagram__svg--dark {
+    display: block;
+  }
+
+  /* Outside Starlight (the landing page) there is no `data-theme`, so honour the
+     OS preference — but never override an explicitly chosen light theme. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .diagram__svg--light {
+      display: none;
+    }
+
+    :root:not([data-theme='light']) .diagram__svg--dark {
+      display: block;
+    }
+  }
+</style>

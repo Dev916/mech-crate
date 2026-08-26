@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="MechCrate">
+  <title>MechCrate</title>
+  <!--
+    The crate the raccoon carries, reduced to a mark that survives 16px.
+
+    Deliberately not the full mascot: at favicon size the raccoon is mud. The
+    crate's amber body plus three dark planks is the one shape from
+    assets/mechcrate-logo.png that stays readable in a tab strip, and the solid
+    amber field keeps it visible against both light and dark browser chrome.
+  -->
+  <defs>
+    <linearGradient id="crate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F5CE5A" />
+      <stop offset="1" stop-color="#C98A0C" />
+    </linearGradient>
+  </defs>
+
+  <rect x="1" y="1" width="30" height="30" rx="6.5" fill="url(#crate)" />
+
+  <!--
+    Two rails and a cross-brace. A *single* diagonal reads as the letter Z at
+    32px and hijacks the wordmark, so the brace is crossed: unmistakably a
+    packing crate, no letterform to misread.
+  -->
+  <g stroke="#23201B" stroke-width="2.6" stroke-linecap="round" fill="none">
+    <path d="M6 9.5h20" />
+    <path d="M6 22.5h20" />
+    <path d="M8.5 11 23.5 21" />
+    <path d="M23.5 11 8.5 21" />
+  </g>
+
+  <rect
+    x="1.75"
+    y="1.75"
+    width="28.5"
+    height="28.5"
+    rx="5.75"
+    fill="none"
+    stroke="#23201B"
+    stroke-width="2.5"
+  />
+</svg>

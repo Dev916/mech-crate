@@ -1,0 +1,26 @@
+{
+  "name": "site",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev --host --port 4321",
+    "build": "astro build",
+    "preview": "astro preview --host --port 4321",
+    "astro": "astro",
+    "diagrams": "node scripts/render-diagrams.mjs",
+    "diagrams:check": "node scripts/render-diagrams.mjs --check",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.37.7",
+    "astro": "^5.5.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "mermaid-isomorphic": "^3.1.0",
+    "playwright": "^1.62.1",
+    "vitest": "^3.2.7"
+  }
+}

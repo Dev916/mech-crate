@@ -1,0 +1,107 @@
+---
+/**
+ * The known-broken lane, rendered from `tests/KNOWN_BROKEN.md` at build time.
+ *
+ * Nothing about the table is authored here — the repository's lane index is the
+ * source of truth and this reads it during `astro build`. A row disappears from
+ * this page when the fix lands and the row leaves the index, which is exactly
+ * the property a hand-copied table cannot have. If the file is missing or its
+ * `## Mapping` table has moved, `loadKnownBrokenLane` throws and the build
+ * stops (see src/loaders/known-broken.ts).
+ */
+import { loadKnownBrokenLane } from '@/loaders/known-broken.ts';
+import { renderInline, KNOWN_BROKEN_PATH } from '@/loaders/lib/known-broken.ts';
+import { GITHUB_BLOB_BASE } from '@/loaders/lib/links.ts';
+
+const lane = loadKnownBrokenLane();
+const indexUrl = `${GITHUB_BLOB_BASE}${KNOWN_BROKEN_PATH}`;
+
+const rows = lane.rows.map((row) => ({
+  ...row,
+  testHtml: renderInline(row.test),
+  assertsHtml: renderInline(row.asserts),
+  whereUrl: `${GITHUB_BLOB_BASE}${row.where}`,
+}));
+---
+
+<div class="lane">
+  <p class="lane__count">
+    <strong>{rows.length}</strong>
+    {rows.length === 1 ? 'open defect' : 'open defects'}, each with a red test asserting its fixed
+    behaviour. Read live from <a href={indexUrl}><code>{KNOWN_BROKEN_PATH}</code></a> when this page
+    was built.
+  </p>
+
+  <div class="lane__scroll">
+    <table class="lane__table">
+      <thead>
+        <tr>
+          <th scope="col">bd id</th>
+          <th scope="col">Test</th>
+          <th scope="col">Where</th>
+          <th scope="col">Asserts once fixed</th>
+          <th scope="col">Tier</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((row) => (
+            <tr>
+              <td>
+                <code>{row.bdId}</code>
+              </td>
+              <td set:html={row.testHtml} />
+              <td>
+                <a href={row.whereUrl}>
+                  <code>{row.where}</code>
+                </a>
+              </td>
+              <td set:html={row.assertsHtml} />
+              <td>{row.tier}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+
+  {
+    lane.scoreboard && (
+      <p class="lane__scoreboard">
+        Last recorded <code>make test-known-broken</code> scoreboard: {lane.scoreboard.run} tests
+        run, {lane.scoreboard.passed} passed, {lane.scoreboard.failed} failed,{' '}
+        {lane.scoreboard.skipped} skipped.
+      </p>
+    )
+  }
+</div>
+
+<style>
+  .lane__count {
+    margin-bottom: 1rem;
+  }
+
+  .lane__scroll {
+    overflow-x: auto;
+  }
+
+  .lane__table {
+    width: 100%;
+    font-size: var(--sl-text-sm);
+  }
+
+  .lane__table th,
+  .lane__table td {
+    vertical-align: top;
+  }
+
+  .lane__table code {
+    overflow-wrap: anywhere;
+  }
+
+  .lane__scoreboard {
+    margin-top: 1rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+</style>

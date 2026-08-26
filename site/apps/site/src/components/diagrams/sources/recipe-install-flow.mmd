@@ -1,0 +1,45 @@
+%% Recipe install flow — what `mx add` actually does, read off
+%% templates/recipes/astro/recipe.json (options, placeholders, init_app,
+%% directories, templates, next_steps).
+%% The `~~~` links inside the "files landed" group are invisible: they exist only
+%% to force those four nodes onto one row, which keeps the diagram from turning
+%% into a 2000px-tall column.
+flowchart TB
+    accTitle: Recipe install flow
+    accDescr: Running mx add site with the astro recipe loads that recipe's manifest, resolves its options and expands its placeholders, optionally runs the recipe's init command to scaffold the framework app and create the declared directories, renders the template files into the project as the app source, the compose baseline and dev override, the dockerfiles and the service env file, writes Traefik routing labels for the chosen domain, and prints next steps ending in make dev, which brings the service up behind the router.
+
+    cmd["<b>mx add site --recipe astro --domain mechcrate.localhost</b>"]
+
+    manifest[/"<b>templates/recipes/astro/recipe.json</b><br/><small>options · placeholders · init_app · directories · templates</small>"/]
+
+    resolve["<b>resolve + expand</b><br/><small>flags beat manifest defaults<br/>SERVICE_NAME=site · DOMAIN=mechcrate.localhost</small>"]
+
+    scaffold["<b>scaffold</b><br/><small>init_app (skip_if_exists) · create declared directories</small>"]
+
+    subgraph landed["<b>files landed</b>"]
+        direction LR
+        f1["apps/site/**<br/><small>app source<br/>+ health route</small>"]
+        f2["docker/compose/<br/><small>site.yml<br/>site.dev.yml</small>"]
+        f3["docker/dockerfiles/site/<br/><small>app<br/>app.prod</small>"]
+        f4["docker/.config/<br/><small>.env.site</small>"]
+
+        f1 ~~~ f2 ~~~ f3 ~~~ f4
+    end
+
+    labels["<b>router labels written</b><br/><small>traefik.enable · Host(mechcrate.localhost) → 4321 · devmesh-traefik</small>"]
+
+    dev["<b>make dev s=site</b><br/><small>baseline + dev override, up</small>"]
+
+    live(["<b>http://mechcrate.localhost</b>"])
+
+    cmd --> manifest --> resolve --> scaffold --> landed --> labels --> dev --> live
+
+    classDef cmdNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#1e1b4b;
+    classDef step fill:#f8fafc,stroke:#64748b,color:#0f172a;
+    classDef file fill:#fef9c3,stroke:#ca8a04,color:#422006;
+    classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d;
+
+    class cmd,dev cmdNode;
+    class resolve,scaffold step;
+    class manifest,f1,f2,f3,f4 file;
+    class labels,live done;

@@ -1,0 +1,63 @@
+// Cloudflare deploy config for mechcrate.dev.
+//
+// ---------------------------------------------------------------------------
+// WHY WORKERS STATIC ASSETS (and not the astro recipe's container path)
+// ---------------------------------------------------------------------------
+// `templates/recipes/astro` is the *full-stack* recipe — Astro 5 SSR + Vue
+// islands + Drizzle, deployed as a Docker image to Cloudflare Containers
+// (see the recipe's `docker/dockerfiles/app.prod.Dockerfile`). This site is not
+// that: `astro build` emits a fully static bundle (110 prerendered pages, zero
+// server routes — see astro.config.mjs), so a container would be a running
+// process whose only job is `sendfile`.
+//
+// So we take Cloudflare's current recommendation for a static bundle: a
+// Workers **static assets** deployment. There is no `main` worker script here —
+// an assets-only Worker serves `./dist` straight off Cloudflare's edge. This is
+// also the successor to Cloudflare Pages for new projects, which is why we did
+// not reach for `wrangler pages deploy`.
+//
+// ---------------------------------------------------------------------------
+// CONTENT TYPES  (/llms.txt and /llms-full.txt)
+// ---------------------------------------------------------------------------
+// Cloudflare's static-asset server derives `Content-Type` from the file
+// extension, so `.txt` is served as `text/plain; charset=utf-8` and renders in
+// the browser rather than downloading. No `_headers` file is needed — that is a
+// Pages mechanism, and it is precisely one of the reasons this is not Pages.
+// `.github/workflows/site.yml` re-asserts this against a local workerd via
+// `wrangler dev` before anything is deployed.
+//
+// ---------------------------------------------------------------------------
+// PREREQUISITES (nothing below works until these exist — see the workflow header)
+// ---------------------------------------------------------------------------
+//   1. mechcrate.dev registered and added as a zone in the Cloudflare account.
+//   2. A Cloudflare API token with Workers Scripts:Edit + Workers Routes:Edit.
+//   3. Repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
+// Until then `site.yml`'s deploy job skips cleanly; it never hard-fails.
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "mechcrate-site",
+  "compatibility_date": "2026-08-01",
+
+  "assets": {
+    // Relative to this file (site/apps/site), i.e. the `astro build` output.
+    "directory": "./dist",
+    // Astro emits directory-style routes (`/docs/start/index.html`), so a
+    // request for `/docs/start` must resolve to `/docs/start/`.
+    "html_handling": "auto-trailing-slash",
+    // Serve Astro's own `dist/404.html` (with site chrome) for unknown paths
+    // instead of Cloudflare's bare 404.
+    "not_found_handling": "404-page"
+  },
+
+  // Attaching the apex domain on deploy keeps the hostname declarative rather
+  // than a dashboard click nobody remembers. Requires prerequisite (1) above:
+  // if the zone is not in the account yet, `wrangler deploy` fails loudly with
+  // "Could not find zone for mechcrate.dev" — which is the correct signal, not
+  // a silent half-deploy.
+  "routes": [
+    {
+      "pattern": "mechcrate.dev",
+      "custom_domain": true
+    }
+  ]
+}

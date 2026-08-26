@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{Error, Result};
-use crate::template::TemplateEngine;
+use crate::template::{expand_placeholders, TemplateEngine};
 
 use super::{FileMapping, PostInstall, Recipe};
 
@@ -16,8 +16,6 @@ use super::{FileMapping, PostInstall, Recipe};
 pub struct RecipeInstaller {
     /// Templates root directory
     templates_root: PathBuf,
-    /// Template engine for interpolation
-    engine: TemplateEngine,
 }
 
 impl RecipeInstaller {
@@ -25,7 +23,6 @@ impl RecipeInstaller {
     pub fn new(templates_root: impl AsRef<Path>) -> Result<Self> {
         Ok(Self {
             templates_root: templates_root.as_ref().to_path_buf(),
-            engine: TemplateEngine::new()?,
         })
     }
 
@@ -122,9 +119,15 @@ impl RecipeInstaller {
         Ok(result)
     }
 
-    /// Interpolate template variables
+    /// Substitute the recipe's placeholders in `template`.
+    ///
+    /// This is deliberately *not* a template rendering pass. Recipe payloads
+    /// include app sources (Blade views, Vue SFCs, Zola themes) whose `{{ }}`
+    /// and `{% %}` belong to another renderer; a general engine consumed them
+    /// and `mx add` failed outright. Only known `{{PLACEHOLDER}}` tokens are
+    /// replaced — see [`expand_placeholders`].
     fn interpolate(&mut self, template: &str, vars: &HashMap<String, String>) -> Result<String> {
-        self.engine.render_string(template, vars)
+        Ok(expand_placeholders(template, vars))
     }
 
     /// Run the init_app command
