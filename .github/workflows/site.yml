@@ -26,7 +26,8 @@
 #        - Zone    | Zone            | Read      (resolve the zone id)
 #      scoped to the mech-crate account and the mechcrate.dev zone.
 #   4. Add two repository secrets (Settings -> Secrets and variables -> Actions):
-#        - CLOUDFLARE_API_TOKEN   = the token from step 3
+#        - CLOUDFLARE_API_KEY     = the token from step 3 (org-secret name;
+#                                   exported to wrangler as CLOUDFLARE_API_TOKEN)
 #        - CLOUDFLARE_ACCOUNT_ID  = Cloudflare dashboard -> Workers & Pages ->
 #                                   right sidebar "Account ID"
 #
@@ -226,7 +227,7 @@ jobs:
       - name: Check Cloudflare credentials
         id: cf
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -234,7 +235,7 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Cloudflare deploy skipped::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set. The site built and passed its gates; see the HANDOFF block in .github/workflows/site.yml to wire up deployment."
+            echo "::notice title=Cloudflare deploy skipped::CLOUDFLARE_API_KEY / CLOUDFLARE_ACCOUNT_ID secrets are not set. The site built and passed its gates; see the HANDOFF block in .github/workflows/site.yml to wire up deployment."
           fi
 
       - name: Download dist
@@ -247,7 +248,7 @@ jobs:
       - name: Deploy to Cloudflare
         if: steps.cf.outputs.ready == 'true'
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy
 
@@ -284,7 +285,7 @@ jobs:
       - name: Check Cloudflare credentials
         id: cf
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -292,7 +293,7 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Preview deploy skipped::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set (expected on fork PRs, and on every PR until the HANDOFF in .github/workflows/site.yml is done)."
+            echo "::notice title=Preview deploy skipped::CLOUDFLARE_API_KEY / CLOUDFLARE_ACCOUNT_ID secrets are not set (expected on fork PRs, and on every PR until the HANDOFF in .github/workflows/site.yml is done)."
           fi
 
       - name: Download dist
@@ -309,7 +310,7 @@ jobs:
         id: preview
         if: steps.cf.outputs.ready == 'true'
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
