@@ -6,7 +6,7 @@
 
 Teach the techniques corpus — mech-crate `docs/development`, ingested by `mx rag ingest` into pgvector on Neon and queried by every agent in every project through `mcp__mx__rag_context` — everything about **our own repositories**: what each one does and is capable of, how it was built, in what language and stack, how to build/run/test it, and how it relates to the others. After this lands an agent can ask "what does hq do", "how do I run pongballz", or "which repo handles meeting capture" and get a sourced answer instead of grepping the filesystem.
 
-Scope: **36 repositories → 37 profile docs** (gnn gets a monorepo overview plus a Nexus City app profile) **+ 1 cross-repo map**, all under `docs/development/repos/`.
+Scope: **35 repositories → 36 profile docs** (gnn gets a monorepo overview plus a Nexus City app profile) **+ 1 cross-repo map**, all under `docs/development/repos/`.
 
 **Non-goals.** Publishing profiles on mechcrate.dev (they stay internal by default — §3 D3). Modifying any target repository. Re-documenting mx techniques the corpus already holds (the mech-crate profile links to them). Building a new retrieval mode — profiles must retrieve through the existing tools.
 
@@ -19,7 +19,7 @@ Scope: **36 repositories → 37 profile docs** (gnn gets a monorepo overview plu
 | Chunker splits on `##`, packs paragraphs to 1,200 chars, prefixes every chunk with `Doc Title > Heading` | `corpus/chunk.rs` | a fixed `##` section set makes every chunk self-identifying ("hq: … (Repo Profile) > Capabilities") |
 | Store keeps `category` per chunk and filters `c.category = $n`; the MCP tools only *describe* categories in prose, they do not validate them | `corpus/store.rs`, `crates/mx-mcp-server/src/tools/mod.rs:923,961,971` | a new `repos` category needs prose updates only |
 | The mechcrate.dev loader reads **only files directly in** `docs/development` (`readdirSync` + `isFile`) and respects `publish: false` | `site/apps/site/src/loaders/lib/sources.ts`, `lib/pipeline.ts` | a subdirectory is outside the publish scope — we make that an explicit contract (§3 D3) |
-| Corpus today: 66 docs, 2,148 chunks, 14 categories; `mx rag status` healthy on Neon | `mx rag status` 2026-09-01 | ~37 profiles ≈ +900 chunks — retrieval pollution must be measured (§8) |
+| Corpus today: 66 docs, 2,148 chunks, 14 categories; `mx rag status` healthy on Neon | `mx rag status` 2026-09-01 | ~36 profiles ≈ +900 chunks — retrieval pollution must be measured (§8) |
 | The MCP server currently searches **lexical-only** ("no embedding key configured") because `.mcp.json` passes no key and `config.rs:87` only reads env / `rag.toml` | `mcp__mx__rag_search` output; `corpus/config.rs` | framework task F4 fixes this before the first wave gate |
 | hq already holds a project registry (14 projects × 7 clients) and `hq_projects` exposes it | `mcp__hq__hq_projects` | the ownership axis for the cross-repo map |
 | The corpus knows nothing about hq, a2a, meetnotes, cupcake, … today; it knows mx well (5 docs) and forst via `tries-and-radix-dispatch.md` | `rag_search` probes | verdict NEW for 35 repos; mech-crate is an umbrella/IMPROVE |
@@ -220,7 +220,7 @@ Resolved on 2026-09-01 from local checkouts (`git remote`, `git log`, file count
 | 35 | `pongballz` — pongballz | `nyvorin/pongballz` (private) | `~/dev/dev916/pongballz` | JavaScript, Rust | maintained · 2026-07-19 | 5 |
 | 36 | `mr-robot` — mr-robot (trade-bot-v2) | `Dev916/mr-robot` (private) | `~/dev/dev916/mr-robot` | TypeScript | dormant · 2025-09-25 | 5 |
 
-Interpretation notes: **mech-crate and `mx`** are one repository, one profile (the profile covers the research subsystem — RESEARCH_BACKLOG/LOG, technique-research, weekly cron — explicitly). **claude-skills** is `~/.claude/skills` (nyvorin/claude-skills), not revenium/test-bench/claude-skills (a client repo that moved into the revenium plugin). **.codex** is `~/.codex` (nyvorin/.codex) and **codex-skills** is the repo nested at `~/.codex/skills`. **nexus-tokyo** lives locally as `~/dev/dev916/gnn2`; **devmesh-traefik** as `~/dev/dev916/stack`. **nexus-client** is public and also embedded in gnn.
+Interpretation notes: the list names 36 items but **mech-crate and `mx`** are one repository, one profile — 35 repos, 36 profile docs (the profile covers the research subsystem — RESEARCH_BACKLOG/LOG, technique-research, weekly cron — explicitly). **claude-skills** is `~/.claude/skills` (nyvorin/claude-skills), not revenium/test-bench/claude-skills (a client repo that moved into the revenium plugin). **.codex** is `~/.codex` (nyvorin/.codex) and **codex-skills** is the repo nested at `~/.codex/skills`. **nexus-tokyo** lives locally as `~/dev/dev916/gnn2`; **devmesh-traefik** as `~/dev/dev916/stack`. **nexus-client** is public and also embedded in gnn.
 
 ## 8. Risks and mitigations
 
@@ -235,7 +235,7 @@ Interpretation notes: **mech-crate and `mx`** are one repository, one profile (t
 
 ## 9. Open decisions (defaults chosen; override any)
 
-1. **Publish public repos' profiles on mechcrate.dev?** Default **no** for all 37; revisit per repo after wave 5.
+1. **Publish public repos' profiles on mechcrate.dev?** Default **no** for all 36; revisit per repo after wave 5.
 2. **One PR per wave vs per profile?** Default **per wave** (5–10 one-file diffs per review). Per profile is a one-line change to the gate task.
 3. **Claude subagents vs a2a Codex workers?** Default **Claude subagents for wave 1**, reassess after.
 4. **Where to clone the 4 missing repos?** Default `~/dev/dev916/<name>` (F3).
@@ -243,4 +243,4 @@ Interpretation notes: **mech-crate and `mx`** are one repository, one profile (t
 
 ## 10. Tracking
 
-Beads epic in mech-crate (`bd list --parent <epic-id>`): 1 epic · 4 framework tasks (F1–F4) · 37 profile tasks (labels `profile`, `wave-1…5`) · 5 wave gates (`gate`) · `repo-map.md` · wrap-up · refresh policy = 50 issues. Dependencies: every profile ← F1 (and ← F3 for the four clones); every gate ← its wave's profiles + F2 + F4; repo-map ← all gates; wrap-up ← repo-map; refresh ← wrap-up. Epic id: `mech-crate-965` (children are hierarchical: `mech-crate-965.1`–`.4` framework, `.5`–`.40` profiles, `.41`–`.45` gates, `.46` repo-map, `.47` wrap-up, `.48` refresh).
+Beads epic in mech-crate (`bd list --parent <epic-id>`): 1 epic · 4 framework tasks (F1–F4) · 36 profile tasks (labels `profile`, `wave-1…5`) · 5 wave gates (`gate`) · `repo-map.md` · wrap-up · refresh policy = 49 issues. Dependencies: every profile ← F1 (and ← F3 for the four clones); every gate ← its wave's profiles + F2 + F4; repo-map ← all gates; wrap-up ← repo-map; refresh ← wrap-up. Epic id: `mech-crate-965` (children are hierarchical: `.1`–`.4` framework, `.5`–`.40` the 36 profiles, `.41`–`.45` gates, `.46` repo-map, `.47` wrap-up, `.48` refresh).
