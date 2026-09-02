@@ -114,7 +114,7 @@ def main() -> int:
         docs_dir = path.parent.parent  # …/docs/development
         repo_root = docs_dir.parent.parent
         mx = repo_root / "bin" / "mx"
-        cmd = [str(mx) if mx.exists() else "mx", "rag", "ingest", str(docs_dir), "--dry-run"]
+        cmd = [str(mx) if mx.exists() else "mx", "rag", "ingest", "--path", str(docs_dir), "--dry-run"]
         r = subprocess.run(cmd, capture_output=True, text=True)
         m = re.search(r"Dry run: (\d+) docs, (\d+) chunks, (\d+) warnings", r.stdout + r.stderr)
         check(m is not None and m.group(3) == "0",
