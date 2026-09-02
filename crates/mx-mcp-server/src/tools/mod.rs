@@ -26,7 +26,7 @@ fn format_hits(header: &str, hits: &[TechHit], mode: SearchMode) -> String {
     let mut out = format!("{header}\n");
     if matches!(mode, SearchMode::TrigramOnly) {
         out.push_str(
-            "\n> Note: lexical-only search (no embedding key configured); results may be weaker.\n",
+            "\n> Note: lexical-only search (embedding unavailable: missing key, exhausted provider credits, or provider error — `mx rag status` shows the key state); results may be weaker.\n",
         );
     }
     let mut by_doc: Vec<(&str, Vec<&TechHit>)> = Vec::new();
@@ -903,6 +903,9 @@ architecture, concurrency, API design, databases, Docker, FSM/FRP, and more,
 drawn from mech-crate docs/development). Describe the task in 1-2 sentences
 and get back the most relevant technique chunks, grouped by source document.
 
+The `repos` category holds profiles of our own repositories — ask things like
+working_on: "understanding what the hq repo does and how it is built".
+
 Examples:
 - working_on: "designing a retry/backoff strategy for an async Rust job queue", language: "rust"
 - working_on: "structuring a Laravel service layer so business logic stays testable", language: "php"
@@ -920,7 +923,7 @@ Examples:
                             },
                             "category": {
                                 "type": "string",
-                                "description": "Optional category filter (e.g. theory, patterns, architecture, concurrency, api-design, database, docker, shell, blockchain, ml, security, process, frontend, infra)"
+                                "description": "Optional category filter (e.g. theory, patterns, architecture, concurrency, api-design, database, docker, shell, blockchain, ml, security, process, frontend, infra, repos)"
                             },
                             "limit": {
                                 "type": "integer",
@@ -958,7 +961,7 @@ Examples:
             ToolDefinition {
                 tool: Tool {
                     name: "rag_search_category".to_string(),
-                    description: "Search the techniques corpus within one category. Categories: theory, patterns, architecture, concurrency, api-design, database, frontend, docker, infra, shell, blockchain, ml, security, process, other.".to_string(),
+                    description: "Search the techniques corpus within one category. Categories: theory, patterns, architecture, concurrency, api-design, database, frontend, docker, infra, shell, blockchain, ml, security, process, repos (profiles of our own repositories), other.".to_string(),
                     input_schema: ToolInputSchema {
                         schema_type: "object".to_string(),
                         properties: Some(json!({
@@ -968,7 +971,7 @@ Examples:
                             },
                             "category": {
                                 "type": "string",
-                                "description": "Category to search: theory, patterns, architecture, concurrency, api-design, database, frontend, docker, infra, shell, blockchain, ml, security, process, other."
+                                "description": "Category to search: theory, patterns, architecture, concurrency, api-design, database, frontend, docker, infra, shell, blockchain, ml, security, process, repos, other."
                             },
                             "limit": {
                                 "type": "integer",

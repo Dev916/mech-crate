@@ -155,6 +155,19 @@ impl RagCommand {
             style("•").dim(),
             st["embedding_model"].as_str().unwrap_or("?")
         );
+        if cfg.embedding_api_key.is_some() {
+            println!(
+                "  {} Embedding key: {}",
+                style("•").dim(),
+                style("configured").green()
+            );
+        } else {
+            println!(
+                "  {} Embedding key: {} — lexical-only retrieval; set embedding_api_key in ~/.mech-crate/config/rag.toml or export OPENAI_API_KEY",
+                style("•").dim(),
+                style("MISSING").yellow().bold()
+            );
+        }
         if st["model_mismatch"].as_bool() == Some(true) {
             println!(
                 "  {} stored embeddings use {} — run `mx rag ingest --reembed` to re-embed with the configured model",
