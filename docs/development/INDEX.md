@@ -788,6 +788,13 @@ if ready.load(Ordering::Acquire) {
 ---
 
 
+### Repo Profiles
+
+**Directory**: `repos/`
+Profiles of our own repositories — what each one does, its capabilities, architecture, how it was built, and how it relates to the others (`category: repos`). One file per repo plus `repos/repo-map.md`, the cross-repo ecosystem map. Internal-only: every profile carries `publish: false` and the directory sits outside the mechcrate.dev loader's flat scan. Ask `rag_context` things like "what does hq do", "how do I build nexus-client", "which repo handles meeting capture". Authored/refreshed via `skills/repo-profile/`; tracked by beads epic `mech-crate-965`; design: `docs/superpowers/specs/2026-09-01-repo-profiles-corpus-design.md`.
+
+---
+
 ## 🎯 Use Case Matrix
 
 ### By Problem Domain
