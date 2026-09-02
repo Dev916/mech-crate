@@ -99,7 +99,8 @@ def main() -> int:
     check(re.search(r"\b[0-9a-f]{7,40}\b", ident) is not None, "Identity records a HEAD sha")
 
     # Synthesis discipline: heading exists only as ### (never ##) — optional presence
-    check("## Synthesis (inferred)" not in text, "Synthesis (inferred) is ### level, not ##")
+    check(re.search(r"^## Synthesis \(inferred\)", text, re.M) is None,
+          "Synthesis (inferred) is ### level, not ##")
 
     # Target repo untouched
     if args.target:
