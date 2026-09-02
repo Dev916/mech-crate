@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-02
 **Status:** proposed
-**Epic:** see `bd show` for the epic created from this spec (linked in §9)
+**Epic:** `bd show mech-crate-4vp` (children 4vp.1–4vp.14; branch `feat/self-update`)
 
 ## 1. Problem
 
@@ -72,7 +72,7 @@ The releases repo is **public**, so update checks and downloads need no
 token. `GET /repos/unyform-ai/mech-crate-releases/releases/latest` returns
 the newest published, non-draft, non-prerelease release. That endpoint's
 semantics are exactly what a self-updater wants, which is why the pipeline
-must move to draft-then-publish (§5.3): a half-uploaded release must never be
+must move to draft-then-publish (§3.7): a half-uploaded release must never be
 `latest`.
 
 - Asset names are already fixed by `scripts/package.sh`:
