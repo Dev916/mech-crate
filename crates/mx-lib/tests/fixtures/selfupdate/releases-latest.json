@@ -1,0 +1,44 @@
+{
+  "url": "https://api.github.com/repos/unyform-ai/mech-crate-releases/releases/198472301",
+  "assets_url": "https://api.github.com/repos/unyform-ai/mech-crate-releases/releases/198472301/assets",
+  "html_url": "https://github.com/unyform-ai/mech-crate-releases/releases/tag/v0.1.2",
+  "id": 198472301,
+  "tag_name": "v0.1.2",
+  "target_commitish": "main",
+  "name": "v0.1.2",
+  "draft": false,
+  "prerelease": false,
+  "created_at": "2026-09-01T18:03:11Z",
+  "published_at": "2026-09-01T18:14:52Z",
+  "assets": [
+    {
+      "url": "https://api.github.com/repos/unyform-ai/mech-crate-releases/releases/assets/311204551",
+      "id": 311204551,
+      "name": "mx-v0.1.2-universal-apple-darwin.tar.gz",
+      "label": null,
+      "content_type": "application/gzip",
+      "state": "uploaded",
+      "size": 18446732,
+      "download_count": 4,
+      "created_at": "2026-09-01T18:12:03Z",
+      "updated_at": "2026-09-01T18:12:09Z",
+      "browser_download_url": "https://github.com/unyform-ai/mech-crate-releases/releases/download/v0.1.2/mx-v0.1.2-universal-apple-darwin.tar.gz"
+    },
+    {
+      "url": "https://api.github.com/repos/unyform-ai/mech-crate-releases/releases/assets/311204552",
+      "id": 311204552,
+      "name": "mx-v0.1.2-universal-apple-darwin.tar.gz.sha256",
+      "label": null,
+      "content_type": "text/plain",
+      "state": "uploaded",
+      "size": 101,
+      "download_count": 4,
+      "created_at": "2026-09-01T18:12:10Z",
+      "updated_at": "2026-09-01T18:12:11Z",
+      "browser_download_url": "https://github.com/unyform-ai/mech-crate-releases/releases/download/v0.1.2/mx-v0.1.2-universal-apple-darwin.tar.gz.sha256"
+    }
+  ],
+  "tarball_url": "https://api.github.com/repos/unyform-ai/mech-crate-releases/tarball/v0.1.2",
+  "zipball_url": "https://api.github.com/repos/unyform-ai/mech-crate-releases/zipball/v0.1.2",
+  "body": "Automated release."
+}
