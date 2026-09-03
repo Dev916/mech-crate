@@ -95,7 +95,7 @@ must move to draft-then-publish (§3.7): a half-uploaded release must never be
 ~/.mech-crate/
   releases/
     mx-v0.1.1/            # an extracted tarball, exactly as packaged
-      bin/{mx,mx-mcp,mx-ingest}
+      bin/{mx,mx-mcp}
       bin/lib/*.sh
       templates/
       scripts/
@@ -107,7 +107,6 @@ must move to draft-then-publish (§3.7): a half-uploaded release must never be
   version                            # mirrors current/VERSION
 ~/.local/bin/mx      -> ~/.mech-crate/current/bin/mx
 ~/.local/bin/mx-mcp  -> ~/.mech-crate/current/bin/mx-mcp
-~/.local/bin/mx-ingest -> ~/.mech-crate/current/bin/mx-ingest
 ```
 
 Why this shape:

@@ -172,7 +172,6 @@ fi
 # Check binaries exist
 MX_BIN="$MECH_CRATE_ROOT/target/release/mx"
 MCP_BIN="$MECH_CRATE_ROOT/target/release/mx-mcp"
-INGEST_BIN="$MECH_CRATE_ROOT/target/release/mx-ingest"
 
 if [[ ! -f "$MX_BIN" ]]; then
     echo -e "${RED}Error: mx binary not found at $MX_BIN${NC}"
@@ -209,7 +208,6 @@ install_binary() {
 
 install_binary "$MX_BIN" "$INSTALL_DIR/mx"
 [[ -f "$MCP_BIN" ]] && install_binary "$MCP_BIN" "$INSTALL_DIR/mx-mcp"
-[[ -f "$INGEST_BIN" ]] && install_binary "$INGEST_BIN" "$INSTALL_DIR/mx-ingest"
 
 echo ""
 

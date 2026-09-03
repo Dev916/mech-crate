@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 /// Write `mx-v<version>/` under `parent` and return its path.
 ///
-/// `bin/mx`, `bin/mx-mcp` and `bin/mx-ingest` are executable `sh` scripts
+/// `bin/mx` and `bin/mx-mcp` are executable `sh` scripts
 /// printing `<name> <version>`; `templates/marker-<version>.txt` lets a test
 /// prove which bundle's templates were copied; `scripts/` exists so
 /// `mech_crate_root()` recognises the directory.
@@ -24,7 +24,7 @@ pub fn write_fake_bundle(parent: &Path, version: &str) -> PathBuf {
     fs::create_dir_all(root.join("templates")).unwrap();
     fs::create_dir_all(root.join("scripts")).unwrap();
 
-    for name in ["mx", "mx-mcp", "mx-ingest"] {
+    for name in ["mx", "mx-mcp"] {
         let path = root.join("bin").join(name);
         fs::write(&path, format!("#!/bin/sh\necho \"{name} {version}\"\n")).unwrap();
         set_executable(&path);

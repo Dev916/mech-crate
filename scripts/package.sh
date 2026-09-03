@@ -8,14 +8,14 @@
 #   triple          target triple, e.g. universal-apple-darwin,
 #                   x86_64-unknown-linux-musl, aarch64-unknown-linux-musl
 #   version         version string without leading "v", e.g. 0.1.1
-#   bin-source-dir  directory containing the built mx, mx-mcp, mx-ingest
+#   bin-source-dir  directory containing the built mx and mx-mcp
 #
 # Outputs:
 #   dist/mx-v<version>-<triple>.tar.gz
 #   dist/mx-v<version>-<triple>.tar.gz.sha256
 #
 # Tarball layout (extracted as mx-v<version>/):
-#   bin/{mx,mx-mcp,mx-ingest}    signed/notarized binaries (on macOS)
+#   bin/{mx,mx-mcp}              signed/notarized binaries (on macOS)
 #   bin/lib/*.sh                 runtime bash helpers (sourced by mx-mcp)
 #   templates/                   project templates copied by `mx init`
 #   scripts/                     repo scripts (mech_crate_root() marker)
@@ -35,7 +35,7 @@ out_dir="$repo_root/dist"
 out_tar="$out_dir/mx-v${version}-${triple}.tar.gz"
 
 # Sanity checks
-for bin in mx mx-mcp mx-ingest; do
+for bin in mx mx-mcp; do
   if [[ ! -x "$bin_src/$bin" ]]; then
     echo "error: missing binary $bin_src/$bin" >&2
     exit 1
@@ -52,7 +52,7 @@ rm -rf "$stage"
 mkdir -p "$stage/bin" "$out_dir"
 
 # Binaries
-for bin in mx mx-mcp mx-ingest; do
+for bin in mx mx-mcp; do
   install -m 0755 "$bin_src/$bin" "$stage/bin/$bin"
 done
 

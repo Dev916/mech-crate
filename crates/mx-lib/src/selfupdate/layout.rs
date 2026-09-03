@@ -25,7 +25,7 @@ use crate::selfupdate::target::bundle_dir_name;
 use crate::selfupdate::version::parse;
 
 /// The executables shimmed into the user's bin directory.
-pub const SHIMS: [&str; 3] = ["mx", "mx-mcp", "mx-ingest"];
+pub const SHIMS: [&str; 2] = ["mx", "mx-mcp"];
 
 /// What [`Layout::ensure_shims`] did, and whether the shims are reachable.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -224,7 +224,7 @@ impl Layout {
         Ok(removed)
     }
 
-    /// Create or repair the `mx`, `mx-mcp` and `mx-ingest` symlinks in
+    /// Create or repair the `mx` and `mx-mcp` symlinks in
     /// `bin_dir`, all pointing through `<home>/current/bin/`.
     ///
     /// A shim that is already correct is left alone; one pointing elsewhere is
@@ -610,9 +610,9 @@ mod tests {
         let bin = home.path().join(".local/bin");
 
         let report = layout.ensure_shims(&bin, None).unwrap();
-        assert_eq!(report.created.len(), 3, "{report:?}");
+        assert_eq!(report.created.len(), 2, "{report:?}");
         assert!(report.repaired.is_empty());
-        for name in ["mx", "mx-mcp", "mx-ingest"] {
+        for name in ["mx", "mx-mcp"] {
             assert_eq!(
                 fs::read_link(bin.join(name)).unwrap(),
                 home.path().join("current/bin").join(name)
@@ -634,7 +634,7 @@ mod tests {
 
         let report = layout.ensure_shims(&bin, None).unwrap();
         assert_eq!(report.repaired, vec![bin.join("mx")]);
-        assert_eq!(report.created.len(), 2);
+        assert_eq!(report.created, vec![bin.join("mx-mcp")]);
         assert_eq!(
             fs::read_link(bin.join("mx")).unwrap(),
             home.path().join("current/bin/mx")

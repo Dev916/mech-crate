@@ -124,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p target/universal-apple-darwin/release
-          for bin in mx mx-mcp mx-ingest; do
+          for bin in mx mx-mcp; do
             lipo -create -output "target/universal-apple-darwin/release/$bin" \
               "target/aarch64-apple-darwin/release/$bin" \
               "target/x86_64-apple-darwin/release/$bin"
@@ -164,7 +164,7 @@ jobs:
         if: steps.signing.outputs.developer-id == 'true'
         run: |
           set -euo pipefail
-          for bin in mx mx-mcp mx-ingest; do
+          for bin in mx mx-mcp; do
             codesign --force --options runtime --timestamp \
               --sign "$APPLE_SIGNING_IDENTITY" \
               "target/universal-apple-darwin/release/$bin"
@@ -176,7 +176,7 @@ jobs:
         if: steps.signing.outputs.developer-id != 'true'
         run: |
           set -euo pipefail
-          for bin in mx mx-mcp mx-ingest; do
+          for bin in mx mx-mcp; do
             codesign --force --sign - "target/universal-apple-darwin/release/$bin"
             codesign --verify --strict --verbose=2 \
               "target/universal-apple-darwin/release/$bin"
