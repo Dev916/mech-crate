@@ -318,11 +318,14 @@ jobs:
       - name: Build (${{ matrix.triple }})
         run: cross build --release --target "$TRIPLE" -p mx-cli -p mx-mcp-server
 
+      # x86_64-musl links static-pie ("static-pie linked"), aarch64-musl
+      # links non-PIE ("statically linked"); both are fully static.
       - name: Prove the binaries are static
         run: |
           set -euo pipefail
           for bin in mx mx-mcp; do
-            file "target/$TRIPLE/release/$bin" | tee /dev/stderr | grep -q "statically linked"
+            file "target/$TRIPLE/release/$bin" | tee /dev/stderr \
+              | grep -Eq "statically linked|static-pie linked"
           done
 
       - name: Package tarball
