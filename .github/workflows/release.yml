@@ -51,6 +51,21 @@ jobs:
           echo "tag=$tag"         >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # The binary reports Cargo.toml's version, and mx self-update refuses a
+      # bundle whose VERSION file and binary disagree — so a tag that does not
+      # match the crate version would ship an uninstallable release. Fail here.
+      - uses: actions/checkout@v4
+      - name: The release version must match the crate version
+        env:
+          VERSION: ${{ steps.set.outputs.version }}
+        run: |
+          set -euo pipefail
+          crate="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [[ "$crate" != "$VERSION" ]]; then
+            echo "::error::Cargo.toml [workspace.package] version is '$crate' but this release is '$VERSION'; bump Cargo.toml (and Cargo.lock) first"
+            exit 1
+          fi
+
   # The release gate. Mirrors ci.yml's lint + test + coverage jobs (the
   # known-broken scoreboard lane is deliberately excluded — it is expected-red
   # and non-blocking, so it has no business in a release decision).

@@ -1417,10 +1417,11 @@ dependencies = [
 
 [[package]]
 name = "mx-cli"
-version = "0.1.1"
+version = "0.1.2-rc.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "chrono",
  "clap",
  "console",
  "dialoguer",
@@ -1444,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "mx-lib"
-version = "0.1.1"
+version = "0.1.2-rc.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1484,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "mx-mcp-server"
-version = "0.1.1"
+version = "0.1.2-rc.3"
 dependencies = [
  "anyhow",
  "async-trait",
