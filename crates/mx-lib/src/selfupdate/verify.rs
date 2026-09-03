@@ -73,6 +73,9 @@ pub fn check_binary_version(exe: &Path, expected: &Version) -> Result<()> {
 /// that was passed in (Linux, or a trimmed-down macOS): an unsigned platform
 /// is not an update failure. Callers pass `std::env::var("PATH")`.
 pub fn check_codesign(exe: &Path, path_env: Option<&str>) -> CodesignStatus {
+    if !is_mach_o(exe) {
+        return CodesignStatus::Skipped(format!("{} is not a Mach-O binary", exe.display()));
+    }
     let Some(codesign) = find_on_path("codesign", path_env) else {
         return CodesignStatus::Skipped("codesign is not on PATH".to_string());
     };
@@ -97,6 +100,29 @@ pub fn check_codesign(exe: &Path, path_env: Option<&str>) -> CodesignStatus {
 }
 
 /// First executable named `name` in the colon-separated `path_env`.
+/// True when the file starts with a Mach-O magic number (thin, either
+/// endianness, or a fat/universal header) — the only thing `codesign` can
+/// verify.
+fn is_mach_o(path: &Path) -> bool {
+    use std::io::Read;
+    let mut magic = [0u8; 4];
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    if file.read_exact(&mut magic).is_err() {
+        return false;
+    }
+    matches!(
+        magic,
+        [0xfe, 0xed, 0xfa, 0xce]
+            | [0xfe, 0xed, 0xfa, 0xcf]
+            | [0xce, 0xfa, 0xed, 0xfe]
+            | [0xcf, 0xfa, 0xed, 0xfe]
+            | [0xca, 0xfe, 0xba, 0xbe]
+            | [0xbe, 0xba, 0xfe, 0xca]
+    )
+}
+
 fn find_on_path(name: &str, path_env: Option<&str>) -> Option<PathBuf> {
     path_env?
         .split(':')
@@ -162,6 +188,20 @@ mod tests {
 
         let err = check_binary_version(&missing, &parse("9.9.9").unwrap()).unwrap_err();
         assert!(err.to_string().contains("mx"), "got: {err}");
+    }
+
+    /// A shell script is not a code object; on macOS `codesign` would report
+    /// "not signed at all" and the updater would refuse a bundle that is
+    /// fine. Only Mach-O files are checked; everything else is Skipped.
+    #[test]
+    fn check_codesign_is_skipped_for_a_non_mach_o_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let exe = fake_exe(&tmp, "mx 9.9.9");
+        let status = check_codesign(&exe, Some("/usr/bin:/bin"));
+        assert!(
+            matches!(status, CodesignStatus::Skipped(_)),
+            "expected Skipped for a shell script, got {status:?}"
+        );
     }
 
     #[test]

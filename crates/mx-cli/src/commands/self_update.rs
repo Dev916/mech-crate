@@ -1,146 +1,356 @@
-//! `mx self-update` command - Rebuild and reinstall the mx CLI
+//! `mx self-update` — check for, apply, and roll back updates of the mx client.
+//!
+//! The command is a thin shell over `mx_lib::selfupdate`: detect how this
+//! binary was installed, derive a plan, show it, and execute it. Which
+//! strategy runs depends on the install kind (spec §3.3):
+//!
+//! - release / bare: download the tarball from the release channel, verify
+//!   its sha256, extract it under `~/.mech-crate/releases`, verify the new
+//!   binary, then flip `~/.mech-crate/current` and refresh templates, the
+//!   version file, the MCP wrapper and the `~/.local/bin` shims;
+//! - homebrew: run `brew upgrade mx`;
+//! - source: rebuild the checkout (the historical behaviour, kept).
+//!
+//! Hidden test seams: `MX_SELFUPDATE_EXE` replaces `current_exe()` for kind
+//! detection (the test binary lives under a checkout's `target/`), and
+//! `HOMEBREW_PREFIX` is honoured before `brew --prefix` is consulted.
 
-use anyhow::Result;
-use clap::Args;
-use console::style;
-use std::env;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Rebuild and reinstall the mx CLI from source
-#[derive(Args, Debug)]
+use anyhow::{anyhow, bail, Context, Result};
+use clap::Args;
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
+
+use mx_lib::selfupdate::fetch;
+use mx_lib::selfupdate::index::{Release, ReleaseIndex};
+use mx_lib::selfupdate::layout::Layout;
+use mx_lib::selfupdate::refresh;
+use mx_lib::selfupdate::verify::{check_binary_version, check_codesign, CodesignStatus};
+use mx_lib::selfupdate::{
+    self, detect, plan, InstallKind, Triple, UpdatePlan, Version, BREW_UPGRADE,
+};
+
+/// Exit status of `--check` when a newer release exists.
+pub const UPDATE_AVAILABLE_EXIT: i32 = 10;
+
+/// Releases kept on disk: the current one plus one to roll back to.
+const KEEP_RELEASES: usize = 2;
+
+/// Hidden env: path used for install-kind detection instead of `current_exe()`.
+const EXE_OVERRIDE_ENV: &str = "MX_SELFUPDATE_EXE";
+
+/// Update the mx CLI itself
+#[derive(Args, Debug, Default)]
 pub struct SelfUpdateCommand {
-    /// Pull latest changes from git before building
-    #[arg(long)]
-    pull: bool,
+    /// Only report whether a newer release exists (exit 10 when it does)
+    #[arg(long, conflicts_with_all = ["dry_run", "rollback", "from_dir", "refresh_cache"])]
+    check: bool,
+
+    /// Show what would be done without making changes
+    #[arg(short = 'n', long)]
+    dry_run: bool,
 
     /// Skip interactive prompts
     #[arg(short, long)]
     yes: bool,
 
-    /// Show what would be done without making changes
-    #[arg(short = 'n', long)]
-    dry_run: bool,
+    /// Install this exact version instead of the latest release
+    #[arg(long, value_name = "VERSION", conflicts_with_all = ["rollback", "from_dir"])]
+    to: Option<String>,
+
+    /// Switch back to the previously installed release
+    #[arg(long, conflicts_with = "from_dir")]
+    rollback: bool,
+
+    /// Adopt an already-extracted release bundle (used by the installer)
+    #[arg(long, value_name = "DIR")]
+    from_dir: Option<PathBuf>,
+
+    /// Source checkouts only: git pull --rebase before rebuilding
+    #[arg(long)]
+    pull: bool,
+
+    /// Refresh the update-check cache and exit (used by the background check)
+    #[arg(long, hide = true)]
+    refresh_cache: bool,
 }
 
 impl SelfUpdateCommand {
     pub async fn run(&self) -> Result<()> {
-        println!();
-        println!(
-            "{}{}{}",
-            style("  ").on_cyan(),
-            style(" 🦝 MechCrate Self-Update ").bold().on_cyan(),
-            style("  ").on_cyan()
-        );
-        println!();
-
-        // Find the mech-crate source directory
-        let source_dir = self.find_source_dir()?;
-        let bin_dir = source_dir.join("bin");
-
-        println!(
-            "{} Source: {}",
-            style("→").cyan().bold(),
-            source_dir.display()
-        );
-        println!("{} Target: {}", style("→").cyan().bold(), bin_dir.display());
-
-        // Get current version
-        let current_version = env!("CARGO_PKG_VERSION");
-        println!(
-            "{} Current version: {}",
-            style("→").cyan().bold(),
-            current_version
-        );
-        println!();
-
-        if self.dry_run {
-            println!("{}", style("[DRY RUN] Would perform the following:").blue());
-            let mut step = 1;
-            if self.pull {
-                println!("  {}. git pull --rebase in {}", step, source_dir.display());
-                step += 1;
-            }
-            println!(
-                "  {}. cargo build --release -p mx-cli -p mx-mcp-server",
-                step
-            );
-            step += 1;
-            println!("  {}. Copy binaries to {}", step, bin_dir.display());
-            step += 1;
-            println!(
-                "  {}. Ensure /usr/local/bin symlinks point to {}",
-                step,
-                bin_dir.display()
-            );
-            println!();
+        if self.refresh_cache {
+            // Reserved for the passive notifier (mech-crate-4vp.8); a stable
+            // no-op keeps the flag surface fixed for callers.
             return Ok(());
         }
 
-        // Confirm if not --yes
-        if !self.yes {
-            use dialoguer::Confirm;
-            let proceed = Confirm::new()
-                .with_prompt("Rebuild and reinstall mx?")
-                .default(true)
-                .interact()?;
+        let home = mx_lib::home_dir()?;
+        let layout = Layout::new(&home);
 
-            if !proceed {
-                println!("{} Cancelled.", style("ℹ").blue());
-                return Ok(());
+        if let Some(dir) = &self.from_dir {
+            return self.adopt_bundle(&layout, dir);
+        }
+        if self.rollback {
+            return self.roll_back(&layout);
+        }
+        if self.check {
+            return self.check_only().await;
+        }
+
+        banner("MechCrate Self-Update");
+
+        let kind = detect_kind(&home);
+        let current = selfupdate::current();
+        let pin = match &self.to {
+            Some(raw) => Some(selfupdate::parse(raw)?),
+            None => None,
+        };
+
+        // Source and Homebrew installs never consult the release channel.
+        let release = match kind {
+            InstallKind::Release { .. } | InstallKind::Bare { .. } => {
+                Some(self.resolve_release(pin.as_ref()).await?)
             }
-            println!();
+            InstallKind::Homebrew { .. } | InstallKind::Source { .. } => None,
+        };
+        let latest = release
+            .as_ref()
+            .map(|r| r.version.clone())
+            .unwrap_or_else(|| current.clone());
+        let triple = Triple::host().unwrap_or(Triple::UniversalAppleDarwin);
+        let plan = plan(&kind, &current, &latest, pin.as_ref(), triple);
+
+        print_kind(&kind);
+        println!("{} Running:      {}", arrow(), current);
+        if release.is_some() {
+            println!("{} Latest:       {}", arrow(), latest);
         }
-
-        // Git pull if requested
-        if self.pull {
-            println!("{} Pulling latest changes...", style("→").cyan().bold());
-            let status = Command::new("git")
-                .args(["pull", "--rebase"])
-                .current_dir(&source_dir)
-                .status()?;
-
-            if !status.success() {
-                anyhow::bail!("git pull failed");
-            }
-            println!("  {} Git pull complete", style("✓").green());
-            println!();
-        }
-
-        // Build release
-        println!("{} Building release binaries...", style("→").cyan().bold());
-        let status = Command::new("cargo")
-            .args(["build", "--release", "-p", "mx-cli", "-p", "mx-mcp-server"])
-            .current_dir(&source_dir)
-            .status()?;
-
-        if !status.success() {
-            anyhow::bail!("cargo build failed");
-        }
-        println!("  {} Build complete", style("✓").green());
+        println!("{} Plan:         {}", arrow(), describe(&plan));
         println!();
 
-        // Copy binaries to bin/
-        println!("{} Installing binaries...", style("→").cyan().bold());
-        let release_dir = source_dir.join("target/release");
+        if self.dry_run {
+            println!("{}", style("[DRY RUN] Nothing changed.").blue());
+            return Ok(());
+        }
+        if matches!(plan, UpdatePlan::UpToDate { .. }) {
+            println!("{} mx is up to date.", ok());
+            return Ok(());
+        }
+        if !self.confirm(&format!("Proceed: {}?", describe(&plan)))? {
+            println!("{} Cancelled.", style("ℹ").blue());
+            return Ok(());
+        }
+        println!();
 
+        match plan {
+            UpdatePlan::UpToDate { .. } => Ok(()),
+            UpdatePlan::DelegateBrew { command } => delegate_to_brew(command),
+            UpdatePlan::RebuildSource { repo } => self.rebuild_from_source(&repo),
+            UpdatePlan::Download {
+                version,
+                asset,
+                checksum,
+                repoint,
+            } => {
+                let release = release.expect("a download plan implies a resolved release");
+                self.download_and_install(&layout, &release, &version, &asset, &checksum)
+                    .await?;
+                finish_install(&layout, &version, repoint.as_deref())
+            }
+        }
+    }
+
+    // ── --check ─────────────────────────────────────────────────────────
+
+    async fn check_only(&self) -> Result<()> {
+        let current = selfupdate::current();
+        let latest = ReleaseIndex::from_env().latest().await?.version;
+        if selfupdate::is_newer(&latest, &current) {
+            println!(
+                "mx {latest} is available (you have {current}). Run: {}",
+                style("mx self-update").cyan()
+            );
+            std::io::stdout().flush()?;
+            std::process::exit(UPDATE_AVAILABLE_EXIT);
+        }
+        println!("mx {current} is up to date (latest is {latest}).");
+        Ok(())
+    }
+
+    // ── --from-dir ──────────────────────────────────────────────────────
+
+    fn adopt_bundle(&self, layout: &Layout, dir: &Path) -> Result<()> {
+        banner("MechCrate Self-Update");
+        let dir = dir
+            .canonicalize()
+            .with_context(|| format!("bundle directory {} not found", dir.display()))?;
+        let version = bundle_version(&dir)?;
+        println!("{} Bundle:  {}", arrow(), dir.display());
+        println!("{} Version: {}", arrow(), version);
+        println!();
+        if self.dry_run {
+            println!("{}", style("[DRY RUN] Nothing changed.").blue());
+            return Ok(());
+        }
+        if !self.confirm(&format!("Install {version} from this bundle?"))? {
+            println!("{} Cancelled.", style("ℹ").blue());
+            return Ok(());
+        }
+
+        let release_dir = layout.adopt(&dir, &version)?;
+        println!("{} Adopted into {}", ok(), release_dir.display());
+        verify_release(layout, &release_dir, &version)?;
+        finish_install(layout, &version, None)
+    }
+
+    // ── --rollback ──────────────────────────────────────────────────────
+
+    fn roll_back(&self, layout: &Layout) -> Result<()> {
+        banner("MechCrate Self-Update");
+        let current = layout.current()?;
+        let previous = layout
+            .previous()?
+            .ok_or_else(|| anyhow!("nothing to roll back to: no other release is installed"))?;
+        match &current {
+            Some(c) => println!("{} Current:  {}", arrow(), c),
+            None => println!("{} Current:  (none)", arrow()),
+        }
+        println!("{} Previous: {}", arrow(), previous);
+        println!();
+        if self.dry_run {
+            println!("{}", style("[DRY RUN] Nothing changed.").blue());
+            return Ok(());
+        }
+        if !self.confirm(&format!("Roll back to {previous}?"))? {
+            println!("{} Cancelled.", style("ℹ").blue());
+            return Ok(());
+        }
+        flip_and_refresh(layout, &previous)?;
+        println!();
+        println!("{} Rolled back to mx {previous}.", ok());
+        Ok(())
+    }
+
+    // ── release channel ─────────────────────────────────────────────────
+
+    async fn resolve_release(&self, pin: Option<&Version>) -> Result<Release> {
+        let index = ReleaseIndex::from_env();
+        Ok(match pin {
+            Some(version) => index
+                .get(version)
+                .await
+                .with_context(|| format!("release v{version} not found on the release channel"))?,
+            None => index.latest().await?,
+        })
+    }
+
+    async fn download_and_install(
+        &self,
+        layout: &Layout,
+        release: &Release,
+        version: &Version,
+        asset_name: &str,
+        checksum_name: &str,
+    ) -> Result<()> {
+        let asset = release
+            .asset(asset_name)
+            .ok_or_else(|| anyhow!("release v{} has no asset {asset_name}", release.version))?;
+        let checksum_asset = release
+            .asset(checksum_name)
+            .ok_or_else(|| anyhow!("release v{} has no asset {checksum_name}", release.version))?;
+
+        let scratch = layout.tmp_dir().join(uuid::Uuid::new_v4().to_string());
+        let result = self
+            .download_verify_extract(layout, asset, checksum_asset, version, &scratch)
+            .await;
+        let _ = std::fs::remove_dir_all(&scratch);
+        result
+    }
+
+    async fn download_verify_extract(
+        &self,
+        layout: &Layout,
+        asset: &mx_lib::selfupdate::index::Asset,
+        checksum_asset: &mx_lib::selfupdate::index::Asset,
+        version: &Version,
+        scratch: &Path,
+    ) -> Result<()> {
+        let client = ReleaseIndex::from_env().client().clone();
+
+        println!("{} Downloading {}...", arrow(), asset.name);
+        let bar = ProgressBar::new(asset.size.max(1));
+        bar.set_style(
+            ProgressStyle::default_bar()
+                .template("  [{bar:40.cyan/blue}] {bytes}/{total_bytes}")
+                .expect("static template"),
+        );
+        let on_progress = |received: u64| bar.set_position(received);
+        let tarball = fetch::download(&client, asset, scratch, Some(&on_progress)).await?;
+        bar.finish_and_clear();
+
+        let expected = fetch::fetch_checksum(&client, checksum_asset).await?;
+        fetch::verify(&tarball, &expected)?;
+        println!("{} sha256 verified", ok());
+
+        let release_dir = layout.extract(&tarball, version)?;
+        println!("{} Extracted to {}", ok(), release_dir.display());
+        verify_release(layout, &release_dir, version)
+    }
+
+    // ── source checkout ─────────────────────────────────────────────────
+
+    fn rebuild_from_source(&self, repo: &Path) -> Result<()> {
+        let repo = if self.pull || repo.join("crates/mx-cli").exists() {
+            repo.to_path_buf()
+        } else {
+            self.find_source_dir()?
+        };
+        let bin_dir = repo.join("bin");
+        println!("{} Source: {}", arrow(), repo.display());
+        println!("{} Target: {}", arrow(), bin_dir.display());
+        println!();
+
+        if self.pull {
+            println!("{} Pulling latest changes...", arrow());
+            let status = Command::new("git")
+                .args(["pull", "--rebase"])
+                .current_dir(&repo)
+                .status()?;
+            if !status.success() {
+                bail!("git pull failed");
+            }
+            println!("  {} Git pull complete", ok());
+            println!();
+        }
+
+        println!("{} Building release binaries...", arrow());
+        let status = Command::new("cargo")
+            .args(["build", "--release", "-p", "mx-cli", "-p", "mx-mcp-server"])
+            .current_dir(&repo)
+            .status()
+            .context("cargo not found; install Rust from https://rustup.rs")?;
+        if !status.success() {
+            bail!("cargo build failed");
+        }
+        println!("  {} Build complete", ok());
+        println!();
+
+        println!("{} Installing binaries...", arrow());
+        let release_dir = repo.join("target/release");
         std::fs::create_dir_all(&bin_dir)?;
-
-        let binaries = [("mx", true), ("mx-mcp", false), ("mx-ingest", false)];
-
+        let binaries = [("mx", true), ("mx-mcp", false)];
         for (name, required) in binaries {
             let src = release_dir.join(name);
-
             if !src.exists() {
                 if required {
-                    anyhow::bail!("Binary not found: {}", src.display());
+                    bail!("Binary not found: {}", src.display());
                 }
                 continue;
             }
-
             let dst = bin_dir.join(name);
             std::fs::copy(&src, &dst)?;
-
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -148,106 +358,17 @@ impl SelfUpdateCommand {
                 perms.set_mode(0o755);
                 std::fs::set_permissions(&dst, perms)?;
             }
-
-            println!("  {} {} -> bin/{}", style("✓").green(), name, name);
+            println!("  {} {} -> bin/{}", ok(), name, name);
         }
-
         println!();
 
-        // Ensure /usr/local/bin symlinks
-        println!(
-            "{} Checking /usr/local/bin symlinks...",
-            style("→").cyan().bold()
-        );
+        ensure_system_symlinks(&bin_dir, &binaries)?;
 
-        let system_bin = PathBuf::from("/usr/local/bin");
-        let mut needs_sudo = false;
-
-        for (name, _) in binaries {
-            let bin_path = bin_dir.join(name);
-            if !bin_path.exists() {
-                continue;
-            }
-
-            let system_path = system_bin.join(name);
-
-            // Check if it's already a correct symlink
-            if system_path.is_symlink() {
-                if let Ok(target) = std::fs::read_link(&system_path) {
-                    if target == bin_path {
-                        println!("  {} {} (symlink ok)", style("✓").green(), name);
-                        continue;
-                    }
-                }
-            }
-
-            // Need to create/update symlink
-            needs_sudo = true;
-            println!("  {} {} needs symlink update", style("→").yellow(), name);
-        }
-
-        if needs_sudo {
-            println!();
-            println!(
-                "  {} Creating symlinks (requires sudo)...",
-                style("→").cyan().bold()
-            );
-
-            for (name, _) in binaries {
-                let bin_path = bin_dir.join(name);
-                if !bin_path.exists() {
-                    continue;
-                }
-
-                let system_path = system_bin.join(name);
-
-                // Check if already correct
-                if system_path.is_symlink() {
-                    if let Ok(target) = std::fs::read_link(&system_path) {
-                        if target == bin_path {
-                            continue;
-                        }
-                    }
-                }
-
-                // Remove existing and create symlink
-                let _ = Command::new("sudo")
-                    .args(["rm", "-f"])
-                    .arg(&system_path)
-                    .status();
-
-                let status = Command::new("sudo")
-                    .args(["ln", "-sf"])
-                    .arg(&bin_path)
-                    .arg(&system_path)
-                    .status()?;
-
-                if status.success() {
-                    println!(
-                        "  {} /usr/local/bin/{} -> bin/{}",
-                        style("✓").green(),
-                        name,
-                        name
-                    );
-                } else {
-                    println!(
-                        "  {} Failed to symlink /usr/local/bin/{}",
-                        style("✗").red(),
-                        name
-                    );
-                }
-            }
-        }
-
-        println!();
-
-        // Run mx init to refresh templates
-        println!("{} Refreshing templates...", style("→").cyan().bold());
+        println!("{} Refreshing templates...", arrow());
         let status = Command::new(bin_dir.join("mx"))
             .args(["init", "--force"])
-            .env("MECH_CRATE_ROOT", &source_dir)
+            .env("MECH_CRATE_ROOT", &repo)
             .status()?;
-
         if !status.success() {
             println!(
                 "  {} Template refresh failed (non-fatal)",
@@ -255,125 +376,349 @@ impl SelfUpdateCommand {
             );
         }
 
-        // Verify
         println!();
-        println!("{} Verifying...", style("→").cyan().bold());
+        println!("{} Verifying...", arrow());
         let output = Command::new(bin_dir.join("mx"))
             .args(["--version"])
             .output()?;
-
         if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout);
-            println!("  {} {}", style("✓").green(), version.trim());
+            println!(
+                "  {} {}",
+                ok(),
+                String::from_utf8_lossy(&output.stdout).trim()
+            );
         }
-
         println!();
-        println!(
-            "{}",
-            style("┌────────────────────────────────────────────────────────────┐").green()
-        );
-        println!(
-            "{}  {} Update complete!                                       {}",
-            style("│").green(),
-            style("✓").green().bold(),
-            style("│").green()
-        );
-        println!(
-            "{}",
-            style("└────────────────────────────────────────────────────────────┘").green()
-        );
-        println!();
-
+        println!("{} Update complete!", ok());
         Ok(())
     }
 
-    /// Find the mech-crate source directory
+    /// Find a mech-crate checkout when the running binary is not inside one:
+    /// `MECH_CRATE_ROOT`, then the root `mx init` recorded, then the
+    /// executable's ancestors, then a few conventional locations.
     fn find_source_dir(&self) -> Result<PathBuf> {
-        // 1. Check MECH_CRATE_ROOT env var
-        if let Ok(root) = env::var("MECH_CRATE_ROOT") {
+        if let Ok(root) = std::env::var("MECH_CRATE_ROOT") {
             let path = PathBuf::from(&root);
-            if self.is_mech_crate_root(&path) {
+            if is_mech_crate_root(&path) {
                 return Ok(path);
             }
         }
 
-        // 2. Resolve from current exe (follows symlink)
-        if let Ok(exe) = env::current_exe() {
-            // current_exe resolves symlinks, so if /usr/local/bin/mx -> repo/bin/mx,
-            // exe will be repo/bin/mx. Go up two levels to get repo root.
-            if let Some(bin_dir) = exe.parent() {
-                if let Some(repo_dir) = bin_dir.parent() {
-                    if self.is_mech_crate_root(repo_dir) {
-                        return Ok(repo_dir.to_path_buf());
-                    }
-                }
+        if let Some(root) = mx_lib::recorded_source_root() {
+            if is_mech_crate_root(&root) {
+                return Ok(root);
             }
         }
 
-        // 3. Check ~/.mech-crate/source marker
-        if let Some(home) = dirs::home_dir() {
-            let marker = home.join(".mech-crate/source");
-            if marker.exists() {
-                if let Ok(path_str) = std::fs::read_to_string(&marker) {
-                    let path = PathBuf::from(path_str.trim());
-                    if self.is_mech_crate_root(&path) {
-                        return Ok(path);
-                    }
-                }
+        if let Ok(exe) = std::env::current_exe() {
+            let exe = exe.canonicalize().unwrap_or(exe);
+            if let Some(repo) = exe.ancestors().skip(1).find(|p| is_mech_crate_root(p)) {
+                return Ok(repo.to_path_buf());
             }
         }
 
-        // 4. Try common locations
         if let Some(home) = dirs::home_dir() {
-            let common = [
+            for rel in [
                 "dev/dev916/mech-crate",
                 "dev/mech-crate",
                 "code/mech-crate",
                 "projects/mech-crate",
-            ];
-
-            for rel in common {
+            ] {
                 let path = home.join(rel);
-                if self.is_mech_crate_root(&path) {
+                if is_mech_crate_root(&path) {
                     return Ok(path);
                 }
             }
         }
 
-        anyhow::bail!(
-            "Could not find mech-crate source directory.\n\n\
-            Set the MECH_CRATE_ROOT environment variable:\n\
-            \n\
-              export MECH_CRATE_ROOT=/path/to/mech-crate\n\
-            \n\
-            Or run from the mech-crate directory:\n\
-            \n\
-              cd /path/to/mech-crate && make upgrade"
-        );
+        bail!(
+            "Could not find a mech-crate checkout to rebuild from.\n\n\
+             Set MECH_CRATE_ROOT=/path/to/mech-crate, or run 'mx init' from inside \
+             the checkout so its location is recorded."
+        )
     }
 
-    fn is_mech_crate_root(&self, path: &std::path::Path) -> bool {
-        path.join("Cargo.toml").exists() && path.join("crates/mx-cli").exists()
+    fn confirm(&self, prompt: &str) -> Result<bool> {
+        if self.yes {
+            return Ok(true);
+        }
+        Ok(dialoguer::Confirm::new()
+            .with_prompt(prompt)
+            .default(true)
+            .interact()?)
     }
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────
+
+fn is_mech_crate_root(path: &Path) -> bool {
+    path.join("Cargo.toml").exists() && path.join("crates/mx-cli").exists()
+}
+
+/// Classify this binary's install. See the module docs for the test seams.
+fn detect_kind(home: &Path) -> InstallKind {
+    let exe = std::env::var_os(EXE_OVERRIDE_ENV)
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_exe().ok())
+        .map(|p| p.canonicalize().unwrap_or(p))
+        .unwrap_or_else(|| PathBuf::from("mx"));
+    let brew_prefix = brew_prefix();
+    detect(&exe, home, brew_prefix.as_deref(), is_mech_crate_root)
+}
+
+/// `HOMEBREW_PREFIX` if set, else `brew --prefix` when brew is on PATH.
+fn brew_prefix() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("HOMEBREW_PREFIX") {
+        return Some(PathBuf::from(p));
+    }
+    let brew = which::which("brew").ok()?;
+    let out = Command::new(brew).arg("--prefix").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let prefix = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!prefix.is_empty()).then(|| PathBuf::from(prefix))
+}
+
+/// The version an extracted bundle declares in its `VERSION` file.
+fn bundle_version(dir: &Path) -> Result<Version> {
+    let raw = std::fs::read_to_string(dir.join("VERSION"))
+        .with_context(|| format!("{} has no VERSION file", dir.display()))?;
+    Ok(selfupdate::parse(&raw)?)
+}
+
+/// The new binary must answer `--version` correctly; its signature is
+/// checked when `codesign` is available. A failure removes the release dir.
+fn verify_release(layout: &Layout, release_dir: &Path, version: &Version) -> Result<()> {
+    let exe = release_dir.join("bin").join("mx");
+    if let Err(e) = check_binary_version(&exe, version) {
+        let _ = std::fs::remove_dir_all(release_dir);
+        return Err(e.into());
+    }
+    println!("{} {} reports {}", ok(), exe.display(), version);
+    let path_env = std::env::var("PATH").ok();
+    match check_codesign(&exe, path_env.as_deref()) {
+        CodesignStatus::Verified => println!("{} code signature verified", ok()),
+        CodesignStatus::Skipped(why) => {
+            println!("  {} signature check skipped: {why}", style("·").dim())
+        }
+        CodesignStatus::Failed(why) => {
+            let _ = std::fs::remove_dir_all(release_dir);
+            let _ = layout;
+            bail!("code signature check failed: {why}");
+        }
+    }
+    Ok(())
+}
+
+/// Point `current` at `version` and refresh everything derived from it.
+fn flip_and_refresh(layout: &Layout, version: &Version) -> Result<()> {
+    layout.flip_current(version)?;
+    println!("{} current -> mx-v{version}", ok());
+    let copied = refresh::refresh_templates(layout.home())?;
+    println!("{} templates refreshed ({copied} files)", ok());
+    refresh::write_version_file(layout.home())?;
+    if refresh::regenerate_mcp_wrapper(layout.home())? {
+        println!("{} MCP wrapper re-pointed at current/", ok());
+    }
+    let shims = layout.ensure_shims(&shim_dir()?, std::env::var("PATH").ok().as_deref())?;
+    for link in shims.created.iter().chain(shims.repaired.iter()) {
+        println!("{} {}", ok(), link.display());
+    }
+    if !shims.on_path {
+        println!();
+        println!(
+            "  {} {} is not on your PATH. Add to your shell profile:",
+            style("⚠").yellow(),
+            shim_dir()?.display()
+        );
+        println!("    export PATH=\"$HOME/.local/bin:$PATH\"");
+    }
+    Ok(())
+}
+
+/// Everything after a release is verified on disk.
+fn finish_install(layout: &Layout, version: &Version, repoint: Option<&Path>) -> Result<()> {
+    flip_and_refresh(layout, version)?;
+    let removed = layout.prune(KEEP_RELEASES)?;
+    for old in removed {
+        println!("  {} removed mx-v{old}", style("·").dim());
+    }
+    if let Some(old_exe) = repoint {
+        repoint_bare_exe(layout, old_exe);
+    }
+    println!();
+    println!("{} mx {version} installed.", ok());
+    Ok(())
+}
+
+/// A bare install's old executable path becomes a symlink into the layout
+/// when its directory is writable; otherwise the user gets the two lines.
+fn repoint_bare_exe(layout: &Layout, old_exe: &Path) {
+    let target = layout.current_link().join("bin").join("mx");
+    let attempt = old_exe.parent().ok_or(()).and_then(|dir| {
+        let staging = dir.join(".mx.new");
+        let _ = std::fs::remove_file(&staging);
+        std::os::unix::fs::symlink(&target, &staging)
+            .and_then(|_| std::fs::rename(&staging, old_exe))
+            .map_err(|_| {
+                let _ = std::fs::remove_file(&staging);
+            })
+    });
+    match attempt {
+        Ok(()) => println!("{} {} -> {}", ok(), old_exe.display(), target.display()),
+        Err(()) => {
+            println!();
+            println!(
+                "  {} could not replace {} (not writable). Either:",
+                style("⚠").yellow(),
+                old_exe.display()
+            );
+            println!("    sudo ln -sf {} {}", target.display(), old_exe.display());
+            println!("  or remove it and use the ~/.local/bin/mx shim.");
+        }
+    }
+}
+
+fn shim_dir() -> Result<PathBuf> {
+    dirs::home_dir()
+        .map(|h| h.join(".local").join("bin"))
+        .ok_or_else(|| anyhow!("could not determine the home directory"))
+}
+
+fn delegate_to_brew(command: &str) -> Result<()> {
+    if which::which("brew").is_err() {
+        bail!("Homebrew owns this install but 'brew' is not on PATH; run: {command}");
+    }
+    println!("{} Running: {command}", arrow());
+    let status = Command::new("brew").args(["upgrade", "mx"]).status()?;
+    if !status.success() {
+        bail!("'{command}' failed with {status}");
+    }
+    println!("{} Homebrew upgrade complete.", ok());
+    Ok(())
+}
+
+/// The historical `/usr/local/bin` symlinks for source installs.
+fn ensure_system_symlinks(bin_dir: &Path, binaries: &[(&str, bool)]) -> Result<()> {
+    println!("{} Checking /usr/local/bin symlinks...", arrow());
+    let system_bin = PathBuf::from("/usr/local/bin");
+    let mut stale = Vec::new();
+    for (name, _) in binaries {
+        let bin_path = bin_dir.join(name);
+        if !bin_path.exists() {
+            continue;
+        }
+        let system_path = system_bin.join(name);
+        let correct = system_path.is_symlink()
+            && std::fs::read_link(&system_path)
+                .map(|t| t == bin_path)
+                .unwrap_or(false);
+        if correct {
+            println!("  {} {} (symlink ok)", ok(), name);
+        } else {
+            println!("  {} {} needs symlink update", style("→").yellow(), name);
+            stale.push((bin_path, system_path, *name));
+        }
+    }
+    if stale.is_empty() {
+        println!();
+        return Ok(());
+    }
+    println!();
+    println!("  {} Creating symlinks (requires sudo)...", arrow());
+    for (bin_path, system_path, name) in stale {
+        let _ = Command::new("sudo")
+            .args(["rm", "-f"])
+            .arg(&system_path)
+            .status();
+        let status = Command::new("sudo")
+            .args(["ln", "-sf"])
+            .arg(&bin_path)
+            .arg(&system_path)
+            .status()?;
+        if status.success() {
+            println!("  {} /usr/local/bin/{name} -> bin/{name}", ok());
+        } else {
+            println!(
+                "  {} Failed to symlink /usr/local/bin/{name}",
+                style("✗").red()
+            );
+        }
+    }
+    println!();
+    Ok(())
+}
+
+fn describe(plan: &UpdatePlan) -> String {
+    match plan {
+        UpdatePlan::UpToDate { current } => format!("up to date ({current})"),
+        UpdatePlan::Download {
+            version,
+            asset,
+            repoint,
+            ..
+        } => {
+            let mut s = format!("download {asset}, verify sha256, install {version}");
+            if let Some(exe) = repoint {
+                s.push_str(&format!(", re-point {}", exe.display()));
+            }
+            s
+        }
+        UpdatePlan::DelegateBrew { command } => format!("run: {command}"),
+        UpdatePlan::RebuildSource { repo } => format!("rebuild from {}", repo.display()),
+    }
+}
+
+fn print_kind(kind: &InstallKind) {
+    let detail = match kind {
+        InstallKind::Release { home, version } => {
+            format!("{} (mx-v{version})", home.join("releases").display())
+        }
+        InstallKind::Homebrew { cellar } => cellar.display().to_string(),
+        InstallKind::Source { repo } => repo.display().to_string(),
+        InstallKind::Bare { exe } => exe.display().to_string(),
+    };
+    println!("{} Install kind: {} ({detail})", arrow(), kind.name());
+    if let InstallKind::Homebrew { .. } = kind {
+        println!(
+            "  {} Homebrew owns this install: {}",
+            style("·").dim(),
+            BREW_UPGRADE
+        );
+    }
+}
+
+fn banner(title: &str) {
+    println!();
+    println!(
+        "{}{}{}",
+        style("  ").on_cyan(),
+        style(format!(" 🦝 {title} ")).bold().on_cyan(),
+        style("  ").on_cyan()
+    );
+    println!();
+}
+
+fn arrow() -> console::StyledObject<&'static str> {
+    style("→").cyan().bold()
+}
+
+fn ok() -> console::StyledObject<&'static str> {
+    style("✓").green()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ── Known-broken lane (bd:mech-crate-gjl) ────────────────────────────
+    use std::env;
 
     /// `mx init` records the source repo root through
-    /// [`mx_lib::paths::save_source_root`], which writes
-    /// `~/.mech-crate/config/source-root`. `find_source_dir`'s marker fallback
-    /// reads `~/.mech-crate/source` instead, so it can never see what init
-    /// recorded — the two ends of one seam disagree on the path.
-    ///
-    /// Asserts the FIXED behavior: the resolver finds the root that `mx init`
-    /// recorded. Expected RED until bd:mech-crate-gjl lands.
+    /// [`mx_lib::paths::save_source_root`] (`~/.mech-crate/config/source-root`).
+    /// The resolver used for rebuilds must find that recording (bd
+    /// mech-crate-gjl: it used to read a different marker file).
     #[test]
-    #[ignore = "bd:mech-crate-gjl self-update reads ~/.mech-crate/source, init writes config/source-root"]
-    fn kb_self_update_finds_the_source_root_recorded_by_init() {
+    fn self_update_finds_the_source_root_recorded_by_init() {
         let home = tempfile::tempdir().expect("setup: home tempdir");
         let repo = tempfile::tempdir().expect("setup: repo tempdir");
         std::fs::write(repo.path().join("Cargo.toml"), "[workspace]\n")
@@ -394,9 +739,8 @@ mod tests {
         );
 
         let cmd = SelfUpdateCommand {
-            pull: false,
-            yes: false,
             dry_run: true,
+            ..Default::default()
         };
 
         let found = cmd

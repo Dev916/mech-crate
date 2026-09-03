@@ -39,7 +39,7 @@ Options:
 | `mx recipes pull <NAME>` | Pull a recipe from Unyform |
 | `mx recipes cache` | Manage cached recipes |
 | `mx upgrade` | Upgrade project scaffolding — `--diff`, `--dry-run`, `--yes`. See [Upgrade](/docs/framework/upgrade/) |
-| `mx self-update` | Update the `mx` binary itself |
+| `mx self-update` | Update `mx` itself from the release channel. `--check` (exit 10 when newer exists), `--dry-run`, `--yes`, `--to <VERSION>`, `--rollback`, `--from-dir <DIR>`, `--pull` (source checkouts). See [Install](/docs/start/install/) |
 
 ### Operating a project
 
