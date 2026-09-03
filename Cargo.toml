@@ -89,6 +89,9 @@ serde_yaml = "0.9"
 # TOML config
 toml = "0.8"
 
+# Semver (self-update version compare)
+semver = "1"
+
 # Hashing
 sha2 = "0.10"
 hex = "0.4"

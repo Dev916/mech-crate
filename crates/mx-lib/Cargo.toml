@@ -71,6 +71,7 @@ pgvector = { workspace = true }
 serde_yaml = { workspace = true }
 toml = { workspace = true }
 sha2 = { workspace = true }
+semver = { workspace = true }
 hex = { workspace = true }
 
 # Test fixtures (optional; activated by the `test-support` feature only, so
