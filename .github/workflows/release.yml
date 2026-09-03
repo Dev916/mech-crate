@@ -229,6 +229,10 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         run: |
           set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::RELEASES_REPO_TOKEN absent: tarball built and kept as a run artifact, not published to $RELEASES_REPO"
+            exit 0
+          fi
           asset="dist/mx-v${VERSION}-universal-apple-darwin.tar.gz"
 
           # Idempotent: create the release on first upload, reuse otherwise.
