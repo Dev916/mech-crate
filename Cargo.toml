@@ -89,6 +89,10 @@ serde_yaml = "0.9"
 # TOML config
 toml = "0.8"
 
+# Tarball extraction (self-update)
+flate2 = "1"
+tar = "0.4"
+
 # Semver (self-update version compare)
 semver = "1"
 
