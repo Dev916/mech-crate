@@ -99,7 +99,7 @@ must move to draft-then-publish (§3.7): a half-uploaded release must never be
       bin/lib/*.sh
       templates/
       scripts/
-      LICENSE.txt
+      LICENSE-APACHE, LICENSE-MIT
       VERSION
     mx-v0.1.2/
   current -> releases/mx-v0.1.2      # the only thing an update changes
