@@ -510,8 +510,11 @@ pub(crate) fn detect_kind(home: &Path) -> InstallKind {
         .or_else(|| std::env::current_exe().ok())
         .map(|p| p.canonicalize().unwrap_or(p))
         .unwrap_or_else(|| PathBuf::from("mx"));
-    let brew_prefix = brew_prefix();
-    detect(&exe, home, brew_prefix.as_deref(), is_mech_crate_root)
+    // Both sides canonical, or a symlinked $HOME (macOS: /var → /private/var)
+    // would never prefix-match the canonicalized exe.
+    let home = home.canonicalize().unwrap_or_else(|_| home.to_path_buf());
+    let brew_prefix = brew_prefix().map(|p| p.canonicalize().unwrap_or(p));
+    detect(&exe, &home, brew_prefix.as_deref(), is_mech_crate_root)
 }
 
 /// `HOMEBREW_PREFIX` if set, else `brew --prefix` when brew is on PATH.
@@ -760,6 +763,35 @@ fn ok() -> console::StyledObject<&'static str> {
 mod tests {
     use super::*;
     use std::env;
+
+    /// macOS resolves `/var` to `/private/var`, so a canonicalized exe path
+    /// and an uncanonicalized `$HOME` disagree on their prefix. Detection
+    /// must canonicalize both sides or a release install under a symlinked
+    /// home is misread as bare (seen live in the installer end-to-end run).
+    #[test]
+    fn detect_kind_sees_a_release_install_through_a_symlinked_home() {
+        let tmp = tempfile::tempdir().expect("setup: tempdir");
+        let real_home = tmp.path().join("real");
+        let alias = tmp.path().join("alias");
+        let exe_real = real_home.join(".mech-crate/releases/mx-v1.2.3/bin/mx");
+        std::fs::create_dir_all(exe_real.parent().unwrap()).expect("setup: layout");
+        std::fs::write(&exe_real, "").expect("setup: exe");
+        std::os::unix::fs::symlink(&real_home, &alias).expect("setup: symlink");
+
+        // The exe is reached through the alias, exactly as $HOME would be.
+        env::set_var(
+            EXE_OVERRIDE_ENV,
+            alias.join(".mech-crate/releases/mx-v1.2.3/bin/mx"),
+        );
+        env::remove_var("HOMEBREW_PREFIX");
+
+        let kind = detect_kind(&alias.join(".mech-crate"));
+        env::remove_var(EXE_OVERRIDE_ENV);
+        assert!(
+            matches!(kind, InstallKind::Release { .. }),
+            "expected Release through the symlinked home, got {kind:?}"
+        );
+    }
 
     /// `mx init` records the source repo root through
     /// [`mx_lib::paths::save_source_root`] (`~/.mech-crate/config/source-root`).
