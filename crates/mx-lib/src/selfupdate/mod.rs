@@ -10,6 +10,7 @@ pub mod fetch;
 pub mod index;
 pub mod kind;
 pub mod layout;
+pub mod notify;
 pub mod plan;
 pub mod refresh;
 pub mod target;
@@ -17,6 +18,7 @@ pub mod verify;
 pub mod version;
 
 pub use kind::{detect, InstallKind};
+pub use notify::{decide, Action, Cache, Context as NotifyContext};
 pub use plan::{plan, UpdatePlan, BREW_UPGRADE};
 pub use target::{asset_name, bundle_dir_name, checksum_name, Triple};
 pub use version::{current, is_newer, parse, Version};

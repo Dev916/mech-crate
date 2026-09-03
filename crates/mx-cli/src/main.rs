@@ -2,9 +2,16 @@
 //!
 //! A CLI for project scaffolding, service management, and infrastructure automation.
 
+use std::io::IsTerminal;
+use std::path::Path;
+use std::process::Stdio;
+
 use anyhow::Result;
+use chrono::Utc;
 use clap::{Parser, Subcommand};
 use console::style;
+use mx_lib::selfupdate::notify::{self, Action};
+use mx_lib::selfupdate::{InstallKind, Version};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod commands;
@@ -127,11 +134,121 @@ fn print_error(msg: &str) {
     eprintln!("{} {}", style("error:").red().bold(), msg);
 }
 
+/// Hidden test seam: overrides the "is stderr a terminal?" answer, so the
+/// notifier's TTY branch is reachable under a test harness's pipes.
+const TTY_OVERRIDE_ENV: &str = "MX_UPDATE_CHECK_TTY";
+
+/// Every subcommand gets the passive update check except two: `self-update`
+/// (it *is* the update path, and `--refresh-cache` is the notifier's own
+/// background half) and `mcp` (its server speaks JSON-RPC over stdio, and
+/// even a stderr line has no business in that stream).
+fn runs_update_check(command: &Commands) -> bool {
+    !matches!(command, Commands::SelfUpdate(_) | Commands::Mcp(_))
+}
+
+/// The passive update notifier (spec §3.6).
+///
+/// Runs after the user's command, costs one small file read in the steady
+/// state, never touches the network, never waits on anything, and swallows
+/// every error: the command has already run and nothing here may change its
+/// outcome or its exit code.
+fn run_update_check() {
+    // Cheap, allocation-free opt-outs first — these cost no IO at all.
+    if !stderr_is_tty() || env_set(notify::DISABLE_ENV) || env_set("CI") {
+        return;
+    }
+    let Ok(home) = mx_lib::home_dir() else {
+        return;
+    };
+    let current = mx_lib::selfupdate::current();
+    // `config/update.toml` is consulted only once something would actually
+    // happen, which keeps the common path to a single file read. Because the
+    // config can only ever force `Silent`, deciding first and filtering after
+    // is the same answer.
+    let ctx = notify::Context {
+        now: Utc::now(),
+        current: &current,
+        stderr_is_tty: true,
+        disabled_by_env: false,
+        disabled_by_ci: false,
+        disabled_by_config: false,
+    };
+    let cache = notify::read_cache(&home);
+    let action = notify::decide(cache.as_ref(), &ctx);
+    if matches!(action, Action::Silent) || notify::config_disables(&home) {
+        return;
+    }
+
+    // Hint first, spawn second: the refresh carries the recorded hint
+    // forward, so writing it before the child starts avoids a lost update.
+    if let Action::Hint(latest) | Action::SpawnAndHint(latest) = &action {
+        hint(&home, cache, latest, &current, ctx.now);
+    }
+    if matches!(action, Action::Spawn | Action::SpawnAndHint(_)) {
+        spawn_refresh();
+    }
+}
+
+/// True when the variable is set to anything non-empty.
+fn env_set(key: &str) -> bool {
+    std::env::var_os(key).is_some_and(|v| !v.is_empty())
+}
+
+/// Whether stderr is a terminal, honouring [`TTY_OVERRIDE_ENV`].
+fn stderr_is_tty() -> bool {
+    match std::env::var(TTY_OVERRIDE_ENV) {
+        Ok(v) if !v.is_empty() => v != "0",
+        _ => std::io::stderr().is_terminal(),
+    }
+}
+
+/// Print the one-line hint and record it, so it is not repeated for a day.
+fn hint(
+    home: &Path,
+    cache: Option<notify::Cache>,
+    latest: &Version,
+    current: &Version,
+    now: chrono::DateTime<Utc>,
+) {
+    let homebrew = matches!(
+        commands::self_update::detect_kind(home),
+        InstallKind::Homebrew { .. }
+    );
+    eprintln!("{}", notify::hint_line(latest, current, homebrew));
+    if let Some(mut cache) = cache {
+        cache.hinted_at = Some(now);
+        cache.hinted_version = Some(latest.clone());
+        let _ = notify::write_cache(home, &cache);
+    }
+}
+
+/// Launch `mx self-update --refresh-cache` detached and forget about it:
+/// stdio on `/dev/null`, its own process group on unix so it outlives this
+/// shell, and no wait.
+fn spawn_refresh() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(["self-update", "--refresh-cache"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let _ = cmd.spawn();
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     setup_logging(cli.verbose);
+
+    let notify_after = runs_update_check(&cli.command);
 
     let result = match cli.command {
         Commands::Init(cmd) => cmd.run().await,
@@ -160,6 +277,10 @@ async fn main() -> Result<()> {
         Commands::Upgrade(cmd) => cmd.run().await,
         Commands::SelfUpdate(cmd) => cmd.run().await,
     };
+
+    if notify_after {
+        run_update_check();
+    }
 
     if let Err(e) = result {
         print_error(&e.to_string());

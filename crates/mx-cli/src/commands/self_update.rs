@@ -18,6 +18,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Args;
@@ -27,6 +28,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use mx_lib::selfupdate::fetch;
 use mx_lib::selfupdate::index::{Release, ReleaseIndex};
 use mx_lib::selfupdate::layout::Layout;
+use mx_lib::selfupdate::notify::{self, Cache};
 use mx_lib::selfupdate::refresh;
 use mx_lib::selfupdate::verify::{check_binary_version, check_codesign, CodesignStatus};
 use mx_lib::selfupdate::{
@@ -41,6 +43,10 @@ const KEEP_RELEASES: usize = 2;
 
 /// Hidden env: path used for install-kind detection instead of `current_exe()`.
 const EXE_OVERRIDE_ENV: &str = "MX_SELFUPDATE_EXE";
+
+/// Whole-operation budget for the notifier's background check. It runs
+/// detached from a user's shell, so it must never linger.
+const REFRESH_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Update the mx CLI itself
 #[derive(Args, Debug, Default)]
@@ -81,9 +87,7 @@ pub struct SelfUpdateCommand {
 impl SelfUpdateCommand {
     pub async fn run(&self) -> Result<()> {
         if self.refresh_cache {
-            // Reserved for the passive notifier (mech-crate-4vp.8); a stable
-            // no-op keeps the flag surface fixed for callers.
-            return Ok(());
+            return refresh_update_cache().await;
         }
 
         let home = mx_lib::home_dir()?;
@@ -455,8 +459,52 @@ fn is_mech_crate_root(path: &Path) -> bool {
     path.join("Cargo.toml").exists() && path.join("crates/mx-cli").exists()
 }
 
+/// `--refresh-cache`: the notifier's background half (spec §3.6).
+///
+/// Ask the release channel what the latest version is and record the answer
+/// at `<home>/cache/update-check.json`. A failure — offline, rate limited,
+/// slow — is not an error: the cache keeps whatever the last good check
+/// found and is dated forward by [`notify::OFFLINE_BACKOFF`] so an offline
+/// laptop forks at most one check an hour. Prints nothing either way; the
+/// process runs detached with its stdio on `/dev/null`.
+async fn refresh_update_cache() -> Result<()> {
+    let home = mx_lib::home_dir()?;
+    let previous = notify::read_cache(&home);
+    let now = chrono::Utc::now();
+
+    let latest = ReleaseIndex::from_env()
+        .with_timeout(REFRESH_TIMEOUT)
+        .latest()
+        .await
+        .ok()
+        .map(|r| r.version);
+
+    let (latest, next_check_at) = match latest {
+        Some(v) => (Some(v), now + notify::CHECK_TTL),
+        // Keep the last known answer so a hint survives a flaky network.
+        None => (
+            previous.as_ref().and_then(|c| c.latest.clone()),
+            now + notify::OFFLINE_BACKOFF,
+        ),
+    };
+
+    let cache = Cache {
+        checked_at: now,
+        next_check_at,
+        latest,
+        current_at_check: selfupdate::current(),
+        // Hint bookkeeping belongs to the foreground; carry it forward so a
+        // refresh does not make an already-printed hint print again.
+        hinted_at: previous.as_ref().and_then(|c| c.hinted_at),
+        hinted_version: previous.and_then(|c| c.hinted_version),
+    };
+    // Even the write is silent: a read-only home is not worth a word here.
+    let _ = notify::write_cache(&home, &cache);
+    Ok(())
+}
+
 /// Classify this binary's install. See the module docs for the test seams.
-fn detect_kind(home: &Path) -> InstallKind {
+pub(crate) fn detect_kind(home: &Path) -> InstallKind {
     let exe = std::env::var_os(EXE_OVERRIDE_ENV)
         .map(PathBuf::from)
         .or_else(|| std::env::current_exe().ok())

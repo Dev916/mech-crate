@@ -76,6 +76,17 @@ impl ReleaseIndex {
         }
     }
 
+    /// Cap every request at `timeout` (connect plus response).
+    ///
+    /// The notifier's background refresh must not linger on a black-holed
+    /// network; a client that cannot be rebuilt keeps the default (no cap).
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        if let Ok(client) = reqwest::Client::builder().timeout(timeout).build() {
+            self.client = client;
+        }
+        self
+    }
+
     /// The base URL every request is built from, without a trailing slash.
     pub fn base_url(&self) -> &str {
         &self.base_url
