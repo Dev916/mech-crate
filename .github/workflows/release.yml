@@ -93,8 +93,51 @@ jobs:
       - run: make test
       - run: make coverage
 
-  macos:
+  # One draft release per tag, created only when the cross-repo token exists.
+  # Every platform job uploads into the draft; `publish` flips it live once
+  # ALL of them succeed, so `releases/latest` (what mx self-update trusts)
+  # can never point at a release that is missing a platform. If a platform
+  # job fails the draft stays a draft and the run is red — do not "fix" a
+  # stuck draft by publishing it by hand without every asset.
+  create-draft:
+    name: create draft release
     needs: [resolve-version, test]
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+    steps:
+      - id: gate
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::RELEASES_REPO_TOKEN absent: tarballs are kept as run artifacts, nothing is published to $RELEASES_REPO"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          # A pre-release suffix (0.1.2-rc.1) marks the GitHub release as a
+          # prerelease so releases/latest never returns it.
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          # Idempotent: reuse an existing (draft) release for this tag.
+          if ! gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$RELEASES_REPO" \
+              --draft \
+              --title "$TAG" \
+              --notes "Automated release for $TAG." \
+              "${prerelease[@]}"
+          fi
+
+  macos:
+    needs: [resolve-version, test, create-draft]
     runs-on: macos-14
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
@@ -224,53 +267,94 @@ jobs:
             dist/mx-v*-universal-apple-darwin.tar.gz.sha256
           if-no-files-found: error
 
-      - name: Publish to releases repo
+      - name: Upload to the draft release
+        if: needs.create-draft.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::warning::RELEASES_REPO_TOKEN absent: tarball built and kept as a run artifact, not published to $RELEASES_REPO"
-            exit 0
-          fi
           asset="dist/mx-v${VERSION}-universal-apple-darwin.tar.gz"
-
-          # Idempotent: create the release on first upload, reuse otherwise.
-          # A version with a pre-release suffix (0.1.2-rc.1) is marked as a
-          # GitHub prerelease so it is never returned by releases/latest,
-          # which is what `mx self-update` trusts.
-          prerelease=()
-          if [[ "$VERSION" == *-* ]]; then
-            prerelease=(--prerelease)
-          fi
-          if ! gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-            gh release create "$TAG" \
-              --repo "$RELEASES_REPO" \
-              --title "$TAG" \
-              --notes "Automated release for $TAG." \
-              "${prerelease[@]}"
-          fi
-
           gh release upload "$TAG" "$asset" "${asset}.sha256" \
             --repo "$RELEASES_REPO" --clobber
 
+  linux:
+    needs: [resolve-version, test, create-draft]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        triple: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+      TRIPLE: ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-${{ matrix.triple }}
+      # cross builds inside a musl container; the result is a static binary
+      # (reqwest is on rustls, sqlx on rustls, so there is no OpenSSL to link).
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build (${{ matrix.triple }})
+        run: cross build --release --target "$TRIPLE" -p mx-cli -p mx-mcp-server
+
+      - name: Prove the binaries are static
+        run: |
+          set -euo pipefail
+          for bin in mx mx-mcp; do
+            file "target/$TRIPLE/release/$bin" | tee /dev/stderr | grep -q "statically linked"
+          done
+
+      - name: Package tarball
+        run: scripts/package.sh "$TRIPLE" "$VERSION" "target/$TRIPLE/release"
+
+      - name: Upload artifact (kept on the Actions run for debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mx-${{ matrix.triple }}
+          path: |
+            dist/mx-v*-${{ matrix.triple }}.tar.gz
+            dist/mx-v*-${{ matrix.triple }}.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Upload to the draft release
+        if: needs.create-draft.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset="dist/mx-v${VERSION}-${TRIPLE}.tar.gz"
+          gh release upload "$TAG" "$asset" "${asset}.sha256" \
+            --repo "$RELEASES_REPO" --clobber
+
+  # Flips the draft live. `needs` on every platform job is the invariant:
+  # this never runs unless all of them uploaded.
+  publish:
+    name: publish release
+    needs: [resolve-version, create-draft, macos, linux]
+    if: needs.create-draft.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --repo "$RELEASES_REPO" --draft=false
+          gh release view "$TAG" --repo "$RELEASES_REPO" \
+            --json tagName,isDraft,isPrerelease,assets \
+            --jq '{tagName, isDraft, isPrerelease, assets: [.assets[].name]}'
+
 # ─────────────────────────────────────────────────────────────────────────────
-# NOTE: every job added below must keep `test` in its `needs:` (directly, or
-# transitively through the first job of its chain) — that is the release gate.
+# NOTE: every job added above must keep `test` in its `needs:` (directly, or
+# transitively through `create-draft`) — that is the release gate.
 #
-# TODO (Linux): mirror the macos job for x86_64 + aarch64 unknown-linux-musl
-#   - needs: [resolve-version, test]
-#   - runs-on: ubuntu-latest
-#   - install `cross` (taiki-e/install-action@v2 with tool: cross)
-#   - cross build --release --target <triple> -p mx-cli -p mx-mcp-server
-#   - scripts/package.sh <triple> "$VERSION" target/<triple>/release
-#   - upload to RELEASES_REPO via the same gh release flow
-#
-# TODO (Homebrew tap): after macos job finishes, open a PR to TAP_REPO that
-#   updates Formula/mx.rb with the new version + sha256. Either hand-roll a
-#   workflow or use mislav/bump-homebrew-formula-action@v3.
-#
-# TODO (publish flow): once Linux is added, create the GH release as a draft,
-#   have each platform job upload to the draft, then add a final `publish` job
-#   (needs: [macos, linux]) that flips it published so users never see a
-#   half-uploaded release.
+# TODO (Homebrew tap): after `publish`, open a PR to TAP_REPO that updates
+#   Formula/mx.rb with the new version + sha256 (mislav/bump-homebrew-formula-
+#   action@v3). Tracked as mech-crate-4vp.13.

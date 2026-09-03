@@ -25,7 +25,10 @@ serde_json = "1.0"
 async-trait = "0.1"
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+# rustls, not native-tls: no OpenSSL at build or run time, so the Linux
+# release targets can be fully static (musl) and the self-updater never
+# depends on the system TLS stack. Bundled Mozilla roots via webpki.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "charset", "http2"] }
 
 # Logging
 tracing = "0.1"
