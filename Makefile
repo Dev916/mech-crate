@@ -26,7 +26,7 @@ build-release:
 	$(CARGO) build --release -p mx-cli -p mx-mcp-server
 	@echo ""
 	@echo "Binaries:"
-	@ls -lh target/release/mx target/release/mx-mcp target/release/mx-ingest 2>/dev/null || true
+	@ls -lh target/release/mx target/release/mx-mcp 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Install
@@ -45,15 +45,14 @@ upgrade: build-release
 	@echo "Installing to bin/..."
 	@cp target/release/mx bin/mx && chmod +x bin/mx && echo "  ✓ bin/mx"
 	@test -f target/release/mx-mcp && cp target/release/mx-mcp bin/mx-mcp && chmod +x bin/mx-mcp && echo "  ✓ bin/mx-mcp" || true
-	@test -f target/release/mx-ingest && cp target/release/mx-ingest bin/mx-ingest && chmod +x bin/mx-ingest && echo "  ✓ bin/mx-ingest" || true
 	@echo ""
 	@echo "🦝 mx upgraded! Run 'mx --version' to verify."
 
 ## Uninstall mx from $(PREFIX)/bin
 uninstall:
 	@echo "Removing mx binaries..."
-	@rm -f $(PREFIX)/bin/mx $(PREFIX)/bin/mx-mcp $(PREFIX)/bin/mx-ingest 2>/dev/null || \
-		sudo rm -f $(PREFIX)/bin/mx $(PREFIX)/bin/mx-mcp $(PREFIX)/bin/mx-ingest
+	@rm -f $(PREFIX)/bin/mx $(PREFIX)/bin/mx-mcp 2>/dev/null || \
+		sudo rm -f $(PREFIX)/bin/mx $(PREFIX)/bin/mx-mcp
 	@echo "✓ mx uninstalled from $(PREFIX)/bin"
 
 ## Initialize MechCrate (copy templates to ~/.mech-crate)

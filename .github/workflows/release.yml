@@ -51,6 +51,21 @@ jobs:
           echo "tag=$tag"         >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # The binary reports Cargo.toml's version, and mx self-update refuses a
+      # bundle whose VERSION file and binary disagree — so a tag that does not
+      # match the crate version would ship an uninstallable release. Fail here.
+      - uses: actions/checkout@v4
+      - name: The release version must match the crate version
+        env:
+          VERSION: ${{ steps.set.outputs.version }}
+        run: |
+          set -euo pipefail
+          crate="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [[ "$crate" != "$VERSION" ]]; then
+            echo "::error::Cargo.toml [workspace.package] version is '$crate' but this release is '$VERSION'; bump Cargo.toml (and Cargo.lock) first"
+            exit 1
+          fi
+
   # The release gate. Mirrors ci.yml's lint + test + coverage jobs (the
   # known-broken scoreboard lane is deliberately excluded — it is expected-red
   # and non-blocking, so it has no business in a release decision).
@@ -93,8 +108,51 @@ jobs:
       - run: make test
       - run: make coverage
 
-  macos:
+  # One draft release per tag, created only when the cross-repo token exists.
+  # Every platform job uploads into the draft; `publish` flips it live once
+  # ALL of them succeed, so `releases/latest` (what mx self-update trusts)
+  # can never point at a release that is missing a platform. If a platform
+  # job fails the draft stays a draft and the run is red — do not "fix" a
+  # stuck draft by publishing it by hand without every asset.
+  create-draft:
+    name: create draft release
     needs: [resolve-version, test]
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+    steps:
+      - id: gate
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::RELEASES_REPO_TOKEN absent: tarballs are kept as run artifacts, nothing is published to $RELEASES_REPO"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          # A pre-release suffix (0.1.2-rc.1) marks the GitHub release as a
+          # prerelease so releases/latest never returns it.
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          # Idempotent: reuse an existing (draft) release for this tag.
+          if ! gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$RELEASES_REPO" \
+              --draft \
+              --title "$TAG" \
+              --notes "Automated release for $TAG." \
+              "${prerelease[@]}"
+          fi
+
+  macos:
+    needs: [resolve-version, test, create-draft]
     runs-on: macos-14
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
@@ -124,23 +182,47 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p target/universal-apple-darwin/release
-          for bin in mx mx-mcp mx-ingest; do
+          for bin in mx mx-mcp; do
             lipo -create -output "target/universal-apple-darwin/release/$bin" \
               "target/aarch64-apple-darwin/release/$bin" \
               "target/x86_64-apple-darwin/release/$bin"
             file "target/universal-apple-darwin/release/$bin"
           done
 
+      # Signing is conditional on the Developer ID material being present as
+      # secrets. Without it the binaries are ad-hoc signed (`codesign -s -`):
+      # that passes `codesign --verify --strict` (what `mx self-update`
+      # checks) but is NOT notarized, so Gatekeeper refuses a *quarantined*
+      # copy — i.e. one downloaded by a browser. `mx self-update` and the
+      # curl installer write files without the quarantine xattr, so those
+      # paths run either way. Adding the APPLE_* secrets switches to
+      # Developer ID + notarization with no workflow change.
+      - name: Detect signing material
+        id: signing
+        env:
+          P12: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$P12" && -n "$API_KEY" ]]; then
+            echo "developer-id=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "developer-id=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::APPLE_* secrets absent: binaries will be ad-hoc signed and not notarized"
+          fi
+
       - name: Import Developer ID Application certificate
+        if: steps.signing.outputs.developer-id == 'true'
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
 
-      - name: Codesign binaries
+      - name: Codesign binaries (Developer ID)
+        if: steps.signing.outputs.developer-id == 'true'
         run: |
           set -euo pipefail
-          for bin in mx mx-mcp mx-ingest; do
+          for bin in mx mx-mcp; do
             codesign --force --options runtime --timestamp \
               --sign "$APPLE_SIGNING_IDENTITY" \
               "target/universal-apple-darwin/release/$bin"
@@ -148,7 +230,18 @@ jobs:
               "target/universal-apple-darwin/release/$bin"
           done
 
+      - name: Codesign binaries (ad-hoc fallback)
+        if: steps.signing.outputs.developer-id != 'true'
+        run: |
+          set -euo pipefail
+          for bin in mx mx-mcp; do
+            codesign --force --sign - "target/universal-apple-darwin/release/$bin"
+            codesign --verify --strict --verbose=2 \
+              "target/universal-apple-darwin/release/$bin"
+          done
+
       - name: Notarize
+        if: steps.signing.outputs.developer-id == 'true'
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -189,41 +282,97 @@ jobs:
             dist/mx-v*-universal-apple-darwin.tar.gz.sha256
           if-no-files-found: error
 
-      - name: Publish to releases repo
+      - name: Upload to the draft release
+        if: needs.create-draft.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         run: |
           set -euo pipefail
           asset="dist/mx-v${VERSION}-universal-apple-darwin.tar.gz"
-
-          # Idempotent: create the release on first upload, reuse otherwise.
-          if ! gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-            gh release create "$TAG" \
-              --repo "$RELEASES_REPO" \
-              --title "$TAG" \
-              --notes "Automated release for $TAG."
-          fi
-
           gh release upload "$TAG" "$asset" "${asset}.sha256" \
             --repo "$RELEASES_REPO" --clobber
 
+  linux:
+    needs: [resolve-version, test, create-draft]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        triple: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+      TRIPLE: ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-${{ matrix.triple }}
+      # cross builds inside a musl container; the result is a static binary
+      # (reqwest is on rustls, sqlx on rustls, so there is no OpenSSL to link).
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build (${{ matrix.triple }})
+        run: cross build --release --target "$TRIPLE" -p mx-cli -p mx-mcp-server
+
+      # x86_64-musl links static-pie ("static-pie linked"), aarch64-musl
+      # links non-PIE ("statically linked"); both are fully static.
+      - name: Prove the binaries are static
+        run: |
+          set -euo pipefail
+          for bin in mx mx-mcp; do
+            file "target/$TRIPLE/release/$bin" | tee /dev/stderr \
+              | grep -Eq "statically linked|static-pie linked"
+          done
+
+      - name: Package tarball
+        run: scripts/package.sh "$TRIPLE" "$VERSION" "target/$TRIPLE/release"
+
+      - name: Upload artifact (kept on the Actions run for debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mx-${{ matrix.triple }}
+          path: |
+            dist/mx-v*-${{ matrix.triple }}.tar.gz
+            dist/mx-v*-${{ matrix.triple }}.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Upload to the draft release
+        if: needs.create-draft.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset="dist/mx-v${VERSION}-${TRIPLE}.tar.gz"
+          gh release upload "$TAG" "$asset" "${asset}.sha256" \
+            --repo "$RELEASES_REPO" --clobber
+
+  # Flips the draft live. `needs` on every platform job is the invariant:
+  # this never runs unless all of them uploaded.
+  publish:
+    name: publish release
+    needs: [resolve-version, create-draft, macos, linux]
+    if: needs.create-draft.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --repo "$RELEASES_REPO" --draft=false
+          gh release view "$TAG" --repo "$RELEASES_REPO" \
+            --json tagName,isDraft,isPrerelease,assets \
+            --jq '{tagName, isDraft, isPrerelease, assets: [.assets[].name]}'
+
 # ─────────────────────────────────────────────────────────────────────────────
-# NOTE: every job added below must keep `test` in its `needs:` (directly, or
-# transitively through the first job of its chain) — that is the release gate.
+# NOTE: every job added above must keep `test` in its `needs:` (directly, or
+# transitively through `create-draft`) — that is the release gate.
 #
-# TODO (Linux): mirror the macos job for x86_64 + aarch64 unknown-linux-musl
-#   - needs: [resolve-version, test]
-#   - runs-on: ubuntu-latest
-#   - install `cross` (taiki-e/install-action@v2 with tool: cross)
-#   - cross build --release --target <triple> -p mx-cli -p mx-mcp-server
-#   - scripts/package.sh <triple> "$VERSION" target/<triple>/release
-#   - upload to RELEASES_REPO via the same gh release flow
-#
-# TODO (Homebrew tap): after macos job finishes, open a PR to TAP_REPO that
-#   updates Formula/mx.rb with the new version + sha256. Either hand-roll a
-#   workflow or use mislav/bump-homebrew-formula-action@v3.
-#
-# TODO (publish flow): once Linux is added, create the GH release as a draft,
-#   have each platform job upload to the draft, then add a final `publish` job
-#   (needs: [macos, linux]) that flips it published so users never see a
-#   half-uploaded release.
+# TODO (Homebrew tap): after `publish`, open a PR to TAP_REPO that updates
+#   Formula/mx.rb with the new version + sha256 (mislav/bump-homebrew-formula-
+#   action@v3). Tracked as mech-crate-4vp.13.

@@ -40,8 +40,14 @@ indicatif = { workspace = true }
 # Process execution
 which = { workspace = true }
 
+# Scratch directory names (self-update downloads)
+uuid = { workspace = true }
+
 # Home directory
 dirs = { workspace = true }
+
+# Time handling (update-check cache timestamps)
+chrono = { workspace = true }
 
 # Directory walking
 walkdir = "2.5"

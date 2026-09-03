@@ -112,13 +112,18 @@ That contract is non-negotiable — and it's the point. It's what lets one `make
 ### Install
 
 ```bash
-git clone https://github.com/Dev916/mech-crate.git
-cd mech-crate
-make install-local    # installs mx to ~/.local/bin (no sudo)
+curl -fsSL https://mechcrate.dev/install.sh | sh    # macOS, Linux; no sudo
 
 mx --version
 mx doctor
+mx self-update --check     # later: is a newer release out?
 ```
+
+The installer downloads the signed tarball for your platform from the
+[release channel](https://github.com/unyform-ai/mech-crate-releases), verifies
+its sha256, and installs under `~/.mech-crate` with shims in `~/.local/bin`.
+`mx self-update` keeps it current (and `--rollback` undoes an update).
+Contributors build from a checkout instead: see [Development](#development).
 
 ### First project
 
