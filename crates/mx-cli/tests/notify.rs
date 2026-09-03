@@ -123,6 +123,20 @@ fn wait_for(timeout: StdDuration, done: impl Fn() -> bool) -> bool {
     done()
 }
 
+/// A release channel that is up but broken: every request is answered with
+/// a 500 at once. The refresh takes the failure path deterministically, with
+/// none of the timing a closed port has on some CI runners (a connect that
+/// hangs until the 5 s budget expires instead of being refused).
+async fn failing_api() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/releases/latest"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+        .mount(&server)
+        .await;
+    server
+}
+
 /// A fake GitHub releases API whose `latest` is `version`.
 async fn releases_api(version: &str) -> MockServer {
     let server = MockServer::start().await;
@@ -141,13 +155,14 @@ async fn releases_api(version: &str) -> MockServer {
 
 // ── the hook on the hot path ────────────────────────────────────────────────
 
-#[test]
-fn a_stale_cache_on_a_tty_hints_once_and_refreshes_in_the_background() {
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stale_cache_on_a_tty_hints_once_and_refreshes_in_the_background() {
     let sb = Sandbox::new();
+    let api = failing_api().await;
     sb.seed(&stale_cache("9.9.9"));
 
     sb.mx_tty()
-        .env("MX_RELEASES_API", UNREACHABLE_API)
+        .env("MX_RELEASES_API", api.uri())
         .arg("doctor")
         .assert()
         .success()
@@ -164,9 +179,11 @@ fn a_stale_cache_on_a_tty_hints_once_and_refreshes_in_the_background() {
         "hinted_at",
     );
 
-    // The detached refresh ran: it could not reach the channel, so it backed
-    // off by an hour rather than a day.
-    let refreshed = wait_for(StdDuration::from_secs(5), || {
+    // The detached refresh ran: the channel answered 500, so it backed off
+    // by an hour rather than a day. The window is generous on purpose: the
+    // refresh is an instrumented, freshly started process on a loaded CI
+    // runner; a working refresh lands in well under a second.
+    let refreshed = wait_for(StdDuration::from_secs(30), || {
         sb.cache()
             .is_some_and(|c| c.checked_at > after_hint.checked_at)
     });
