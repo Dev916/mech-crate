@@ -131,13 +131,37 @@ jobs:
             file "target/universal-apple-darwin/release/$bin"
           done
 
+      # Signing is conditional on the Developer ID material being present as
+      # secrets. Without it the binaries are ad-hoc signed (`codesign -s -`):
+      # that passes `codesign --verify --strict` (what `mx self-update`
+      # checks) but is NOT notarized, so Gatekeeper refuses a *quarantined*
+      # copy — i.e. one downloaded by a browser. `mx self-update` and the
+      # curl installer write files without the quarantine xattr, so those
+      # paths run either way. Adding the APPLE_* secrets switches to
+      # Developer ID + notarization with no workflow change.
+      - name: Detect signing material
+        id: signing
+        env:
+          P12: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$P12" && -n "$API_KEY" ]]; then
+            echo "developer-id=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "developer-id=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::APPLE_* secrets absent: binaries will be ad-hoc signed and not notarized"
+          fi
+
       - name: Import Developer ID Application certificate
+        if: steps.signing.outputs.developer-id == 'true'
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
 
-      - name: Codesign binaries
+      - name: Codesign binaries (Developer ID)
+        if: steps.signing.outputs.developer-id == 'true'
         run: |
           set -euo pipefail
           for bin in mx mx-mcp mx-ingest; do
@@ -148,7 +172,18 @@ jobs:
               "target/universal-apple-darwin/release/$bin"
           done
 
+      - name: Codesign binaries (ad-hoc fallback)
+        if: steps.signing.outputs.developer-id != 'true'
+        run: |
+          set -euo pipefail
+          for bin in mx mx-mcp mx-ingest; do
+            codesign --force --sign - "target/universal-apple-darwin/release/$bin"
+            codesign --verify --strict --verbose=2 \
+              "target/universal-apple-darwin/release/$bin"
+          done
+
       - name: Notarize
+        if: steps.signing.outputs.developer-id == 'true'
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -197,11 +232,19 @@ jobs:
           asset="dist/mx-v${VERSION}-universal-apple-darwin.tar.gz"
 
           # Idempotent: create the release on first upload, reuse otherwise.
+          # A version with a pre-release suffix (0.1.2-rc.1) is marked as a
+          # GitHub prerelease so it is never returned by releases/latest,
+          # which is what `mx self-update` trusts.
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
           if ! gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --repo "$RELEASES_REPO" \
               --title "$TAG" \
-              --notes "Automated release for $TAG."
+              --notes "Automated release for $TAG." \
+              "${prerelease[@]}"
           fi
 
           gh release upload "$TAG" "$asset" "${asset}.sha256" \
