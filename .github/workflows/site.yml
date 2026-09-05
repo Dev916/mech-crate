@@ -53,9 +53,15 @@
 # Consequence worth knowing: Cloudflare's asset server sets `Content-Type` from
 # the file extension, so `/llms.txt` and `/llms-full.txt` are served as
 # `text/plain; charset=utf-8` and render in the browser instead of downloading.
-# No `_headers` file is required (that is a Pages mechanism). The `build` job
-# re-proves this on every run against a local workerd, so a future change to the
-# asset config cannot quietly turn the agent-facing artefacts into downloads.
+#
+# An earlier revision of this comment claimed `_headers` was a Pages-only
+# mechanism and therefore unavailable here. That was wrong. Workers static
+# assets support it: `wrangler deploy` ships `dist/_headers` in the assets
+# manifest and the asset worker applies the rules. `site/apps/site/public/_headers`
+# now carries the site's cache, HSTS and robots policy, and the `Edge headers`
+# step below re-proves the whole set on every run against a local workerd — so a
+# future change to the asset config cannot quietly turn the agent-facing
+# artefacts into downloads or drop the security headers.
 #
 # ----------------------------------------------------------------------------
 # WHY PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
@@ -165,11 +171,15 @@ jobs:
             "site/apps/site/dist/**/*.html"
           fail: true
 
-      # Proves the two agent-facing artefacts are served as inline text/plain by
-      # Cloudflare's own asset server (workerd, local mode — no account, no
-      # secrets, no network). If someone later swaps the deploy mechanism for
-      # one that guesses wrong, this fails here rather than in production.
-      - name: Content-type check (/llms.txt as text/plain on workerd)
+      # Runs the built `dist/` through Cloudflare's own asset server (workerd,
+      # local mode — no account, no secrets, no network) and asserts what
+      # actually reaches the wire: the two agent-facing artefacts as inline
+      # text/plain, and every rule in `public/_headers`. Unit tests can only
+      # check that file's bytes; this is the only place that proves the edge
+      # applies them. If someone later swaps the deploy mechanism for one that
+      # ignores `_headers`, or guesses the content type wrong, it fails here
+      # rather than in production.
+      - name: Edge headers (public/_headers on workerd)
         run: |
           set -euo pipefail
           npx --yes "wrangler@${WRANGLER_VERSION}" dev --port 8799 --ip 127.0.0.1 &
@@ -184,12 +194,55 @@ jobs:
             echo "::error::wrangler dev did not serve http://127.0.0.1:8799/ within 60s"
             exit 1
           fi
-          for path in /llms.txt /llms-full.txt; do
-            ctype=$(curl -fsS -o /dev/null -w '%{content_type}' "http://127.0.0.1:8799${path}")
-            echo "${path} -> ${ctype}"
-            case "${ctype}" in
-              text/plain*) ;;
-              *) echo "::error::${path} served as '${ctype}', expected text/plain"; exit 1 ;;
+
+          # One header value for one path, empty when absent. Matched
+          # case-insensitively: workerd emits its own headers capitalised and
+          # the `_headers` ones lowercased.
+          header() {
+            curl -fsS -D - -o /dev/null "http://127.0.0.1:8799$1" 2>/dev/null \
+              | tr -d '\r' | grep -i "^$2:" | head -n 1 | sed 's/^[^:]*:[[:space:]]*//'
+          }
+
+          # `want` is a glob, so a trailing * makes a prefix assertion.
+          expect() {
+            got=$(header "$1" "$2" || true)
+            echo "$1 -> $2: ${got:-<absent>}"
+            case "${got}" in
+              $3) ;;
+              *) echo "::error::$1 sent '$2: ${got:-<absent>}', expected '$3'"; exit 1 ;;
+            esac
+          }
+
+          expect /llms.txt      Content-Type  'text/plain*'
+          expect /llms-full.txt Content-Type  'text/plain*'
+          expect /llms.txt      Cache-Control 'public, max-age=3600'
+          expect /llms-full.txt Cache-Control 'public, max-age=3600'
+          expect /              Strict-Transport-Security 'max-age=31536000; includeSubDomains'
+          expect /              X-Content-Type-Options    'nosniff'
+          expect /              Referrer-Policy           'strict-origin-when-cross-origin'
+          # /404 resolves to dist/404.html with a 200 on a DIRECT hit; the rule
+          # keeps that copy out of the index. Ordinary not-found responses are
+          # out of reach — the asset worker matches rules against the REQUESTED
+          # path, never the asset it resolved to.
+          expect /404           X-Robots-Tag  'noindex'
+          asset=$(ls dist/_astro | head -n 1)
+          expect "/_astro/${asset}" Cache-Control 'public, max-age=31536000, immutable'
+
+          # robots.txt reaches the wire verbatim from the origin. In production
+          # Cloudflare may PREPEND a managed Content-Signals preamble (a
+          # dashboard toggle this gate cannot see), which is why the live check
+          # after deploy looks at the merged output instead.
+          robots=$(curl -fsS "http://127.0.0.1:8799/robots.txt")
+          echo "${robots}"
+          for line in \
+            'User-agent: *' \
+            'Allow: /' \
+            'Content-Signal: search=yes, ai-input=yes, ai-train=yes' \
+            'Sitemap: https://mechcrate.dev/sitemap-index.xml'
+          do
+            case "${robots}" in
+              *"${line}"*) ;;
+              *) echo "::error::robots.txt is missing '${line}'"; exit 1 ;;
             esac
           done
 

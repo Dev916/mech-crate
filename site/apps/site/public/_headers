@@ -1,0 +1,57 @@
+# Response headers for mechcrate.dev.
+#
+# `_headers` is NOT a Pages-only mechanism: wrangler uploads this file as part
+# of the assets manifest for a Workers **static assets** deployment, and
+# Cloudflare's asset worker applies it (locally, `wrangler dev` runs the same
+# worker through workerd — see the "Edge headers" step in
+# .github/workflows/site.yml, which proves the rules below against it).
+# Syntax and limits are the Workers-assets ones, read out of wrangler 4.125.0
+# (`workers-shared/utils/configuration/parseHeaders.ts` + `asset-worker`):
+#
+#   * a rule is a path line (must start with `/` or `https://`) followed by
+#     indented `Name: value` lines; `# …` lines and blank lines are ignored;
+#   * at most one `*` splat per path, 100 rules, 2000 chars per line;
+#   * `! Header-Name` under a rule DETACHES that header from the response;
+#   * a header set by two matching rules is comma-joined, not overwritten, so
+#     no key below appears in more than one rule;
+#   * rules match the REQUESTED URL pathname, not the asset that ends up being
+#     served. That distinction matters for /404 — see the note at the bottom.
+
+# Astro fingerprints everything under /_astro/ (content hash in the filename),
+# so these are safe to cache forever. This is the one rule that actually moves
+# a Core Web Vital.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Site-wide transport + privacy defaults.
+# HSTS ships WITHOUT `preload`: preload is a one-way door (removal takes
+# months) and it should not be requested until the http→https 301 has been
+# live and healthy for a while. Adding `preload` is a deliberate later edit,
+# not a default.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# The agent-facing artefacts. Cloudflare's asset server already derives
+# text/plain from the `.txt` extension; re-asserting it here means a future
+# change to that inference cannot quietly turn them into downloads. One hour
+# of cache because they are regenerated on every deploy.
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+# Keeps the 404 page itself out of the index when it is requested DIRECTLY
+# (crawlers do find /404 via stray links). It does NOT cover ordinary
+# not-found responses: `not_found_handling: "404-page"` serves dist/404.html
+# for an unmatched path, but the asset worker matches `_headers` rules against
+# the requested pathname (`/typo`), never against the asset it resolved to, so
+# no rule short of `/*` can reach those. `/*` would put noindex on the whole
+# site, so the remaining coverage belongs on the 404 page itself as
+# `<meta name="robots" content="noindex">` — a page change, tracked separately.
+/404
+  X-Robots-Tag: noindex
