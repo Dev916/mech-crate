@@ -41,11 +41,18 @@ export default defineConfig({
       // Pagefind stays on (Starlight's default) — it is the human-facing search;
       // the RAG corpus is the agent-facing one.
       pagefind: true,
-      // Corpus pages get a banner ("…agents retrieve it via `rag_context`") and,
-      // where the research pipeline recorded one, a provenance footer. The
-      // override is gated on `data.corpus` so authored pages are untouched.
+      // Two overrides, both additive — each renders Starlight's own component
+      // and wraps it rather than replacing it.
+      //
+      //   MarkdownContent — corpus page chrome: a banner ("…agents retrieve it
+      //     via `rag_context`") and, where the research pipeline recorded one, a
+      //     provenance footer. Gated on `data.corpus`, so authored pages are
+      //     untouched.
+      //   Head — the per-page `og:image` tags. Starlight's `head:` config array
+      //     only takes static entries, and every page's card URL is different.
       components: {
         MarkdownContent: './src/components/MarkdownContent.astro',
+        Head: './src/components/Head.astro',
       },
       sidebar: [
         { label: 'Start', autogenerate: { directory: 'docs/start' } },

@@ -1,0 +1,57 @@
+---
+/**
+ * Starlight `<Head>` override — the per-page social card tags.
+ *
+ * Starlight's `head:` config array only takes static entries, and every page
+ * needs a different `og:image`, so the route-aware half has to be a component.
+ * The default is rendered rather than reimplemented (it emits
+ * `Astro.locals.starlightRoute.head`, which already carries `og:title`,
+ * `og:description`, `og:url` and `twitter:card`), and these tags are appended
+ * after it. Starlight never emits an `og:image` of its own, so nothing here
+ * duplicates.
+ *
+ * Applies to every Starlight route, including the pages rendered through
+ * `<StarlightPage>` (`/docs/corpus/`, `/docs/corpus/<category>/`). The landing
+ * page is not a Starlight route and carries the same tags by hand — see
+ * `src/pages/index.astro`.
+ *
+ * Nothing imported here may touch git or the filesystem: the containerised dev
+ * loop mounts only `apps/site` plus a read-only `docs/`, so a component that
+ * pulls in `src/loaders/lib/dates.ts` (which shells to `git log`) breaks
+ * `make dev`. `src/lib/og.ts` is pure route math for exactly that reason.
+ */
+import Default from '@astrojs/starlight/components/Head.astro';
+
+import {
+  OG_CARD_HEIGHT,
+  OG_CARD_TYPE,
+  OG_CARD_WIDTH,
+  ogCardUrl,
+  routeHasOgCard,
+} from '../lib/og.ts';
+
+const route = Astro.locals.starlightRoute;
+
+// The 404 route is `sidebar.hidden`, which is also what keeps it out of the
+// sitemap, out of llms.txt and out of the card endpoint's page list. Pointing
+// at a card that was never generated would put a 404 image in a share preview,
+// so pages without one simply omit the tags.
+const card = routeHasOgCard(Astro.url.pathname, route.entry.data.sidebar?.hidden === true)
+  ? ogCardUrl(Astro.url.pathname)
+  : undefined;
+---
+
+<Default />
+
+{
+  card && (
+    <>
+      <meta property="og:image" content={card} />
+      <meta property="og:image:type" content={OG_CARD_TYPE} />
+      <meta property="og:image:width" content={String(OG_CARD_WIDTH)} />
+      <meta property="og:image:height" content={String(OG_CARD_HEIGHT)} />
+      <meta property="og:image:alt" content={route.entry.data.title} />
+      <meta name="twitter:image" content={card} />
+    </>
+  )
+}
