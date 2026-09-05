@@ -1,6 +1,8 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
+import { mechcrateSitemap } from './src/integrations/sitemap.ts';
+
 // https://astro.build/config
 //
 // Static output: the site is a documentation site deployed to Cloudflare as a
@@ -64,6 +66,14 @@ export default defineConfig({
         { label: 'Project', autogenerate: { directory: 'docs/project' } },
       ],
     }),
+
+    // Must come after starlight(): Starlight injects its own `@astrojs/sitemap`
+    // only when the user has not supplied one, and it decides that by scanning
+    // `config.integrations` during its own config:setup. Declaring it here wins
+    // that check, so the site gets ONE sitemap — the same URL set Starlight
+    // would have produced (its config is empty for a single-locale site), now
+    // with a verifiable `<lastmod>` on every entry.
+    ...mechcrateSitemap(),
   ],
 
   server: {

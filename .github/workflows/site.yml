@@ -132,7 +132,15 @@ jobs:
       run:
         working-directory: site/apps/site
     steps:
+      # fetch-depth: 0 — the sitemap's `<lastmod>` is the source file's last
+      # COMMIT date (`git log -1 --format=%cI`, see
+      # site/apps/site/src/loaders/lib/dates.ts). The default depth-1 checkout
+      # knows exactly one commit, so every page would look undated and the build
+      # would fail its own lastmod guard. Full history is the price of a
+      # `<lastmod>` Google is willing to trust.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -267,7 +275,13 @@ jobs:
       run:
         working-directory: site/apps/site
     steps:
+      # fetch-depth: 0 for the same reason as the build job: this job re-checks
+      # out the repo, and anything here that has to reason about the site's
+      # git-derived page dates (or that grows a build step later) needs the
+      # history the default depth-1 clone throws away.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
