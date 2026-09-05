@@ -185,12 +185,45 @@ describe('public/_headers', () => {
     expect(ruleFor('/*').set['strict-transport-security']).not.toContain('preload');
   });
 
-  it('serves both llms artefacts as inline UTF-8 text with an hour of cache', () => {
-    for (const path of ['/llms.txt', '/llms-full.txt']) {
+  it('serves every llms artefact as inline UTF-8 text with an hour of cache', () => {
+    for (const path of ['/llms.txt', '/llms-*.txt']) {
       const rule = ruleFor(path);
       expect(rule.set['content-type'], path).toBe('text/plain; charset=utf-8');
       expect(rule.set['cache-control'], path).toBe('public, max-age=3600');
     }
+  });
+
+  it('covers the section splits with one splat rule that cannot reach /llms.txt', () => {
+    // `/llms-*.txt` has to catch llms-full.txt, llms-guides.txt and the fifteen
+    // llms-corpus-<category>.txt files without also matching /llms.txt — which
+    // would comma-join Content-Type onto itself for that one path.
+    const matches = (pattern: string, path: string) =>
+      new RegExp(
+        `^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`,
+      ).test(path);
+
+    for (const path of [
+      '/llms-full.txt',
+      '/llms-guides.txt',
+      '/llms-corpus-theory.txt',
+      '/llms-corpus-framework-guides.txt',
+    ]) {
+      expect(matches('/llms-*.txt', path), path).toBe(true);
+      expect(matches('/llms.txt', path), path).toBe(false);
+    }
+    expect(matches('/llms-*.txt', '/llms.txt')).toBe(false);
+    // A page route must never be swept up by it.
+    expect(matches('/llms-*.txt', '/docs/start/install/')).toBe(false);
+  });
+
+  it('pins the markdown twins to text/markdown with the same hour of cache', () => {
+    // Verified against workerd: the asset server already infers text/markdown
+    // from the extension, so this rule fixes the answer rather than repairing
+    // it. `.md` cannot collide with a page — Astro writes every route as
+    // `<route>/index.html`.
+    const rule = ruleFor('/*.md');
+    expect(rule.set['content-type']).toBe('text/markdown; charset=utf-8');
+    expect(rule.set['cache-control']).toBe('public, max-age=3600');
   });
 
   it('marks the 404 page noindex', () => {
