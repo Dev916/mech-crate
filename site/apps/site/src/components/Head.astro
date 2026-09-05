@@ -1,6 +1,6 @@
 ---
 /**
- * Starlight `<Head>` override — the per-page social card tags.
+ * Starlight `<Head>` override — the per-page social card tags and structured data.
  *
  * Starlight's `head:` config array only takes static entries, and every page
  * needs a different `og:image`, so the route-aware half has to be a component.
@@ -15,13 +15,23 @@
  * page is not a Starlight route and carries the same tags by hand — see
  * `src/pages/index.astro`.
  *
- * Nothing imported here may touch git or the filesystem: the containerised dev
- * loop mounts only `apps/site` plus a read-only `docs/`, so a component that
- * pulls in `src/loaders/lib/dates.ts` (which shells to `git log`) breaks
- * `make dev`. `src/lib/og.ts` is pure route math for exactly that reason.
+ * The structured data half (spec §4) emits one `application/ld+json` block per
+ * page: a `BreadcrumbList` on every docs route, preceded by a `TechArticle` on
+ * corpus documents. It sits OUTSIDE the card block — a page with no social card
+ * still gets its breadcrumbs.
+ *
+ * Nothing *statically* imported here may touch git or the filesystem: the
+ * containerised dev loop mounts only `apps/site` plus a read-only `docs/`, so a
+ * component that pulls in `src/loaders/lib/dates.ts` (which shells to `git log`)
+ * breaks `make dev`. `src/lib/og.ts` and `src/lib/jsonld.ts` are pure for
+ * exactly that reason, and the date map is reached through the deliberately
+ * lazy, deliberately fallible `src/lib/build-dates.ts`.
  */
 import Default from '@astrojs/starlight/components/Head.astro';
 
+import { corpusMetaOf } from './corpus.ts';
+import { buildPageDates } from '../lib/build-dates.ts';
+import { docsPageGraph, jsonLdScript, pageDates } from '../lib/jsonld.ts';
 import {
   OG_CARD_HEIGHT,
   OG_CARD_TYPE,
@@ -31,14 +41,49 @@ import {
 } from '../lib/og.ts';
 
 const route = Astro.locals.starlightRoute;
+const pathname = Astro.url.pathname;
 
 // The 404 route is `sidebar.hidden`, which is also what keeps it out of the
 // sitemap, out of llms.txt and out of the card endpoint's page list. Pointing
 // at a card that was never generated would put a 404 image in a share preview,
 // so pages without one simply omit the tags.
-const card = routeHasOgCard(Astro.url.pathname, route.entry.data.sidebar?.hidden === true)
-  ? ogCardUrl(Astro.url.pathname)
+const card = routeHasOgCard(pathname, route.entry.data.sidebar?.hidden === true)
+  ? ogCardUrl(pathname)
   : undefined;
+
+// `data.corpus` is set only by the corpus loader, so authored pages (Start /
+// Framework / AI Layer / Project) and the generated corpus index pages — which
+// render through `<StarlightPage>` and have no collection entry behind them —
+// get the breadcrumbs and nothing else.
+const corpus = corpusMetaOf(route.entry);
+
+const dateIndex = await buildPageDates();
+
+const dates = pageDates({
+  route: pathname,
+  ...(corpus?.researched === undefined ? {} : { researched: corpus.researched }),
+  ...(dateIndex === undefined ? {} : { index: dateIndex }),
+});
+
+const jsonLd = jsonLdScript(
+  docsPageGraph({
+    route: pathname,
+    title: route.entry.data.title,
+    ...(route.entry.data.description === undefined
+      ? {}
+      : { description: route.entry.data.description }),
+    ...(corpus === undefined
+      ? {}
+      : {
+          corpus: {
+            category: corpus.category,
+            sourceUrl: corpus.sourceUrl,
+            ...(corpus.sources === undefined ? {} : { sources: corpus.sources }),
+          },
+        }),
+    dates,
+  })
+);
 ---
 
 <Default />
@@ -55,3 +100,18 @@ const card = routeHasOgCard(Astro.url.pathname, route.entry.data.sidebar?.hidden
     </>
   )
 }
+
+{/* Same dates the sitemap's <lastmod> and the JSON-LD carry — one resolution,
+    three surfaces. Absent only where the build could not read git history (the
+    dev container), never where the page is published. */}
+{dates.datePublished && (
+  <meta property="article:published_time" content={dates.datePublished} />
+)}
+{dates.dateModified && (
+  <meta property="article:modified_time" content={dates.dateModified} />
+)}
+
+{/* One block per page, holding this page's @graph. `set:html` because the value
+    is already-serialised JSON, and `is:inline` so Astro leaves the element where
+    it is instead of treating it as a script to process. */}
+<script type="application/ld+json" is:inline set:html={jsonLd} />
