@@ -20,6 +20,12 @@
  * corpus documents. It sits OUTSIDE the card block — a page with no social card
  * still gets its breadcrumbs.
  *
+ * The agent-surface half (spec §5) adds `<link rel="alternate"
+ * type="text/markdown">` pointing at the page's `.md` twin. Independent of both
+ * blocks above: the pages that have a twin are the pages with a markdown source,
+ * which is not the same set as the pages with a card (the corpus navigation
+ * pages have a card and no twin).
+ *
  * Nothing *statically* imported here may touch git or the filesystem: the
  * containerised dev loop mounts only `apps/site` plus a read-only `docs/`, so a
  * component that pulls in `src/loaders/lib/dates.ts` (which shells to `git log`)
@@ -32,6 +38,7 @@ import Default from '@astrojs/starlight/components/Head.astro';
 import { corpusMetaOf } from './corpus.ts';
 import { buildPageDates } from '../lib/build-dates.ts';
 import { docsPageGraph, jsonLdScript, pageDates } from '../lib/jsonld.ts';
+import { MD_TWIN_TYPE, mdTwinUrl, routeHasMdTwin } from '../lib/md-twin.ts';
 import {
   OG_CARD_HEIGHT,
   OG_CARD_TYPE,
@@ -43,13 +50,19 @@ import {
 const route = Astro.locals.starlightRoute;
 const pathname = Astro.url.pathname;
 
+const hidden = route.entry.data.sidebar?.hidden === true;
+
 // The 404 route is `sidebar.hidden`, which is also what keeps it out of the
 // sitemap, out of llms.txt and out of the card endpoint's page list. Pointing
 // at a card that was never generated would put a 404 image in a share preview,
 // so pages without one simply omit the tags.
-const card = routeHasOgCard(pathname, route.entry.data.sidebar?.hidden === true)
-  ? ogCardUrl(pathname)
-  : undefined;
+const card = routeHasOgCard(pathname, hidden) ? ogCardUrl(pathname) : undefined;
+
+// The `<page-url>.md` twin, for pages that have a markdown source. The generated
+// navigation pages (the corpus overview and its per-category indexes) have none,
+// so they advertise none — `src/pages/[...slug].md.ts` fails the build if this
+// predicate and the page list ever disagree about which those are.
+const twin = routeHasMdTwin(pathname, hidden) ? mdTwinUrl(pathname) : undefined;
 
 // `data.corpus` is set only by the corpus loader, so authored pages (Start /
 // Framework / AI Layer / Project) and the generated corpus index pages — which
@@ -98,6 +111,21 @@ const jsonLd = jsonLdScript(
       <meta property="og:image:alt" content={route.entry.data.title} />
       <meta name="twitter:image" content={card} />
     </>
+  )
+}
+
+{/* The markdown twin of this page: same document, no HTML chrome. `rel=alternate`
+    with an explicit `type` is the standard way to say "the same content in
+    another format", and it is how an agent finds the twin without being told the
+    `.md` convention first. */}
+{
+  twin && (
+    <link
+      rel="alternate"
+      type={MD_TWIN_TYPE}
+      href={twin}
+      title={`${route.entry.data.title} (markdown)`}
+    />
   )
 }
 

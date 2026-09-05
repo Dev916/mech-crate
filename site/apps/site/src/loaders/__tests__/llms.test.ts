@@ -20,15 +20,27 @@ import {
   repoFileExistsIn,
 } from '../lib/sources.ts';
 import {
+  INSTALL_COMMAND,
+  INSTRUCTIONS_HEADING,
+  LLMS_FULL_PATH,
+  LLMS_GUIDES_PATH,
+  OPTIONAL_HEADING,
+  REPO_URL,
   SITE_ORIGIN,
   absoluteUrl,
+  agentInstructions,
+  buildLlmsCorpusTxt,
   buildLlmsFullTxt,
+  buildLlmsGuidesTxt,
   buildLlmsTxt,
   classifyDocId,
   docSeparator,
+  documentsOf,
   firstParagraph,
   groupPages,
+  llmsCorpusPath,
   routeFromDocId,
+  splitDocuments,
   summaryFor,
   truncateSummary,
   type LlmsPage,
@@ -263,8 +275,54 @@ describe('buildLlmsTxt', () => {
     expect(text).toContain('https://mechcrate.dev/llms-full.txt');
   });
 
-  it('uses ## for every group heading', () => {
-    expect(text.match(/^## .*$/gm)).toEqual(['## Overview', '## Start', '## Corpus: Patterns']);
+  it('opens with the agent contract and closes with Optional, primary sections between', () => {
+    // llmstxt.org: H2 sections carry the link lists, and the H2 spelled exactly
+    // "Optional" marks URLs a reader may skip for a shorter context. The corpus
+    // is what that is for here, so its per-category groups are demoted into it
+    // and it is always last.
+    expect(text.match(/^## .*$/gm)).toEqual([
+      `## ${INSTRUCTIONS_HEADING}`,
+      '## Overview',
+      '## Start',
+      `## ${OPTIONAL_HEADING}`,
+    ]);
+    expect(OPTIONAL_HEADING).toBe('Optional');
+  });
+
+  it('emits exactly one Optional section, whatever the category count', () => {
+    const many = buildLlmsTxt({
+      pages: [
+        page({ title: 'A', route: '/docs/corpus/theory/a/', kind: 'corpus', category: 'theory' }),
+        page({ title: 'B', route: '/docs/corpus/shell/b/', kind: 'corpus', category: 'shell' }),
+        page({ title: 'C', route: '/docs/corpus/infra/c/', kind: 'corpus', category: 'infra' }),
+      ],
+    });
+    expect(many.match(/^## Optional$/gm)).toHaveLength(1);
+    expect(many.match(/^## /gm)).toHaveLength(2); // Instructions + Optional
+  });
+
+  it('keeps each category grouped under Optional, labelled with its split file', () => {
+    expect(text).toContain(
+      `**Patterns** — https://mechcrate.dev${llmsCorpusPath('patterns')}`
+    );
+    // The bullet still follows its label, so the grouping survives the demotion.
+    const optional = text.slice(text.indexOf('## Optional'));
+    expect(optional.indexOf('**Patterns**')).toBeLessThan(
+      optional.indexOf('/docs/corpus/patterns/appendix-fsm/')
+    );
+  });
+
+  it('still parses as an llms.txt: H1, blockquote, then H2 link-list sections', () => {
+    const lines = text.split('\n');
+    expect(lines[0]!.startsWith('# ')).toBe(true);
+    expect(lines[2]!.startsWith('> ')).toBe(true);
+    // Every H2 other than the prose contract carries at least one link bullet.
+    for (const heading of text.match(/^## .*$/gm) ?? []) {
+      if (heading === `## ${INSTRUCTIONS_HEADING}`) continue;
+      const section = text.slice(text.indexOf(heading) + heading.length);
+      const body = section.split(/^## /m)[0]!;
+      expect(body, heading).toMatch(/^- \[[^\]]+\]\(https:\/\/\S+\)/m);
+    }
   });
 
   it('writes each page as a bullet with an absolute URL and a one-line summary', () => {
@@ -289,6 +347,158 @@ describe('buildLlmsTxt', () => {
   it('ends with a single newline', () => {
     expect(text.endsWith('\n')).toBe(true);
     expect(text.endsWith('\n\n')).toBe(false);
+  });
+});
+
+describe('agentInstructions', () => {
+  const text = agentInstructions({
+    categories: ['theory', 'shell'],
+    generatedAt: '2026-09-05',
+  }).join('\n');
+
+  it('states the only install path, and that no package registry carries mx', () => {
+    expect(text).toContain(INSTALL_COMMAND);
+    expect(INSTALL_COMMAND).toContain(REPO_URL);
+    expect(INSTALL_COMMAND).toContain('make install-local');
+    expect(text).toMatch(/not published to npm, cargo or Homebrew/);
+  });
+
+  it('sends the reader to the CLI reference and forbids inventing flags', () => {
+    expect(text).toContain('https://mechcrate.dev/docs/start/cli-reference/');
+    expect(text).toMatch(/[Dd]o not invent flags/);
+  });
+
+  it('says out loud that mx upgrade is broken', () => {
+    // The honesty rule: a model that plans work around `mx upgrade` wastes a
+    // user's afternoon, so the file says so where the model will read it.
+    expect(text).toMatch(/`mx upgrade` is mid-repair/);
+    expect(text).toContain('https://mechcrate.dev/docs/framework/upgrade/');
+    expect(text).toContain('https://mechcrate.dev/docs/project/known-broken/');
+  });
+
+  it('documents the markdown twins with a worked example', () => {
+    expect(text).toContain('https://mechcrate.dev/docs/start/install.md');
+    expect(text).toContain('rel="alternate"');
+  });
+
+  it('advertises every retrieval file, and the MCP alternative', () => {
+    expect(text).toContain(absoluteUrl(LLMS_FULL_PATH));
+    expect(text).toContain(absoluteUrl(LLMS_GUIDES_PATH));
+    expect(text).toContain(absoluteUrl(llmsCorpusPath('theory')));
+    expect(text).toContain(absoluteUrl(llmsCorpusPath('shell')));
+    expect(text).toContain('rag_context');
+  });
+
+  it('uses absolute URLs everywhere — a relative one is useless to a fetcher', () => {
+    for (const line of agentInstructions({ categories: ['theory'] })) {
+      for (const match of line.matchAll(/(?<![\w:/])\/[a-z][\w./-]*/g)) {
+        // `~/.local/bin` and the like are paths, not links; links follow a space
+        // or a paren and are what a fetcher would try to resolve.
+        expect(match[0], line).not.toMatch(/^\/(docs|llms|sitemap)/);
+      }
+    }
+    expect(text.match(/https:\/\/mechcrate\.dev/g)!.length).toBeGreaterThan(5);
+  });
+
+  it('dates the file from the content, and omits the line when git is unreadable', () => {
+    expect(text).toContain('Generated from the repository as of 2026-09-05');
+    expect(agentInstructions({ categories: [] }).join('\n')).not.toContain('Freshness');
+  });
+
+  it('honours an origin override throughout', () => {
+    const staged = agentInstructions({
+      origin: 'https://staging.example',
+      categories: ['theory'],
+    }).join('\n');
+    expect(staged).not.toContain('https://mechcrate.dev');
+    expect(staged).toContain('https://staging.example/llms-corpus-theory.txt');
+  });
+});
+
+describe('splitDocuments', () => {
+  const pages: LlmsPage[] = [
+    page({ title: 'Landing', route: '/', kind: 'overview' }),
+    page({ title: 'Install', route: '/docs/start/install/', kind: 'start', body: '# I\n' }),
+    page({ title: 'Corpus', route: '/docs/corpus/', kind: 'corpus', order: -1 }),
+    page({ title: 'FSM', route: '/docs/corpus/patterns/a/', kind: 'corpus', category: 'patterns', body: '# F\n' }),
+    page({ title: 'CQRS', route: '/docs/corpus/patterns/b/', kind: 'corpus', category: 'patterns', body: '# C\n' }),
+    page({ title: 'Cap', route: '/docs/corpus/theory/c/', kind: 'corpus', category: 'theory', body: '# T\n' }),
+  ];
+
+  it('partitions the documents into guides and one bucket per category', () => {
+    const { guides, corpus } = splitDocuments(pages);
+    expect(guides.map((p) => p.title)).toEqual(['Install']);
+    expect([...corpus.keys()].sort()).toEqual(['patterns', 'theory']);
+    // Navigation order within a category: declared sidebar order, then title.
+    expect(corpus.get('patterns')!.map((p) => p.title)).toEqual(['CQRS', 'FSM']);
+  });
+
+  it('covers every document exactly once — the buckets sum to llms-full.txt', () => {
+    const { guides, corpus } = splitDocuments(pages);
+    const split = [...guides, ...[...corpus.values()].flat()].map((p) => p.route);
+    expect(split.sort()).toEqual(documentsOf(pages).map((p) => p.route).sort());
+    expect(new Set(split).size).toBe(split.length);
+  });
+
+  it('skips pages with no markdown body, as every concatenated file does', () => {
+    const { guides, corpus } = splitDocuments(pages);
+    expect(guides.map((p) => p.route)).not.toContain('/');
+    expect([...corpus.values()].flat().map((p) => p.route)).not.toContain('/docs/corpus/');
+  });
+});
+
+describe('buildLlmsGuidesTxt / buildLlmsCorpusTxt', () => {
+  const pages: LlmsPage[] = [
+    page({
+      title: 'Install',
+      route: '/docs/start/install/',
+      kind: 'start',
+      sourcePath: `${APP_REPO_PREFIX}/src/content/docs/docs/start/install.md`,
+      body: '# Install\n\nBuild mx from source.\n',
+    }),
+    page({
+      title: 'Appendix: FSM',
+      route: '/docs/corpus/patterns/appendix-fsm/',
+      kind: 'corpus',
+      category: 'patterns',
+      sourcePath: 'docs/development/appendix-fsm.md',
+      body: '# Appendix: FSM\n\nA distinctive paragraph about state machines.\n',
+    }),
+  ];
+
+  const guides = buildLlmsGuidesTxt({ pages });
+  const patterns = buildLlmsCorpusTxt({ pages, category: 'patterns' });
+
+  it('uses the same separator format as llms-full.txt', () => {
+    expect(guides).toContain(
+      '---\n# Install\nURL: https://mechcrate.dev/docs/start/install/\n' +
+        `Source: ${APP_REPO_PREFIX}/src/content/docs/docs/start/install.md\n---`
+    );
+    expect(patterns).toContain('Source: docs/development/appendix-fsm.md');
+  });
+
+  it('carries only its own half of the corpus split', () => {
+    expect(guides).toContain('Build mx from source.');
+    expect(guides).not.toContain('A distinctive paragraph about state machines.');
+    expect(patterns).toContain('A distinctive paragraph about state machines.');
+    expect(patterns).not.toContain('Build mx from source.');
+  });
+
+  it('names itself and points at its siblings and the index', () => {
+    expect(guides.split('\n')[0]).toBe('# MechCrate — guides');
+    expect(guides).toContain('The complete text of 1 authored guide from mechcrate.dev');
+    expect(patterns.split('\n')[0]).toBe('# MechCrate — Patterns corpus');
+    expect(patterns).toContain('https://mechcrate.dev/docs/corpus/patterns/');
+    for (const file of [guides, patterns]) {
+      expect(file).toContain('https://mechcrate.dev/llms.txt');
+      expect(file).toContain(absoluteUrl(LLMS_FULL_PATH));
+    }
+  });
+
+  it('emits a well-formed empty file for a category with nothing in it', () => {
+    const empty = buildLlmsCorpusTxt({ pages, category: 'nonexistent' });
+    expect(empty).toContain('The complete text of 0 ');
+    expect(empty.match(/^URL: /gm)).toBeNull();
   });
 });
 
@@ -493,6 +703,52 @@ describe('the real corpus reaching both files', () => {
   );
   const index = buildLlmsTxt({ pages });
   const full = buildLlmsFullTxt({ pages });
+
+  const categories = [...splitDocuments(pages).corpus.keys()].sort();
+  /** Every file an agent can retrieve in bulk, keyed by its published path. */
+  const splits = new Map<string, string>([
+    [LLMS_GUIDES_PATH, buildLlmsGuidesTxt({ pages })],
+    ...categories.map(
+      (category) =>
+        [llmsCorpusPath(category), buildLlmsCorpusTxt({ pages, category })] as const
+    ),
+  ]);
+
+  it('splits the corpus into one file per category, all of them non-empty', () => {
+    expect(categories.length).toBeGreaterThanOrEqual(10);
+    for (const category of categories) {
+      const file = splits.get(llmsCorpusPath(category))!;
+      expect(file.match(/^URL: /gm)?.length ?? 0, category).toBeGreaterThan(0);
+    }
+  });
+
+  it("the split files' documents sum to llms-full.txt, with no overlap", () => {
+    const fullUrls = full.match(/^URL: .*$/gm) ?? [];
+    const splitUrls = [...splits.values()].flatMap((file) => file.match(/^URL: .*$/gm) ?? []);
+
+    expect(splitUrls).toHaveLength(fullUrls.length);
+    expect(new Set(splitUrls).size).toBe(splitUrls.length);
+    expect([...splitUrls].sort()).toEqual([...fullUrls].sort());
+  });
+
+  it('advertises every split file from llms.txt', () => {
+    for (const path of splits.keys()) {
+      expect(index, path).toContain(absoluteUrl(path));
+    }
+    expect(index).toContain(absoluteUrl(LLMS_FULL_PATH));
+  });
+
+  it('holds back every doc the pipeline held back — from the split files too', () => {
+    expect(corpus.skipped.length).toBeGreaterThan(0);
+    for (const [path, file] of splits) {
+      for (const skip of corpus.skipped) {
+        expect(file, `${skip.repoPath} leaked into ${path}`).not.toContain(
+          `Source: ${skip.repoPath}`
+        );
+      }
+      expect(file.toLowerCase(), path).not.toContain('source: docs/development/apple_design');
+    }
+  });
 
   it('indexes every published corpus document exactly once', () => {
     expect(pages).toHaveLength(corpus.published.length);

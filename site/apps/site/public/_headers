@@ -37,12 +37,34 @@
 # text/plain from the `.txt` extension; re-asserting it here means a future
 # change to that inference cannot quietly turn them into downloads. One hour
 # of cache because they are regenerated on every deploy.
+#
+# Two rules, not seventeen: `/llms-*.txt` covers llms-full.txt, llms-guides.txt
+# and the fifteen llms-corpus-<category>.txt splits in one splat, and it cannot
+# overlap `/llms.txt` (which has no hyphen) — so neither header is comma-joined
+# onto itself. A new corpus category ships its file with no edit here.
 /llms.txt
   Content-Type: text/plain; charset=utf-8
   Cache-Control: public, max-age=3600
 
-/llms-full.txt
+/llms-*.txt
   Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+# The per-page markdown twins (`/docs/start/install.md` beside
+# `/docs/start/install/`). The asset server already infers
+# `text/markdown; charset=utf-8` from the extension — verified against workerd,
+# see the Edge headers step in .github/workflows/site.yml — so this rule is not
+# repairing anything; it pins the answer so a change to that inference cannot
+# turn an agent's retrieval path into a download prompt, and it gives the twins
+# the same hour of cache the .txt artefacts get instead of the asset server's
+# `max-age=0, must-revalidate` default.
+#
+# `/*.md` cannot match an HTML page: Astro writes every route as
+# `<route>/index.html`, so no published document ends in `.md` except a twin.
+# It overlaps `/*`, which is fine — the two rules share no header name, and the
+# asset worker only comma-joins values for a header set twice.
+/*.md
+  Content-Type: text/markdown; charset=utf-8
   Cache-Control: public, max-age=3600
 
 # Keeps the 404 page itself out of the index when it is requested DIRECTLY
