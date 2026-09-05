@@ -101,6 +101,43 @@ const width = naturalWidth(light);
     border: 1px solid var(--sl-color-gray-5, #cbd5e1);
     border-radius: 0.5rem;
     background-color: var(--sl-color-bg, transparent);
+
+    /*
+     * Say that the diagram continues past the edge.
+     *
+     * The `clamp()` below deliberately lets a wide diagram outgrow its column
+     * and scroll here rather than shrink to an illegible size. That is the
+     * right trade — but macOS and iOS draw *overlay* scrollbars, which stay
+     * invisible until something is actually scrolling, so the only thing a
+     * reader ever saw was a diagram cut off flush at the frame's edge with no
+     * hint that the rest of it existed. It reads as a broken rendering. In the
+     * docs column at 1280px that hides a third of the ecosystem topology; at
+     * 390px it hides nearly two thirds of it.
+     *
+     * The pure-CSS scroll shadow fixes it without a line of JavaScript: two
+     * opaque "cover" layers pinned to the content (`local`) sit on top of two
+     * shadows pinned to the frame (`scroll`). At rest a cover hides the shadow
+     * beneath it; scroll away from an edge and the cover travels off with the
+     * content, uncovering the shadow on that side. It also self-cancels — when
+     * the diagram fits there is nothing to scroll, both covers stay put, and
+     * neither shadow is ever revealed.
+     *
+     * The shadow is mid-slate rather than black on purpose: one colour has to
+     * work against both themes, and mid-slate darkens the light background and
+     * lightens the dark one. Black would be invisible against `#17181c`.
+     */
+    background-image:
+      linear-gradient(to right, var(--sl-color-bg, #fff), transparent),
+      linear-gradient(to left, var(--sl-color-bg, #fff), transparent),
+      linear-gradient(to right, rgba(100, 116, 139, 0.5), transparent),
+      linear-gradient(to left, rgba(100, 116, 139, 0.5), transparent);
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-repeat: no-repeat;
+    background-size: 2.25rem 100%, 2.25rem 100%, 1rem 100%, 1rem 100%;
+    background-attachment: local, local, scroll, scroll;
+
+    /* And a slim, always-drawn scrollbar on the platforms that offer one. */
+    scrollbar-width: thin;
   }
 
   .diagram__svg svg {

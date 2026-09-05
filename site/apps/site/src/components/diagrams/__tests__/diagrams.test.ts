@@ -131,4 +131,111 @@ describe('inlining safety', () => {
       }
     }
   });
+
+  /*
+   * The root-id test above proves the ten `<svg>` elements do not collide with
+   * each other. It says nothing about the ~380 ids *inside* them — the markers,
+   * gradients and filters that `url(#…)` points at. Those all have to be unique
+   * across the whole document too, because /docs/framework/diagrams/ inlines
+   * both variants of all five diagrams into one page: a repeated marker id
+   * makes an arrowhead resolve to whichever twin the parser saw first, which
+   * may well be the `display: none` one.
+   */
+  it('keeps every id unique across both variants of all five diagrams', () => {
+    const seen = new Map<string, string>();
+    const collisions: string[] = [];
+    for (const name of DIAGRAM_NAMES) {
+      for (const variant of VARIANTS) {
+        const where = `${name}.${variant}`;
+        const svg = readSvg(name, variant);
+        for (const [, id] of svg.matchAll(/\sid="([^"]+)"/g)) {
+          const prior = seen.get(id);
+          if (prior && prior !== where) collisions.push(`${id} (${prior} + ${where})`);
+          else seen.set(id, where);
+        }
+      }
+    }
+    expect(collisions, 'ids repeat across the inlined set').toEqual([]);
+    expect(seen.size).toBeGreaterThan(100);
+  });
+
+  it('resolves every internal reference within its own file', () => {
+    for (const name of DIAGRAM_NAMES) {
+      for (const variant of VARIANTS) {
+        const svg = readSvg(name, variant);
+        const ids = new Set([...svg.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+        const refs = new Set<string>();
+        for (const [, r] of svg.matchAll(/url\(#([^)]+)\)/g)) refs.add(r);
+        for (const [, r] of svg.matchAll(/(?:xlink:)?href="#([^"]+)"/g)) refs.add(r);
+        for (const [, r] of svg.matchAll(/aria-(?:labelledby|describedby)="([^"]+)"/g)) {
+          for (const one of r.split(/\s+/)) refs.add(one);
+        }
+        // A dangling url(#…) is how arrowheads and gradients silently vanish.
+        const dangling = [...refs].filter((r) => !ids.has(r));
+        expect(dangling, `${name}.${variant} has dangling references`).toEqual([]);
+        expect(refs.size).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('scopes every rule in the embedded stylesheets to its own root id', () => {
+    // An SVG inlined into HTML contributes its <style> to the *document*. One
+    // unscoped selector in the dark copy would repaint the light one, and the
+    // last diagram on the page would win — a bug that changes with page order.
+    for (const name of DIAGRAM_NAMES) {
+      for (const variant of VARIANTS) {
+        const svg = readSvg(name, variant);
+        const block = svg.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
+        expect(block, `${name}.${variant} has no stylesheet`).toMatch(/\S/);
+        const withoutAtRules = block.replace(
+          /@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g,
+          '',
+        );
+        const unscoped: string[] = [];
+        for (const rule of withoutAtRules.split('}')) {
+          const brace = rule.indexOf('{');
+          if (brace < 0) continue;
+          for (const selector of rule.slice(0, brace).split(',')) {
+            const trimmed = selector.trim();
+            if (trimmed && !trimmed.startsWith('#mmd-')) unscoped.push(trimmed);
+          }
+        }
+        expect(unscoped, `${name}.${variant} leaks selectors`).toEqual([]);
+      }
+    }
+  });
+});
+
+describe('scroll affordance', () => {
+  /*
+   * Regression guard for the reported "diagrams do not always render correctly".
+   *
+   * Nothing was wrong with the SVGs. The `clamp()` in this component lets a wide
+   * diagram outgrow its column and scroll inside `.diagram__frame` instead of
+   * shrinking to an illegible size — but macOS and iOS overlay scrollbars are
+   * invisible at rest, so a third of the ecosystem topology (63% at 390px) was
+   * simply cut off at the frame's edge with nothing to say it could be scrolled.
+   *
+   * The affordance is CSS-only, so this asserts on the component source. It is a
+   * blunt test, but it is the thing that fails if the scroll shadow is dropped.
+   */
+  const component = readFileSync(join(DIAGRAM_DIR, 'Diagram.astro'), 'utf8');
+
+  it('keeps the frame scrollable', () => {
+    expect(component).toMatch(/\.diagram__frame\s*\{[\s\S]*?overflow-x:\s*auto/);
+  });
+
+  it('marks the scrollable edge so a clipped diagram does not read as broken', () => {
+    // The `local` layers are the covers that ride with the content; without
+    // them the shadow is static decoration and signals nothing.
+    expect(component).toMatch(/background-attachment:[^;]*local[^;]*;/);
+    expect(component.match(/linear-gradient/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+  });
+
+  it('still lets a wide diagram stay legible rather than squeezing it', () => {
+    // The clamp is the reason the frame scrolls at all; if it is ever replaced
+    // by a plain `max-width: 100%` the affordance above becomes dead code.
+    expect(component).toMatch(/width:\s*clamp\(/);
+    expect(component).toMatch(/max-width:\s*none/);
+  });
 });
