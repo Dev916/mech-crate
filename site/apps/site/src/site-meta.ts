@@ -13,3 +13,24 @@ export const LANDING_TITLE = 'MechCrate — an AI-native meta-framework for serv
 /** The landing page's meta description. */
 export const LANDING_DESCRIPTION =
   'mx runs a subset of your service ecosystem locally, routes every project through one Traefik instance, scaffolds services that carry their wisdom, and feeds agents a techniques corpus you host yourself.';
+
+/**
+ * Canonical repository URL.
+ *
+ * The landing page links it from the masthead, the CTA and the footer; the
+ * homepage JSON-LD carries it twice more, as the Organization's `sameAs` and the
+ * SoftwareApplication's `codeRepository`. One constant so a fork or a rename
+ * cannot leave the structured data pointing somewhere the links do not.
+ */
+export const GITHUB_REPO = 'https://github.com/Dev916/mech-crate';
+
+/**
+ * Both license texts, in the order the footer names them.
+ *
+ * mx is dual-licensed "Apache-2.0 or MIT, at your option", which schema.org
+ * expresses as two `license` URLs rather than one SPDX expression.
+ */
+export const LICENSE_URLS = [
+  `${GITHUB_REPO}/blob/main/LICENSE-APACHE`,
+  `${GITHUB_REPO}/blob/main/LICENSE-MIT`,
+] as const;
