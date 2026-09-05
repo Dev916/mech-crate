@@ -17,6 +17,7 @@
     "@astrojs/sitemap": "^3.7.4",
     "@astrojs/starlight": "^0.37.7",
     "astro": "^5.5.0",
+    "astro-og-canvas": "0.13.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
