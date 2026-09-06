@@ -1,6 +1,8 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
+import { mechcrateSitemap } from './src/integrations/sitemap.ts';
+
 // https://astro.build/config
 //
 // Static output: the site is a documentation site deployed to Cloudflare as a
@@ -39,11 +41,18 @@ export default defineConfig({
       // Pagefind stays on (Starlight's default) — it is the human-facing search;
       // the RAG corpus is the agent-facing one.
       pagefind: true,
-      // Corpus pages get a banner ("…agents retrieve it via `rag_context`") and,
-      // where the research pipeline recorded one, a provenance footer. The
-      // override is gated on `data.corpus` so authored pages are untouched.
+      // Two overrides, both additive — each renders Starlight's own component
+      // and wraps it rather than replacing it.
+      //
+      //   MarkdownContent — corpus page chrome: a banner ("…agents retrieve it
+      //     via `rag_context`") and, where the research pipeline recorded one, a
+      //     provenance footer. Gated on `data.corpus`, so authored pages are
+      //     untouched.
+      //   Head — the per-page `og:image` tags. Starlight's `head:` config array
+      //     only takes static entries, and every page's card URL is different.
       components: {
         MarkdownContent: './src/components/MarkdownContent.astro',
+        Head: './src/components/Head.astro',
       },
       sidebar: [
         { label: 'Start', autogenerate: { directory: 'docs/start' } },
@@ -64,6 +73,14 @@ export default defineConfig({
         { label: 'Project', autogenerate: { directory: 'docs/project' } },
       ],
     }),
+
+    // Must come after starlight(): Starlight injects its own `@astrojs/sitemap`
+    // only when the user has not supplied one, and it decides that by scanning
+    // `config.integrations` during its own config:setup. Declaring it here wins
+    // that check, so the site gets ONE sitemap — the same URL set Starlight
+    // would have produced (its config is empty for a single-locale site), now
+    // with a verifiable `<lastmod>` on every entry.
+    ...mechcrateSitemap(),
   ],
 
   server: {

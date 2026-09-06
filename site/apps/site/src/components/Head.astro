@@ -1,0 +1,164 @@
+---
+/**
+ * Starlight `<Head>` override — the per-page social card tags and structured data.
+ *
+ * Starlight's `head:` config array only takes static entries, and every page
+ * needs a different `og:image`, so the route-aware half has to be a component.
+ * The default is rendered rather than reimplemented (it emits
+ * `Astro.locals.starlightRoute.head`, which already carries `og:title`,
+ * `og:description`, `og:url` and `twitter:card`), and these tags are appended
+ * after it. Starlight never emits an `og:image` of its own, so nothing here
+ * duplicates.
+ *
+ * Applies to every Starlight route, including the pages rendered through
+ * `<StarlightPage>` (`/docs/corpus/`, `/docs/corpus/<category>/`). The landing
+ * page is not a Starlight route and carries the same tags by hand — see
+ * `src/pages/index.astro`.
+ *
+ * The structured data half (spec §4) emits one `application/ld+json` block per
+ * page: a `BreadcrumbList` on every docs route, preceded by a `TechArticle` on
+ * corpus documents. It sits OUTSIDE the card block — a page with no social card
+ * still gets its breadcrumbs.
+ *
+ * The agent-surface half (spec §5) adds `<link rel="alternate"
+ * type="text/markdown">` pointing at the page's `.md` twin. Independent of both
+ * blocks above: the pages that have a twin are the pages with a markdown source,
+ * which is not the same set as the pages with a card (the corpus navigation
+ * pages have a card and no twin).
+ *
+ * Nothing *statically* imported here may touch git or the filesystem: the
+ * containerised dev loop mounts only `apps/site` plus a read-only `docs/`, so a
+ * component that pulls in `src/loaders/lib/dates.ts` (which shells to `git log`)
+ * breaks `make dev`. `src/lib/og.ts` and `src/lib/jsonld.ts` are pure for
+ * exactly that reason, and the date map is reached through the deliberately
+ * lazy, deliberately fallible `src/lib/build-dates.ts`.
+ */
+import Default from '@astrojs/starlight/components/Head.astro';
+
+import { corpusMetaOf } from './corpus.ts';
+import { buildPageDates } from '../lib/build-dates.ts';
+import { docsPageGraph, jsonLdScript, pageDates } from '../lib/jsonld.ts';
+import { MD_TWIN_TYPE, mdTwinUrl, routeHasMdTwin } from '../lib/md-twin.ts';
+import {
+  OG_CARD_HEIGHT,
+  OG_CARD_TYPE,
+  OG_CARD_WIDTH,
+  ogCardUrl,
+  ogTypeForRoute,
+  routeHasOgCard,
+} from '../lib/og.ts';
+import { commonHeadHtml } from '../lib/site-head.ts';
+import { CF_BEACON_TOKEN } from '../site-meta.ts';
+
+const route = Astro.locals.starlightRoute;
+const pathname = Astro.url.pathname;
+
+const hidden = route.entry.data.sidebar?.hidden === true;
+
+// `og:type` is corrected in place rather than appended: Starlight already put an
+// `article` in `route.head`, and two `og:type` metas on one page is a scraper
+// coin-toss. `<Default />` below renders this array, so editing it here is what
+// the page ships. Every other tag in this file is genuinely additive.
+const ogType = ogTypeForRoute(pathname, hidden);
+for (const tag of route.head) {
+  if (tag.tag === 'meta' && tag.attrs?.property === 'og:type') tag.attrs.content = ogType;
+}
+
+// The 404 route is `sidebar.hidden`, which is also what keeps it out of the
+// sitemap, out of llms.txt and out of the card endpoint's page list. Pointing
+// at a card that was never generated would put a 404 image in a share preview,
+// so pages without one simply omit the tags.
+const card = routeHasOgCard(pathname, hidden) ? ogCardUrl(pathname) : undefined;
+
+// The `<page-url>.md` twin, for pages that have a markdown source. The generated
+// navigation pages (the corpus overview and its per-category indexes) have none,
+// so they advertise none — `src/pages/[...slug].md.ts` fails the build if this
+// predicate and the page list ever disagree about which those are.
+const twin = routeHasMdTwin(pathname, hidden) ? mdTwinUrl(pathname) : undefined;
+
+// `data.corpus` is set only by the corpus loader, so authored pages (Start /
+// Framework / AI Layer / Project) and the generated corpus index pages — which
+// render through `<StarlightPage>` and have no collection entry behind them —
+// get the breadcrumbs and nothing else.
+const corpus = corpusMetaOf(route.entry);
+
+const dateIndex = await buildPageDates();
+
+const dates = pageDates({
+  route: pathname,
+  ...(corpus?.researched === undefined ? {} : { researched: corpus.researched }),
+  ...(dateIndex === undefined ? {} : { index: dateIndex }),
+});
+
+const jsonLd = jsonLdScript(
+  docsPageGraph({
+    route: pathname,
+    title: route.entry.data.title,
+    ...(route.entry.data.description === undefined
+      ? {}
+      : { description: route.entry.data.description }),
+    ...(corpus === undefined
+      ? {}
+      : {
+          corpus: {
+            category: corpus.category,
+            sourceUrl: corpus.sourceUrl,
+            ...(corpus.sources === undefined ? {} : { sources: corpus.sources }),
+          },
+        }),
+    dates,
+  })
+);
+---
+
+<Default />
+
+{
+  card && (
+    <>
+      <meta property="og:image" content={card} />
+      <meta property="og:image:type" content={OG_CARD_TYPE} />
+      <meta property="og:image:width" content={String(OG_CARD_WIDTH)} />
+      <meta property="og:image:height" content={String(OG_CARD_HEIGHT)} />
+      <meta property="og:image:alt" content={route.entry.data.title} />
+      <meta name="twitter:image" content={card} />
+    </>
+  )
+}
+
+{/* The markdown twin of this page: same document, no HTML chrome. `rel=alternate`
+    with an explicit `type` is the standard way to say "the same content in
+    another format", and it is how an agent finds the twin without being told the
+    `.md` convention first. */}
+{
+  twin && (
+    <link
+      rel="alternate"
+      type={MD_TWIN_TYPE}
+      href={twin}
+      title={`${route.entry.data.title} (markdown)`}
+    />
+  )
+}
+
+{/* Same dates the sitemap's <lastmod> and the JSON-LD carry — one resolution,
+    three surfaces. Absent only where the build could not read git history (the
+    dev container), never where the page is published. */}
+{dates.datePublished && (
+  <meta property="article:published_time" content={dates.datePublished} />
+)}
+{dates.dateModified && (
+  <meta property="article:modified_time" content={dates.dateModified} />
+)}
+
+{/* One block per page, holding this page's @graph. `set:html` because the value
+    is already-serialised JSON, and `is:inline` so Astro leaves the element where
+    it is instead of treating it as a script to process. */}
+<script type="application/ld+json" is:inline set:html={jsonLd} />
+
+{/* Raster icons, the manifest, `theme-color`, and the analytics beacon — the
+    tags that are the same on every page of the site, docs and landing alike.
+    Built as a string in src/lib/site-head.ts so the landing page, which writes
+    its own head, emits exactly the same bytes. The `rel=sitemap` link is not in
+    it: Starlight already emits one, and the landing page adds its own. */}
+<Fragment set:html={commonHeadHtml(CF_BEACON_TOKEN)} />

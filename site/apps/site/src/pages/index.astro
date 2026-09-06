@@ -9,7 +9,7 @@
 // README's honesty rules: no capability is claimed past what ships, `mx upgrade`
 // is described as mid-repair, and the locality claim about the corpus is about
 // the *store*, not the embedding provider (which is OpenAI by default).
-import { Image } from 'astro:assets';
+import { Image, getImage } from 'astro:assets';
 
 import logo from '@/assets/mechcrate-logo.png';
 import ComposeLayering from '@/components/diagrams/ComposeLayering.astro';
@@ -18,7 +18,11 @@ import RecipeInstallFlow from '@/components/diagrams/RecipeInstallFlow.astro';
 import FolderContract from '@/components/diagrams/FolderContract.astro';
 import AiLoop from '@/components/diagrams/AiLoop.astro';
 
-import { LANDING_DESCRIPTION, LANDING_TITLE } from '@/site-meta.ts';
+import { homepageGraph, jsonLdScript } from '@/lib/jsonld.ts';
+import { OG_CARD_HEIGHT, OG_CARD_TYPE, OG_CARD_WIDTH, ogCardUrl } from '@/lib/og.ts';
+import { SITE_ORIGIN } from '@/loaders/lib/llms.ts';
+import { commonHeadHtml } from '@/lib/site-head.ts';
+import { CF_BEACON_TOKEN, GITHUB_REPO, LANDING_DESCRIPTION, LANDING_TITLE } from '@/site-meta.ts';
 import '@/styles/landing.css';
 
 // Shared with /llms.txt, which quotes the same two strings for the `/` bullet —
@@ -26,7 +30,23 @@ import '@/styles/landing.css';
 const title = LANDING_TITLE;
 const description = LANDING_DESCRIPTION;
 
-const repo = 'https://github.com/Dev916/mech-crate';
+const repo = GITHUB_REPO;
+
+// The landing page carries the three site-level entities (spec §4): the
+// Organization every docs page's `publisher` @id points back at, the WebSite,
+// and mx itself as a SoftwareApplication. The docs pages get theirs from the
+// <Head> override; this route is not a Starlight route, so it emits its own.
+//
+// The logo goes through `getImage()` rather than `logo.src` because the raw
+// import is only a build-time handle — Astro emits the optimized derivative the
+// <Image> below asks for (a .webp), and nothing else. Asking explicitly for a
+// PNG both emits the file and keeps the format Google's Organization logo
+// guidance wants; `.src` is then a real, hashed, absolute-able URL.
+const logoPng = await getImage({ src: logo, format: 'png', width: 512, height: 512 });
+
+const jsonLd = jsonLdScript(
+  homepageGraph({ url: new URL(logoPng.src, SITE_ORIGIN).href, width: 512, height: 512 })
+);
 
 // Rendered one line per entry and copied newline-joined, so what the Copy
 // button puts on the clipboard is exactly what is on screen. Kept to two lines
@@ -60,7 +80,39 @@ const startCommand = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content="https://mechcrate.dev/" />
+    {/* Parity with what Starlight's head defaults give every /docs/** page:
+        the site name and the locale. Values match `title:` in astro.config.mjs
+        and the site's single locale — this route is hand-written, so nothing
+        supplies them for it. */}
+    <meta property="og:site_name" content="MechCrate" />
+    <meta property="og:locale" content="en" />
     <meta name="twitter:card" content="summary_large_image" />
+    {/* Twitter reads og:title/og:description when these are absent, but the
+        landing page is the one URL people paste into a post, so it states them
+        rather than relying on the fallback. */}
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    {/* The landing page is not a Starlight route, so the card tags the
+        <Head> override adds to /docs/** are written out here by hand. Same
+        helper, same card endpoint — this one resolves to /og/index.png. */}
+    <meta property="og:image" content={ogCardUrl('/')} />
+    <meta property="og:image:type" content={OG_CARD_TYPE} />
+    <meta property="og:image:width" content={String(OG_CARD_WIDTH)} />
+    <meta property="og:image:height" content={String(OG_CARD_HEIGHT)} />
+    <meta property="og:image:alt" content={title} />
+    <meta name="twitter:image" content={ogCardUrl('/')} />
+
+    {/* Organization + WebSite + SoftwareApplication, one block, already
+        serialised (and `<`-escaped) by src/lib/jsonld.ts. */}
+    <script type="application/ld+json" is:inline set:html={jsonLd} />
+
+    {/* The rest of the parity: `rel=sitemap` (Starlight emits its own on
+        /docs/**), the raster icon set, the manifest, `theme-color` and the
+        analytics beacon. Same string src/components/Head.astro emits, so the
+        two heads cannot drift. The SVG icon link stays above it — a browser
+        takes the first icon it understands. */}
+    <Fragment set:html={commonHeadHtml(CF_BEACON_TOKEN, { sitemap: true })} />
 
     {/* Inlined, and first, so the theme is resolved before the first paint —
         same storage key Starlight's ThemeProvider uses, so a choice made here
