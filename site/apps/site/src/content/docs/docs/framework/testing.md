@@ -35,10 +35,10 @@ make check              # fmt-check + lint + test
 
 | Target | What it is | Blocking |
 |---|---|---|
-| `make test` | `cargo nextest run --workspace --profile ci` plus `cargo test --doc` | yes — every PR and push to `main` |
+| `make test` | `cargo nextest run --workspace --profile ci` plus `cargo test --doc` | yes, on every PR and push to `main` |
 | `make lint` | clippy, warnings denied | yes |
 | `make coverage` | ratchet script against `.coverage-floor` (currently **49.5%**). `BUMP=1` raises the floor; a drop fails CI | yes |
-| `make test-known-broken` | the TDD lane below — a report, never a gate | no |
+| `make test-known-broken` | the TDD lane below: a report, never a gate | no |
 | `make test-e2e` | scaffold → `make dev` → live router URL → teardown, with real Docker | dispatched workflow |
 | `make test-mutants` | `cargo-mutants` over `mx-lib` | weekly cron; missed mutants are backlog, not failure |
 | `make test-unit` | fast unit-only loop, no database | local |
@@ -46,7 +46,7 @@ make check              # fmt-check + lint + test
 
 Database-backed tests skip when `MX_RAG_TEST_DATABASE_URL` is unset, so a laptop
 without Docker still runs green. CI always supplies the container. Skipping is an
-env-var early return, never `#[ignore]` — that attribute is reserved for one
+env-var early return, never `#[ignore]`. That attribute is reserved for one
 thing only.
 
 ## The known-broken lane
@@ -57,7 +57,7 @@ gate never runs them; `make test-known-broken` runs only them and scoreboards th
 result.
 
 **Expected state: all red.** A lane test that turns green is the signal that a
-fix landed without bookkeeping — surfaced, not silently absorbed.
+fix landed without bookkeeping. Surfaced, not silently absorbed.
 
 The fix workflow is the definition of done for each issue: claim it, make the
 lane test pass, delete its `#[ignore]` so the test joins the gate, remove its row
@@ -69,14 +69,14 @@ Two house rules keep the lane honest:
   missing fixture tells you nothing about the defect, so setup assertions carry a
   `setup:` prefix and the two failure classes stay distinguishable.
 - Lane tests live beside the suite that owns their subject, not in one central
-  file — the test is the first thing whoever fixes it should read.
+  file. The test is the first thing whoever fixes it should read.
 
 The two numbers partition the workspace: the lane reports 14 tests, 14 red; the
 gate suite in the same tree reports 189 passed, 14 skipped. If they stop summing,
 either a lane test lost its `#[ignore]` or a gate test grew one.
 
 Several pages in these docs point at this lane, because pointing at it is the
-alternative to quietly writing around a defect —
+alternative to quietly writing around a defect:
 [`mech-crate-z5i`](/docs/framework/upgrade/) for `mx upgrade`,
 `mech-crate-vxq`, `mech-crate-wd9` and `mech-crate-066` for the
 [infra credential path](/docs/framework/infra-credentials/).
@@ -100,6 +100,6 @@ npx astro build   # the build gate
 
 ## Agent execution rules
 
-Agents working in this repository are held to the same standard — evidence before
+Agents working in this repository are held to the same standard: evidence before
 assertion, no claiming a fix without running it. Those rules are published in the
 corpus: [instructions](/docs/corpus/process/instructions/).

@@ -16,7 +16,7 @@ mx infra setup cloudflare          # credentials, once per workstation
 
 :::caution[The `cf-*` targets are not in every project]
 Without `--infra cloudflare`, `make/cloudflare.mk` is simply not in `make/`, and
-`make cf-setup` fails with "no rule to make target". Check `make help` — if you
+`make cf-setup` fails with "no rule to make target". Check `make help`. If you
 see the `cf-*` block, you have it. `mx upgrade` treats these files as conditional
 on `infra/cloudflare/` existing, so a project that opted in stays current and one
 that did not is never offered them.
@@ -36,7 +36,7 @@ Three worker types, chosen at `cf-init`:
 |---|---|
 | `worker` | standard edge worker handling HTTP requests |
 | `cron` | scheduled worker, with KV for state and optional webhook notifications |
-| `container` | a container image behind a worker — port, sleep timeout, max instances, custom domain |
+| `container` | a container image behind a worker: port, sleep timeout, max instances, custom domain |
 
 ## Target reference
 
@@ -71,30 +71,30 @@ versioning, CI/CD wiring and troubleshooting:
 
 **→ [Cloudflare Infrastructure](/docs/corpus/framework-guides/cloudflare/)**
 
-And a researched, as-implemented account of the same flow — including a drift
-inventory of the places the documentation and the code disagree, which is worth
-reading before you debug a credential problem:
+And a researched, as-implemented account of the same flow, including a drift
+inventory of the places the documentation and the code disagree. Worth reading
+before you debug a credential problem:
 
 **→ [mx Cloudflare Deploy: as-implemented flow, credentials, and known traps](/docs/corpus/infra/mx-cloudflare-deploy/)**
 
 ## How this site ships
 
-mechcrate.dev is built from `site/` in the mech-crate repository — a nested mx
+mechcrate.dev is built from `site/` in the mech-crate repository, a nested mx
 project with the Astro app at `site/apps/site/`. The intended deploy is the
 astro recipe's Cloudflare path: a GitHub Actions workflow that runs `astro build`
 on pushes to `main` touching `site/**` or `docs/**` and publishes the static
 bundle with wrangler, plus a preview deploy on pull requests. The site job is
-independent of the Rust gates — it never blocks `ci.yml` and is never blocked by
+independent of the Rust gates. It never blocks `ci.yml` and is never blocked by
 it.
 
 That workflow is now `.github/workflows/site.yml`. `site/` was scaffolded without
-`--infra cloudflare`, so it has no `make/cloudflare.mk` — the workflow calls
+`--infra cloudflare`, so it has no `make/cloudflare.mk`. The workflow calls
 wrangler directly rather than through the `cf-*` targets.
 
 :::tip[This site is an mx app]
 The page you are reading is not built by a bespoke docs pipeline. `site/` is an
-ordinary mx project — the same folder contract, the same compose layering, the
-same router — scaffolded from the `astro` recipe. You can clone the repository
+ordinary mx project (the same folder contract, the same compose layering, the
+same router) scaffolded from the `astro` recipe. You can clone the repository
 and run it exactly like any other mx service:
 
 ```bash
@@ -121,7 +121,7 @@ commented where they live:
   repository's `docs/development/`, which is above `apps/site` and therefore
   outside the container's source mount. `docker/compose/site.dev.yml` bind-mounts
   `docs/` read-only at `/repo/docs` and sets `MECHCRATE_REPO_ROOT`, so `make dev`
-  renders the same 110 pages CI builds. Without it the site still comes up — it
+  renders the same 110 pages CI builds. Without it the site still comes up. It
   just silently loses all 67 corpus pages.
 
 The production deploy does not use this container at all: CI runs `astro build`
