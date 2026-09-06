@@ -29,9 +29,18 @@
  *     direction. That is what lets a body heading of `LLM Token & Cache
  *     Efficiency Engineering` be dropped in favour of the longer title `…for
  *     Agentic Coding`, and equally lets a title that is the shorter of the two
- *     win. A heading that merely *starts differently* — `Appendix: Streams Deep
+ *     win. A heading that merely *starts differently* — `Part Two: Streams Deep
  *     Dive` against a title of `Streams Deep Dive` — is left alone rather than
- *     guessed at.
+ *     guessed at;
+ *   - the one exception to that last point is a leading *appendix label*.
+ *     Fourteen corpus documents were split out of a larger guide and kept the
+ *     label they had as a chapter: `# Appendix: FRP in Rust` under a title of
+ *     `FRP in Rust`, `# Appendix K: Algebraic Effects & Optics` under
+ *     `Algebraic Effects & Optics`. The label is filing metadata, not part of
+ *     the heading, so it is discarded before the prefix comparison — but only
+ *     when it is genuinely a label: the word `Appendix`, an optional short
+ *     designator, and a punctuation separator. `Solana RPC appendix (LLM-safe)`
+ *     keeps its word, because there the word is prose.
  *
  * See docs/superpowers/specs/2026-09-05-seo-geo-design.md → "6. Polish".
  */
@@ -61,17 +70,42 @@ function isWordPrefix(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
+ * A leading appendix label: the word itself, an optional short designator
+ * (`K`, `A1`, `3`), and a punctuation separator that proves it is a label
+ * rather than the first word of a sentence. Leading emphasis markers are
+ * tolerated, because `**Appendix: …**` is the same heading in bold.
+ */
+const APPENDIX_LABEL = /^[\s*_]*appendix(?:\s+[a-z0-9][a-z0-9.]{0,3})?\s*[:—–-]\s*/i;
+
+/**
+ * `Appendix K: Algebraic Effects & Optics` → `Algebraic Effects & Optics`.
+ *
+ * Returns the text unchanged when there is no label to discard.
+ */
+export function withoutAppendixLabel(heading: string): string {
+  return heading.replace(APPENDIX_LABEL, '');
+}
+
+/**
  * Do a body heading and a frontmatter title say the same thing?
  *
- * True when either word list is a whole-word prefix of the other. Empty lists
- * never match: a document with no title, or a heading that normalises to
- * nothing, must keep whatever it has.
+ * True when either word list is a whole-word prefix of the other — tried on the
+ * heading as written, and again with a leading appendix label discarded. Empty
+ * lists never match: a document with no title, or a heading that normalises to
+ * nothing (an `# Appendix:` with no subject, say), must keep whatever it has.
  */
 export function headingMatchesTitle(heading: string, title: string): boolean {
-  const h = headingWords(heading);
   const t = headingWords(title);
-  if (h.length === 0 || t.length === 0) return false;
-  return isWordPrefix(h, t) || isWordPrefix(t, h);
+  if (t.length === 0) return false;
+
+  const unlabelled = withoutAppendixLabel(heading);
+  const candidates = unlabelled === heading ? [heading] : [heading, unlabelled];
+
+  return candidates.some((candidate) => {
+    const h = headingWords(candidate);
+    if (h.length === 0) return false;
+    return isWordPrefix(h, t) || isWordPrefix(t, h);
+  });
 }
 
 export interface StrippedBody {
