@@ -15,8 +15,8 @@ the router and the corpus store all run on hardware you control.
 The bet is that consistency compounds. A developer who knows one mx project
 knows all of them; an agent that has learned the folder contract once does not
 re-derive it per repository. That only pays off if the contract is real, so mx
-owns the parts that make it real — `Makefile`, `make/`, `scripts/`,
-`docker/compose/` — and leaves `apps/<service>/` and `docker/system/` to you.
+owns the parts that make it real (`Makefile`, `make/`, `scripts/`,
+`docker/compose/`) and leaves `apps/<service>/` and `docker/system/` to you.
 
 ## Where to go next
 

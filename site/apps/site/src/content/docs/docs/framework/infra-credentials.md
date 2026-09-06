@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-Infrastructure credentials — Cloudflare, DigitalOcean, AWS, Hetzner — are
+Infrastructure credentials (Cloudflare, DigitalOcean, AWS, Hetzner) are
 deliberately *not* part of a project's `docker/.config/` env layers. They are set
 up once per workstation and resolved hierarchically, so a laptop with six mx
 projects has one place its Cloudflare token lives.
@@ -34,9 +34,9 @@ Infrastructure Providers
 
 ## Resolution order
 
-1. **Project-local** — `./infra/<provider>/.env.<provider>`, used when it exists
+1. **Project-local**: `./infra/<provider>/.env.<provider>`, used when it exists
    and the project is not linked to global.
-2. **Global** — `~/.mech-crate/config/infra/<provider>.env`, used otherwise.
+2. **Global**: `~/.mech-crate/config/infra/<provider>.env`, used otherwise.
 
 Linking is the normal case; project-local config is the escape hatch for a
 project that needs a different account than the rest of the workstation.
@@ -53,7 +53,7 @@ credential files, and the per-provider variable names are all in the corpus:
 
 :::caution[Two things that guide gets ahead of the code on]
 The corpus guide shows `mx cf setup` as a project-local alternative. There is no
-`mx cf` subcommand in the current build — it exits with `unrecognized
+`mx cf` subcommand in the current build. Running it exits with `unrecognized
 subcommand`. It is tracked as `mech-crate-vxq` with a red test in the
 [known-broken lane](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md);
 the fix may equally turn out to be deleting the doc references.
@@ -69,7 +69,7 @@ is and why the defects are published rather than hidden.
 
 ## Related
 
-- [Cloudflare deploy](/docs/framework/cloudflare-deploy/) — what the credentials
+- [Cloudflare deploy](/docs/framework/cloudflare-deploy/): what the credentials
   are for
-- [Compose &amp; env conventions](/docs/framework/compose-env/) — the project-level
+- [Compose &amp; env conventions](/docs/framework/compose-env/): the project-level
   env layers, which are a different thing

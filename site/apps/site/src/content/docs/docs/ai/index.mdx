@@ -1,6 +1,6 @@
 ---
 title: AI Layer
-description: The mx AI layer — one MCP server that understands any mx project, a techniques corpus stored in a Postgres you control, and a PR-gated research pipeline that fills it.
+description: 'The mx AI layer: one MCP server that understands any mx project, a techniques corpus stored in a Postgres you control, and a PR-gated research pipeline that fills it.'
 sidebar:
   order: 1
 ---
@@ -26,7 +26,7 @@ delta, and agents retrieve it. Nothing writes to the corpus without a merge.
 | [Agent execution rules](/docs/ai/agent-rules/) | The rules agents in this repository work under |
 
 The documents themselves are published under
-[Techniques Corpus](/docs/corpus/) — the same markdown that gets chunked,
+[Techniques Corpus](/docs/corpus/). It is the same markdown that gets chunked,
 embedded and served to agents, rendered for humans.
 
 ## What it is not
@@ -36,5 +36,5 @@ embedded and served to agents, rendered for humans.
 - **Not a model.** mx never runs inference. Your agent supplies the model; mx
   supplies tools and retrieved text.
 - **Not magic retrieval.** The corpus is 66 documents that a human merged. It
-  answers well inside that surface and returns weak hits outside it — which is
+  answers well inside that surface and returns weak hits outside it, which is
   what `mx rag gaps` exists to surface.

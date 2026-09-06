@@ -8,7 +8,7 @@
  */
 
 /** The landing page's title (`src/pages/index.astro`). */
-export const LANDING_TITLE = 'MechCrate — an AI-native meta-framework for service ecosystems';
+export const LANDING_TITLE = 'MechCrate: an AI-native meta-framework for service ecosystems';
 
 /** The landing page's meta description. */
 export const LANDING_DESCRIPTION =

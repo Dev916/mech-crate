@@ -36,8 +36,8 @@ mx doctor
 ```
 
 `mx --version` prints the crate version (`mx 0.1.1` at the time of writing).
-`mx doctor` checks Docker, Compose and Make, and — when run inside a project —
-the folder contract and the service list.
+`mx doctor` checks Docker, Compose and Make. Run inside a project, it also
+checks the folder contract and the service list.
 
 :::note[Installing system-wide]
 `make install` installs to a system prefix instead and needs elevated
@@ -69,7 +69,7 @@ mx router up         # start it
 mx router status     # installed / running / network / dashboard URL
 ```
 
-`mx router status` prints the dashboard URL — Traefik allocates it from
+`mx router status` prints the dashboard URL. Traefik allocates it from
 `7680-7799` unless you pin it. Full detail is on
 [The router](/docs/framework/router/).
 

@@ -1,6 +1,6 @@
 ---
 title: Your first project
-description: mx new, mx add, make dev — a service answering on api.localhost in five commands.
+description: mx new, mx add, make dev. A service answering on api.localhost in five commands.
 sidebar:
   order: 3
 ---
@@ -22,8 +22,8 @@ That is the whole path. What follows is what each step actually does.
 
 ## `mx new my-app`
 
-Creates the project skeleton — `Makefile`, `make/`, `scripts/`, `apps/` and the
-`docker/` tree — and copies the shared Docker config. Nothing is running yet;
+Creates the project skeleton (`Makefile`, `make/`, `scripts/`, `apps/` and the
+`docker/` tree) and copies the shared Docker config. Nothing is running yet;
 this is the [folder contract](/docs/start/folder-contract/) on disk.
 
 Two flags are worth knowing:
@@ -51,7 +51,7 @@ brings with it. `mx add` lands, for a typical recipe:
 
 `--domain` is what makes the service reachable at `http://api.localhost` rather
 than a port. Omit it and the recipe defaults to `<service>.localhost`. Extra
-recipe options go through `--opt key=value` — `mx recipes info` lists which ones
+recipe options go through `--opt key=value`. `mx recipes info` lists which ones
 a recipe accepts.
 
 Recipes that also declare backing services (Postgres, Redis) drop their compose
@@ -59,7 +59,7 @@ files in at the same time, so `docker/compose/` grows `db.yml` and `redis.yml`
 on the first `mx add` that needs them.
 
 :::note[The app skeleton is a skeleton]
-`mx add` gives you the operational layer — compose, dockerfile, env, routing —
+`mx add` gives you the operational layer (compose, dockerfile, env, routing)
 plus a source tree with the recipe's structure and a health endpoint. You still
 run the framework's own install step (`npm install`, `cargo build`, `composer
 install`) the first time. Each recipe prints its exact next steps when it
@@ -68,16 +68,16 @@ finishes.
 
 ## `make doctor`
 
-Checks Docker, Compose and Make, then the project structure — `Makefile`,
+Checks Docker, Compose and Make, then the project structure (`Makefile`,
 `make/`, `scripts/`, `docker/compose/`, `docker/.config/`, the secrets file and
-the Docker network — and lists the services it found. It exits non-zero if
+the Docker network) and lists the services it found. It exits non-zero if
 something is missing, so it is safe to put in front of a script.
 
 ## `make init`
 
 Creates `docker/.config/.env.secrets` from `.env.secrets.template` if it does not
-exist yet, and ensures the project network. Idempotent — run it whenever you are
-not sure.
+exist yet, and ensures the project network. Idempotent, so run it whenever you
+are not sure.
 
 ## `make dev`
 
@@ -90,7 +90,7 @@ make dev s=api      # just this service (and what it depends on)
 ```
 
 `make dev` stops the existing services first, so it is also the "restart into a
-clean state" command. `make up` is the same thing without the dev overrides —
+clean state" command. `make up` is the same thing without the dev overrides:
 the baseline compose files alone, which is what ships.
 
 Then:
@@ -115,6 +115,6 @@ service listening on 3000 internally and never collide.
 
 ## Next
 
-- [The folder contract](/docs/start/folder-contract/) — what you just created
-- [The router](/docs/framework/router/) — how the hostname routing works
-- [Recipes](/docs/framework/recipes/) — what is available, and what each carries
+- [The folder contract](/docs/start/folder-contract/): what you just created
+- [The router](/docs/framework/router/): how the hostname routing works
+- [Recipes](/docs/framework/recipes/): what is available, and what each carries
