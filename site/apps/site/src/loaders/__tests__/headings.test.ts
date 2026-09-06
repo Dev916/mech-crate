@@ -11,7 +11,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { headingMatchesTitle, headingWords, stripDuplicateH1 } from '../lib/headings.ts';
+import {
+  headingMatchesTitle,
+  headingWords,
+  stripDuplicateH1,
+  withoutAppendixLabel,
+} from '../lib/headings.ts';
 import { buildCorpus } from '../lib/pipeline.ts';
 import { collectCorpusSources, defaultRepoRoot, repoFileExistsIn } from '../lib/sources.ts';
 
@@ -50,6 +55,48 @@ describe('headingWords', () => {
   });
 });
 
+describe('withoutAppendixLabel', () => {
+  it('discards a bare `Appendix:` label', () => {
+    expect(withoutAppendixLabel('Appendix: FRP in Rust')).toBe('FRP in Rust');
+  });
+
+  it('discards a designator with the label', () => {
+    expect(withoutAppendixLabel('Appendix K: Algebraic Effects & Optics')).toBe(
+      'Algebraic Effects & Optics'
+    );
+    expect(withoutAppendixLabel('Appendix A.1 — Streams')).toBe('Streams');
+  });
+
+  it('accepts an em dash, en dash or hyphen as the separator', () => {
+    expect(withoutAppendixLabel('Appendix — Streams')).toBe('Streams');
+    expect(withoutAppendixLabel('Appendix – Streams')).toBe('Streams');
+    expect(withoutAppendixLabel('Appendix - Streams')).toBe('Streams');
+  });
+
+  it('sees through leading emphasis markers', () => {
+    expect(withoutAppendixLabel('**Appendix: FRP in PHP**')).toBe('FRP in PHP**');
+  });
+
+  it('keeps a heading whose label has no separator', () => {
+    // Without punctuation there is no way to tell a label from a first word.
+    expect(withoutAppendixLabel('Appendix Streams Deep Dive')).toBe(
+      'Appendix Streams Deep Dive'
+    );
+  });
+
+  it('keeps the word when it is not leading', () => {
+    expect(withoutAppendixLabel('Solana RPC appendix (LLM-safe)')).toBe(
+      'Solana RPC appendix (LLM-safe)'
+    );
+  });
+
+  it('keeps an unrelated label', () => {
+    expect(withoutAppendixLabel('Part Two: Streams Deep Dive')).toBe(
+      'Part Two: Streams Deep Dive'
+    );
+  });
+});
+
 describe('headingMatchesTitle', () => {
   it('matches identical text through different punctuation', () => {
     expect(
@@ -79,12 +126,34 @@ describe('headingMatchesTitle', () => {
     ).toBe(true);
   });
 
-  it('refuses a heading that merely starts differently', () => {
-    // `Appendix:` in front makes the title a *suffix*, not a prefix. Guessing
-    // here is how a real heading gets deleted, so the rule declines.
+  it('matches through a leading appendix label', () => {
+    // The label is filing metadata from the guide these documents were split
+    // out of; the heading under it is the title verbatim.
     expect(
       headingMatchesTitle('Appendix: Streams Deep Dive', 'Streams Deep Dive')
+    ).toBe(true);
+    expect(
+      headingMatchesTitle('Appendix K: Algebraic Effects & Optics', 'Algebraic Effects & Optics')
+    ).toBe(true);
+  });
+
+  it('refuses a heading that merely starts differently', () => {
+    // Any other prefix makes the title a *suffix*, not a prefix. Guessing here
+    // is how a real heading gets deleted, so the rule declines.
+    expect(
+      headingMatchesTitle('Part Two: Streams Deep Dive', 'Streams Deep Dive')
     ).toBe(false);
+  });
+
+  it('refuses a heading whose appendix word is prose, not a label', () => {
+    expect(
+      headingMatchesTitle('Solana RPC appendix (LLM-safe)', 'Solana RPC (LLM-safe)')
+    ).toBe(false);
+  });
+
+  it('refuses a heading that is nothing but an appendix label', () => {
+    // Discarding the label leaves no words, so there is nothing to match on.
+    expect(headingMatchesTitle('Appendix:', 'Streams Deep Dive')).toBe(false);
   });
 
   it('refuses two unrelated headings', () => {
@@ -121,8 +190,13 @@ describe('stripDuplicateH1', () => {
     expect(stripDuplicateH1('# Title #\n\nBody.\n', 'Title').body).toBe('Body.\n');
   });
 
+  it('removes a heading that matches once its appendix label is discarded', () => {
+    const out = stripDuplicateH1('# Appendix: Streams Deep Dive\n\nBody.\n', 'Streams Deep Dive');
+    expect(out).toEqual({ body: 'Body.\n', linesRemoved: 2 });
+  });
+
   it('leaves a non-matching heading in place', () => {
-    const body = '# Appendix: Streams Deep Dive\n\nBody.\n';
+    const body = '# Part Two: Streams Deep Dive\n\nBody.\n';
     expect(stripDuplicateH1(body, 'Streams Deep Dive')).toEqual({ body, linesRemoved: 0 });
   });
 
