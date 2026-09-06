@@ -11,6 +11,7 @@
  */
 
 import { isHeldBack, normalizeMetadata, parseFrontmatter } from './frontmatter.ts';
+import { stripDuplicateH1 } from './headings.ts';
 import { GITHUB_BLOB_BASE, rewriteLinks } from './links.ts';
 import { findSecrets, formatFindings } from './secrets.ts';
 import { corpusEntryId, corpusRoute, fileStem, sanitizeSlug } from './slug.ts';
@@ -141,14 +142,26 @@ export function buildCorpus(
       );
     }
 
+    // Last, and after the lint: a corpus file opens with its own `# Title`, and
+    // Starlight renders the frontmatter title as the page's <h1>, so the
+    // published page would carry the heading twice. Dropping it here — on the
+    // one body that feeds the HTML, `llms-full.txt`, the sixteen splits and the
+    // `.md` twins — fixes every surface at once. Deliberately after
+    // `findSecrets`: the lint's line numbers are offsets into the body it was
+    // handed, and scanning the pre-strip body is the conservative direction
+    // (a superset of what ships).
+    const deduped = stripDuplicateH1(rewritten.body, meta.title);
+
     published.push({
       id: corpusEntryId(meta.category, slug),
       route: corpusRoute(meta.category, slug),
       repoPath: source.repoPath,
       category: meta.category,
       slug,
-      body: rewritten.body,
-      bodyStartLine,
+      body: deduped.body,
+      // Kept truthful for the body that actually ships, so a diagnostic quoting
+      // it still points at the right line of the source file.
+      bodyStartLine: bodyStartLine + deduped.linesRemoved,
       data,
     });
   }

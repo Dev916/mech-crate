@@ -21,7 +21,8 @@ import AiLoop from '@/components/diagrams/AiLoop.astro';
 import { homepageGraph, jsonLdScript } from '@/lib/jsonld.ts';
 import { OG_CARD_HEIGHT, OG_CARD_TYPE, OG_CARD_WIDTH, ogCardUrl } from '@/lib/og.ts';
 import { SITE_ORIGIN } from '@/loaders/lib/llms.ts';
-import { GITHUB_REPO, LANDING_DESCRIPTION, LANDING_TITLE } from '@/site-meta.ts';
+import { commonHeadHtml } from '@/lib/site-head.ts';
+import { CF_BEACON_TOKEN, GITHUB_REPO, LANDING_DESCRIPTION, LANDING_TITLE } from '@/site-meta.ts';
 import '@/styles/landing.css';
 
 // Shared with /llms.txt, which quotes the same two strings for the `/` bullet —
@@ -79,7 +80,18 @@ const startCommand = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content="https://mechcrate.dev/" />
+    {/* Parity with what Starlight's head defaults give every /docs/** page:
+        the site name and the locale. Values match `title:` in astro.config.mjs
+        and the site's single locale — this route is hand-written, so nothing
+        supplies them for it. */}
+    <meta property="og:site_name" content="MechCrate" />
+    <meta property="og:locale" content="en" />
     <meta name="twitter:card" content="summary_large_image" />
+    {/* Twitter reads og:title/og:description when these are absent, but the
+        landing page is the one URL people paste into a post, so it states them
+        rather than relying on the fallback. */}
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
 
     {/* The landing page is not a Starlight route, so the card tags the
         <Head> override adds to /docs/** are written out here by hand. Same
@@ -94,6 +106,13 @@ const startCommand = [
     {/* Organization + WebSite + SoftwareApplication, one block, already
         serialised (and `<`-escaped) by src/lib/jsonld.ts. */}
     <script type="application/ld+json" is:inline set:html={jsonLd} />
+
+    {/* The rest of the parity: `rel=sitemap` (Starlight emits its own on
+        /docs/**), the raster icon set, the manifest, `theme-color` and the
+        analytics beacon. Same string src/components/Head.astro emits, so the
+        two heads cannot drift. The SVG icon link stays above it — a browser
+        takes the first icon it understands. */}
+    <Fragment set:html={commonHeadHtml(CF_BEACON_TOKEN, { sitemap: true })} />
 
     {/* Inlined, and first, so the theme is resolved before the first paint —
         same storage key Starlight's ThemeProvider uses, so a choice made here

@@ -34,3 +34,28 @@ export const LICENSE_URLS = [
   `${GITHUB_REPO}/blob/main/LICENSE-APACHE`,
   `${GITHUB_REPO}/blob/main/LICENSE-MIT`,
 ] as const;
+
+/**
+ * Cloudflare Web Analytics site token (spec's analytics decision).
+ *
+ * A public identifier, not a secret — it ships in the HTML of every page by
+ * design, and the beacon is cookie-less, which is what keeps the site out of
+ * consent-banner territory. It lives here rather than in an env var because a
+ * static build has no runtime config, and because referrers are the only way to
+ * observe an AI answer engine citing the site.
+ *
+ * Emptying the string is the supported way to turn the beacon off: nothing is
+ * emitted and the build stays green — see `cfBeaconTag()` in
+ * `src/lib/site-head.ts`, which is unit-tested for exactly that.
+ */
+export const CF_BEACON_TOKEN = '4c7a272fdcaf472ba395a69fbf05507c';
+
+/**
+ * `theme-color`, the manifest's `theme_color`, and the ground the raster icons
+ * are composited on: `--sl-color-black` from the dark palette, hsl(224 10% 10%).
+ *
+ * One value rather than a light/dark pair — dark is the site's base theme, and a
+ * browser that paints its chrome to match should paint it the colour the site
+ * opens in.
+ */
+export const THEME_COLOR = '#17181c';

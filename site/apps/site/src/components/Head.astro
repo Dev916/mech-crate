@@ -44,13 +44,25 @@ import {
   OG_CARD_TYPE,
   OG_CARD_WIDTH,
   ogCardUrl,
+  ogTypeForRoute,
   routeHasOgCard,
 } from '../lib/og.ts';
+import { commonHeadHtml } from '../lib/site-head.ts';
+import { CF_BEACON_TOKEN } from '../site-meta.ts';
 
 const route = Astro.locals.starlightRoute;
 const pathname = Astro.url.pathname;
 
 const hidden = route.entry.data.sidebar?.hidden === true;
+
+// `og:type` is corrected in place rather than appended: Starlight already put an
+// `article` in `route.head`, and two `og:type` metas on one page is a scraper
+// coin-toss. `<Default />` below renders this array, so editing it here is what
+// the page ships. Every other tag in this file is genuinely additive.
+const ogType = ogTypeForRoute(pathname, hidden);
+for (const tag of route.head) {
+  if (tag.tag === 'meta' && tag.attrs?.property === 'og:type') tag.attrs.content = ogType;
+}
 
 // The 404 route is `sidebar.hidden`, which is also what keeps it out of the
 // sitemap, out of llms.txt and out of the card endpoint's page list. Pointing
@@ -143,3 +155,10 @@ const jsonLd = jsonLdScript(
     is already-serialised JSON, and `is:inline` so Astro leaves the element where
     it is instead of treating it as a script to process. */}
 <script type="application/ld+json" is:inline set:html={jsonLd} />
+
+{/* Raster icons, the manifest, `theme-color`, and the analytics beacon — the
+    tags that are the same on every page of the site, docs and landing alike.
+    Built as a string in src/lib/site-head.ts so the landing page, which writes
+    its own head, emits exactly the same bytes. The `rel=sitemap` link is not in
+    it: Starlight already emits one, and the landing page adds its own. */}
+<Fragment set:html={commonHeadHtml(CF_BEACON_TOKEN)} />

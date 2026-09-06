@@ -29,6 +29,7 @@ import {
   mdTwins,
   routeHasMdTwin,
 } from '../md-twin.ts';
+import { headingMatchesTitle } from '../../loaders/lib/headings.ts';
 import { buildCorpus } from '../../loaders/lib/pipeline.ts';
 import { collectCorpusSources, defaultRepoRoot, repoFileExistsIn } from '../../loaders/lib/sources.ts';
 import { SITE_ORIGIN, type LlmsPage } from '../../loaders/lib/llms.ts';
@@ -187,6 +188,23 @@ describe('twins of the real repository content', () => {
     const twins = mdTwins([...corpusPages, ...navPages]);
     expect(twins.size).toBe(corpus.published.length);
     expect(twins.size).toBeGreaterThan(50);
+  });
+
+  it('does not repeat its own H1 in the body — the corpus H1 dedup reaches the twins', () => {
+    // The twin's header already opens `# <title>`; before the dedup
+    // (src/loaders/lib/headings.ts) the body under the rule opened with the same
+    // heading again. The strip happens on the one body the HTML page,
+    // llms-full.txt and this file all share, so asserting it here is asserting
+    // it for all three.
+    for (const p of corpusPages) {
+      const [header, body] = splitTwin(buildMdTwin(p));
+      expect(header.startsWith(`# ${p.title}`), p.route).toBe(true);
+      const opening = body.split('\n').find((line) => line.trim() !== '') ?? '';
+      const h1 = /^ {0,3}#[ \t]+(.*)$/.exec(opening);
+      if (h1 !== null) {
+        expect(headingMatchesTitle(h1[1]!, p.title), `${p.route} repeats its title`).toBe(false);
+      }
+    }
   });
 
   it('serves the page markdown unchanged — two corpus documents, one authored guide', () => {

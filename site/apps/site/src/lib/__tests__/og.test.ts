@@ -39,7 +39,10 @@ import {
   ogCardSlug,
   ogCardUrl,
   ogCards,
+  ogTypeForRoute,
   routeHasOgCard,
+  OG_TYPE_ARTICLE,
+  OG_TYPE_WEBSITE,
 } from '../og.ts';
 
 function page(overrides: Partial<LlmsPage> & Pick<LlmsPage, 'title' | 'route' | 'kind'>): LlmsPage {
@@ -50,6 +53,49 @@ describe('card dimensions', () => {
   it('are the 1200×630 PNG every consumer expects', () => {
     expect([OG_CARD_WIDTH, OG_CARD_HEIGHT]).toEqual([1200, 630]);
     expect(OG_CARD_TYPE).toBe('image/png');
+  });
+});
+
+describe('ogTypeForRoute', () => {
+  it('calls the landing page and the docs overview a website', () => {
+    expect(ogTypeForRoute('/')).toBe(OG_TYPE_WEBSITE);
+    expect(ogTypeForRoute('/docs/')).toBe(OG_TYPE_WEBSITE);
+  });
+
+  it('calls every group index a website', () => {
+    for (const group of ['start', 'framework', 'ai', 'project', 'corpus']) {
+      expect(ogTypeForRoute(`/docs/${group}/`), group).toBe(OG_TYPE_WEBSITE);
+    }
+  });
+
+  it('calls a generated corpus category index a website', () => {
+    expect(ogTypeForRoute('/docs/corpus/theory/')).toBe(OG_TYPE_WEBSITE);
+    expect(ogTypeForRoute('/docs/corpus/framework-guides/')).toBe(OG_TYPE_WEBSITE);
+  });
+
+  it('keeps article on the documents at the same depth as a category index', () => {
+    // The distinction the depth alone cannot make: /docs/start/install/ and
+    // /docs/corpus/theory/ are both two segments under /docs/, and only one of
+    // them is a list of links.
+    expect(ogTypeForRoute('/docs/start/install/')).toBe(OG_TYPE_ARTICLE);
+    expect(ogTypeForRoute('/docs/framework/router/')).toBe(OG_TYPE_ARTICLE);
+  });
+
+  it('keeps article on a corpus document', () => {
+    expect(ogTypeForRoute('/docs/corpus/theory/appendix-fsm/')).toBe(OG_TYPE_ARTICLE);
+  });
+
+  it('calls the hidden 404 route a website — it is not an article either', () => {
+    expect(ogTypeForRoute('/404/', true)).toBe(OG_TYPE_WEBSITE);
+  });
+
+  it('tolerates a pathname without a trailing slash', () => {
+    expect(ogTypeForRoute('/docs')).toBe(OG_TYPE_WEBSITE);
+    expect(ogTypeForRoute('/docs/start/install')).toBe(OG_TYPE_ARTICLE);
+  });
+
+  it('uses the two values Open Graph defines for these page kinds', () => {
+    expect([OG_TYPE_WEBSITE, OG_TYPE_ARTICLE]).toEqual(['website', 'article']);
   });
 });
 

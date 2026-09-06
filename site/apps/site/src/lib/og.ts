@@ -41,6 +41,12 @@ export const OG_CARD_HEIGHT = 630;
 /** Card MIME type — the `og:image:type` every page advertises. */
 export const OG_CARD_TYPE = 'image/png';
 
+/** `og:type` for a document — a page that is itself the content. */
+export const OG_TYPE_ARTICLE = 'article';
+
+/** `og:type` for a page that lists other pages, and for the 404. */
+export const OG_TYPE_WEBSITE = 'website';
+
 /** Slug of the landing page's card, so `/og/index.png` is written for `/`. */
 export const OG_LANDING_SLUG = 'index';
 
@@ -147,6 +153,49 @@ export function routeHasOgCard(pathname: string, hidden: boolean = false): boole
   // `classifyDocId` already collapses a trailing `index` segment, so the
   // landing page's `index` slug classifies as the overview, same as `/docs`.
   return classifyDocId(ogCardSlug(pathname)) !== null;
+}
+
+/**
+ * `og:type` for a route.
+ *
+ * Starlight's head defaults put `article` on every page it renders, which is
+ * wrong for the pages that are navigation rather than reading: an index is not
+ * an article, and a scraper that treats one as a document indexes a list of
+ * links as if it were prose. `src/components/Head.astro` rewrites the tag using
+ * this, and the landing page (`website`, hand-written) never had the problem.
+ *
+ * Three families get `website`:
+ *
+ *   - `/docs/` — the documentation overview;
+ *   - `/docs/<group>/` — the Start / Framework / AI Layer / Project group
+ *     indexes, and the corpus overview at `/docs/corpus/`;
+ *   - `/docs/corpus/<category>/` — the fifteen generated category indexes.
+ *
+ * A deeper route is a document: `/docs/start/install/` and
+ * `/docs/corpus/theory/appendix-fsm/` both keep `article`. The depth rule cannot
+ * be "two segments or fewer" for that reason — `/docs/start/install/` and
+ * `/docs/corpus/theory/` are both two deep and are not the same kind of page —
+ * so the corpus branch is spelled out.
+ *
+ * `hidden` is the entry's `sidebar.hidden`; the 404 route is the only page that
+ * sets it, and it is not an article either.
+ */
+export function ogTypeForRoute(pathname: string, hidden: boolean = false): string {
+  if (hidden) return OG_TYPE_WEBSITE;
+
+  const slug = pathname.replace(/^\/+|\/+$/g, '');
+  if (slug === '' || slug === 'docs') return OG_TYPE_WEBSITE;
+
+  const segments = slug.split('/');
+  if (segments[0] !== 'docs') return OG_TYPE_ARTICLE;
+
+  // /docs/<group>/ — every group index, corpus included.
+  if (segments.length === 2) return OG_TYPE_WEBSITE;
+  // /docs/corpus/<category>/ — a generated category index. Its siblings under
+  // any other group are documents.
+  if (segments.length === 3 && segments[1] === 'corpus') return OG_TYPE_WEBSITE;
+
+  return OG_TYPE_ARTICLE;
 }
 
 /**
