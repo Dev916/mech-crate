@@ -34,52 +34,52 @@ A project with `--infra cloudflare` also carries `infra/cloudflare/` and
 
 ## Who owns what
 
-The split is not a style preference — `mx upgrade` reads it directly, and it
+The split is not a style preference. `mx upgrade` reads it directly, and it
 decides whether a file can be replaced under you.
 
 | Path | Owner | Upgrade behaviour |
 |---|---|---|
-| `Makefile`, `make/*.mk`, `scripts/*.sh`, `scripts/*.mjs` | mx | **Tooling** — upgrade offers to update these |
-| `docker/compose/`, `docker/dockerfiles/`, `docker/system/` | you | **Config** — added if missing, never overwritten |
+| `Makefile`, `make/*.mk`, `scripts/*.sh`, `scripts/*.mjs` | mx | **Tooling**: upgrade offers to update these |
+| `docker/compose/`, `docker/dockerfiles/`, `docker/system/` | you | **Config**: added if missing, never overwritten |
 | `apps/<service>/` | you | untouched |
 | `docker/.config/` | you | untouched; `.env.secrets` is gitignored |
-| `infra/cloudflare/`, `make/cloudflare.mk`, `scripts/cf-*.sh` | mx | **Conditional** — only if `infra/cloudflare/` exists |
+| `infra/cloudflare/`, `make/cloudflare.mk`, `scripts/cf-*.sh` | mx | **Conditional**: only if `infra/cloudflare/` exists |
 
 The practical reading: **your code and your compose files are yours.** The verb
 layer belongs to the framework, which is what lets improvements to `make dev`
 reach projects that were scaffolded a year ago. (`mx upgrade` is the command that
-does this and it is currently mid-repair — see [Upgrade](/docs/framework/upgrade/).)
+does this, and it is currently mid-repair. See [Upgrade](/docs/framework/upgrade/).)
 
 ## Why each directory exists
 
-**`Makefile` + `make/`** — the verbs. `make/` is one module per verb group
+**`Makefile` + `make/`** are the verbs. `make/` is one module per verb group
 (`dev.mk`, `logs.mk`, `build.mk`, …), auto-included by a wildcard in the
 `Makefile`. Adding a module is how a feature like Cloudflare adds targets without
 touching the root file.
 
-**`scripts/`** — the implementations. Make targets stay one line; the logic lives
-in shell scripts that are readable, greppable and runnable on their own.
+**`scripts/`** holds the implementations. Make targets stay one line; the logic
+lives in shell scripts that are readable, greppable and runnable on their own.
 
-**`apps/<service>/`** — one directory per service, named exactly as the service.
+**`apps/<service>/`** is one directory per service, named exactly as the service.
 Compose, dockerfile and env file all key off that same name, so there is never a
 mapping table to consult.
 
-**`docker/compose/`** — one baseline file per service plus a `.dev.yml` override.
+**`docker/compose/`** is one baseline file per service plus a `.dev.yml` override.
 This is what makes the *subset* the unit of work: `make dev s=api` composes only
 the files that service needs. See
 [Compose &amp; env conventions](/docs/framework/compose-env/).
 
-**`docker/.config/`** — three env layers: `.env.shared` for everything,
+**`docker/.config/`** has three env layers: `.env.shared` for everything,
 `.env.secrets` (gitignored, generated from `.env.secrets.template` by
 `make init`) for credentials, `.env.<service>` for per-service settings.
 
-**`docker/system/`** — 1:1 host-to-container mounts. If a service needs a config
-file, a seed dataset or a persisted directory, it lives here at the same relative
-path the container sees.
+**`docker/system/`** holds 1:1 host-to-container mounts. If a service needs a
+config file, a seed dataset or a persisted directory, it lives here at the same
+relative path the container sees.
 
-**`docker/dockerfiles/<service>/`** — `app` for development, `app.prod` for the
-shipped image. Multi-stage targets (`development`, `production`) let the same
-file serve both.
+**`docker/dockerfiles/<service>/`** carries `app` for development and `app.prod`
+for the shipped image. Multi-stage targets (`development`, `production`) let the
+same file serve both.
 
 ## Nesting
 
@@ -90,5 +90,5 @@ and `docker/` tree, and the Astro app under `site/apps/site/`.
 
 ## Next
 
-- [CLI reference](/docs/start/cli-reference/) — the verbs the contract enables
-- [Compose &amp; env conventions](/docs/framework/compose-env/) — the `docker/` half in detail
+- [CLI reference](/docs/start/cli-reference/): the verbs the contract enables
+- [Compose &amp; env conventions](/docs/framework/compose-env/): the `docker/` half in detail

@@ -28,7 +28,7 @@ export default defineConfig({
     starlight({
       title: 'MechCrate',
       description:
-        'mx — a Rust CLI for running a subset of your service ecosystem locally, scaffolding projects with wisdom, and feeding agents a curated techniques corpus.',
+        'mx is a Rust CLI for running a subset of your service ecosystem locally, scaffolding projects with wisdom, and feeding agents a curated techniques corpus.',
       social: [
         {
           icon: 'github',

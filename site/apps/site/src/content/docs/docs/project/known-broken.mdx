@@ -1,6 +1,6 @@
 ---
 title: Known-broken lane
-description: Every open, testable defect in MechCrate, each with a red test asserting its fixed behaviour — rendered from tests/KNOWN_BROKEN.md at build time.
+description: Every open, testable defect in MechCrate, each with a red test asserting its fixed behaviour. Rendered from tests/KNOWN_BROKEN.md at build time.
 sidebar:
   order: 2
 ---
@@ -13,7 +13,7 @@ release gate never runs them. `make test-known-broken` runs only them and
 scoreboards the result.
 
 **Expected state: all red.** A lane test that turns green is the signal that a
-fix landed without bookkeeping — surfaced rather than silently absorbed.
+fix landed without bookkeeping, surfaced rather than silently absorbed.
 
 <KnownBrokenLane />
 
@@ -21,7 +21,7 @@ fix landed without bookkeeping — surfaced rather than silently absorbed.
 It is read out of the repository's
 [`tests/KNOWN_BROKEN.md`](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md)
 during `astro build`. A row leaves this page when the fix lands and the row
-leaves the index — and if the file ever goes missing, the build fails rather
+leaves the index. If the file ever goes missing, the build fails rather
 than publishing a page that claims there is nothing wrong.
 :::
 
@@ -32,20 +32,20 @@ accumulate:
 
 1. `bd update mech-crate-<id> --claim`
 2. Make the lane test pass.
-3. Delete its `#[ignore]` — the test joins the gate.
+3. Delete its `#[ignore]` so the test joins the gate.
 4. Remove its row from the index.
 5. `bd close mech-crate-<id>`.
 
 ## House rules
 
 - `#[ignore]` is reserved **exclusively** for this lane. Database-gated tests
-  skip via an env-var early return, never `#[ignore]` — so the attribute means
+  skip via an env-var early return, never `#[ignore]`, so the attribute means
   one thing and the two counts stay meaningful.
 - Every lane test's *arrange* half must succeed today. A lane test that dies on
   a missing fixture tells you nothing about the defect, so setup assertions
   carry a `setup:` prefix and the two failure classes stay distinguishable.
 - Lane tests live beside the suite that owns their subject, not in one central
-  file — the test is the first thing whoever fixes it should read.
+  file. The test is the first thing whoever fixes it should read.
 
 The two numbers partition the workspace: the lane count plus the gate count is
 the total test count. If they stop summing, either a lane test lost its

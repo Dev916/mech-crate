@@ -122,12 +122,12 @@ const startCommand = [
           <div>
             <p class="eyebrow">Meta-framework for service ecosystems</p>
             <h1>
-              Stand up and operate <em>entire service ecosystems</em> — consistently, locally.
+              Stand up and operate <em>entire service ecosystems</em>. Consistently, locally.
             </h1>
             <p class="hero__lede">
               An AI-native meta-framework with agents as first-class developers. Every repo has
               its own layout, its own env-var loading order, its own half-documented way to
-              start the stack — humans burn onboarding time relearning it, agents burn tokens
+              start the stack. Humans burn onboarding time relearning it, agents burn tokens
               re-exploring it. <code>mx</code> makes the shape of a project the one thing
               nobody has to relearn.
             </p>
@@ -149,7 +149,7 @@ const startCommand = [
               </div>
             </div>
             <p class="hero__note">
-              Installs the <code>mx</code> binary to <code>~/.local/bin</code> — no sudo. Then
+              Installs the <code>mx</code> binary to <code>~/.local/bin</code>. No sudo. Then
               <code>mx doctor</code> tells you what else your machine needs.
             </p>
 
@@ -184,7 +184,7 @@ const startCommand = [
               </p>
               <p>
                 mx makes the <em>subset</em> the unit of work. Every service gets its own
-                atomic compose file — a baseline that describes its production shape, plus a
+                atomic compose file: a baseline that describes its production shape, plus a
                 dev override that adds hot-reload mounts, debug ports and relaxed health
                 checks. Nothing forces all-or-nothing, and nothing about &ldquo;what runs
                 where&rdquo; lives in tribal knowledge.
@@ -203,11 +203,11 @@ const startCommand = [
               </div>
               <ul class="callouts">
                 <li>
-                  <strong>docker/compose/&lt;service&gt;.yml</strong> — the baseline, the same
+                  <strong>docker/compose/&lt;service&gt;.yml</strong>: the baseline, the same
                   shape you deploy.
                 </li>
                 <li>
-                  <strong>&lt;service&gt;.dev.yml</strong> — the override, merged only by
+                  <strong>&lt;service&gt;.dev.yml</strong>: the override, merged only by
                   <code>make dev</code>.
                 </li>
               </ul>
@@ -230,7 +230,7 @@ const startCommand = [
                 Switching organizations shouldn&rsquo;t mean tearing down your stack
               </h2>
               <p>
-                Work across two organizations — or just two products — and the usual routine
+                Work across two organizations (or just two products) and the usual routine
                 is misery: spin down ecosystem A&rsquo;s containers so ecosystem B&rsquo;s
                 ports don&rsquo;t collide, lose your state, repeat tomorrow.
               </p>
@@ -239,7 +239,7 @@ const startCommand = [
                 mx project registers with. Application services publish no HTTP host ports;
                 Traefik routes to them by hostname, so two ecosystems&rsquo; web apps never
                 collide. Multiple ecosystems coexist on one machine, and switching context is
-                <code>cd</code> — not teardown.
+                <code>cd</code>, not teardown.
               </p>
             </div>
 
@@ -262,8 +262,8 @@ const startCommand = [
                 </li>
                 <li>
                   <strong>Backing services still get ports.</strong> Dev overrides expose
-                  Postgres and Redis on their conventional ports for local GUI tools — per
-                  compose file, easy to change.
+                  Postgres and Redis on their conventional ports for local GUI tools (per
+                  compose file, easy to change).
                 </li>
               </ul>
               <p class="aside-link">
@@ -292,9 +292,9 @@ const startCommand = [
               </p>
               <p>
                 mx <strong>recipes</strong> are production-shaped service definitions that
-                carry the accumulated decisions of the stacks they came from — dependency
-                choices, testing setup, admin tooling, dev overrides, deploy configuration —
-                applied in one motion. And projects don&rsquo;t fork away from the framework:
+                carry the accumulated decisions of the stacks they came from: dependency
+                choices, testing setup, admin tooling, dev overrides, deploy configuration,
+                all applied in one motion. And projects don&rsquo;t fork away from the framework:
                 <code>mx upgrade</code> is how an existing project adopts newer scaffolding as
                 the templates improve.
               </p>
@@ -314,7 +314,7 @@ const startCommand = [
               </div>
               <p class="caveat">
                 <strong>Being straight with you:</strong> <code>mx upgrade</code> is currently
-                mid-repair against the shipped template layout — tracked as
+                mid-repair against the shipped template layout, tracked as
                 <code>mech-crate-z5i</code>, with a red test asserting the fixed behaviour. A
                 few recipes also still fail on a known templating defect. Both live in the
                 <a href="/docs/project/">known-broken lane</a>, not in a backlog nobody reads.
@@ -337,9 +337,9 @@ const startCommand = [
               <h2 class="section__title">The cobbled-together everything else</h2>
               <p>
                 Environment loading, the local CLI, where files live, how you check the
-                machine is healthy — the concerns every team solves badly, differently, once
-                per project. mx standardises them once, in a folder contract that is
-                deliberately non-negotiable.
+                machine is healthy. These are the concerns every team solves badly,
+                differently, once per project. mx standardises them once, in a folder
+                contract that is deliberately non-negotiable.
               </p>
               <p>
                 That contract is the point. It is what lets one <code>make dev</code> work
@@ -351,21 +351,21 @@ const startCommand = [
             <div class="problem__aside">
               <ul class="callouts">
                 <li>
-                  <strong>Environment config</strong> — one documented loading order:
+                  <strong>Environment config.</strong> One documented loading order:
                   <code>.env.shared</code> → <code>.env.secrets</code> (gitignored) →
                   <code>.env.&lt;service&gt;</code>, all under <code>docker/.config/</code>.
                 </li>
                 <li>
-                  <strong>A consistent CLI</strong> — <code>make dev / up / down / logs / sh /
+                  <strong>A consistent CLI.</strong> <code>make dev / up / down / logs / sh /
                   ps / build / doctor</code> behave identically in every project, and
                   <code>mx</code> mirrors the same verbs globally.
                 </li>
                 <li>
-                  <strong>Filesystem discipline</strong> — 1:1 host-to-container mounts under
+                  <strong>Filesystem discipline.</strong> 1:1 host-to-container mounts under
                   <code>docker/system/</code>. What you see is what the container sees.
                 </li>
                 <li>
-                  <strong>Documentation and health</strong> — <code>mx docs</code> compiles
+                  <strong>Documentation and health.</strong> <code>mx docs</code> compiles
                   project Markdown to PDF and HTML; <code>mx doctor</code> and
                   <code>make doctor</code> check dependencies before they ruin your afternoon.
                 </li>
@@ -396,7 +396,7 @@ const startCommand = [
               <li>
                 <h3>One MCP server, forty-plus tools</h3>
                 <p>
-                  <code>mx-mcp-server</code> groups its tools into four families — scaffold,
+                  <code>mx-mcp-server</code> groups its tools into four families: scaffold,
                   operate, understand, retrieve. An agent can create a service, start the
                   right subset of the stack, tail its logs and consult the corpus before
                   writing a line. <a href="/docs/ai/">How the AI layer works →</a>
@@ -406,7 +406,7 @@ const startCommand = [
                 <h3>A techniques corpus you host yourself</h3>
                 <p>
                   RAG over curated engineering docs on pgvector, stored in a Postgres
-                  <strong>you</strong> control — a Neon project or a local container, never a
+                  <strong>you</strong> control: a Neon project or a local container, never a
                   third-party AI vendor&rsquo;s store. Embeddings go through any
                   OpenAI-compatible <code>/embeddings</code> endpoint: OpenAI by default, or
                   point <code>embedding_base_url</code> at Ollama or LM Studio to keep
@@ -438,7 +438,7 @@ const startCommand = [
           <p class="eyebrow">Quality</p>
           <h2 class="section__title">Proven gates, and a public list of what is broken</h2>
           <p class="section__intro">
-            The three blocking gates — lint, test, coverage — are proven, not assumed. Each
+            The three blocking gates (lint, test, coverage) are proven, not assumed. Each
             was demonstrated failing on a deliberately broken branch before the baseline
             landed, so we know they catch what they claim to catch. A release tag cannot ship
             unless its commit passes all three.
@@ -486,7 +486,7 @@ const startCommand = [
               We would rather publicly index our own defects than pretend there aren&rsquo;t
               any. <code>mx upgrade</code> (<code>mech-crate-z5i</code>) and the corpus&rsquo;s
               lexical retrieval arm (<code>mech-crate-4jw</code>) are both open and both
-              named — each with a red test that asserts the behaviour we owe you.
+              named, each with a red test that asserts the behaviour we owe you.
             </p>
             <p>
               Un-ignoring that test is the fix&rsquo;s definition of done. It is a report, not
@@ -503,7 +503,7 @@ const startCommand = [
           <h2>A developer who knows one mx project knows all of them</h2>
           <p class="lede">
             Install the CLI, bring up the router once, and scaffold your first project. The
-            second one will look exactly like it — which is the whole idea.
+            second one will look exactly like it. That is the whole idea.
           </p>
 
           <div class="terminal">

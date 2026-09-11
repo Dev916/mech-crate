@@ -6,9 +6,9 @@ sidebar:
 ---
 
 A recipe is a production-shaped service definition. It carries the decisions of
-the stack it came from — dependency choices, dockerfile targets, a dev override,
-a health endpoint, admin tooling, deploy configuration — and `mx add` applies all
-of it in one motion.
+the stack it came from: dependency choices, dockerfile targets, a dev override,
+a health endpoint, admin tooling, deploy configuration. `mx add` applies all of
+it in one motion.
 
 ```bash
 mx recipes list                                      # what is installed
@@ -26,10 +26,10 @@ mx add api --recipe rust-api --domain api.localhost  # apply it
 | `rust-api` | 1.0 | ✅ | Actix-web + SQLx, hexagonal architecture. Brings `db` and `redis`. |
 | `rust-leptos` | 1.0 | ✅ | Leptos SSR on Actix-web with shadcn-ui, actor model, Postgres and Redis. |
 | `rust-worker` | 1.0 | ✅ | Job worker on Redis pub/sub with Postgres and local LLM evaluation. |
-| `zola` | 1.0 | ✅ | Zola static site generator — single binary, no runtime dependencies. |
+| `zola` | 1.0 | ✅ | Zola static site generator. Single binary, no runtime dependencies. |
 
 :::note[How that column was measured]
-Not asserted — run. On 2026-08-25, against a build of this repository, a scratch
+Run, not asserted. On 2026-08-25, against a build of this repository, a scratch
 project was created outside the repo with `mx new` and then each recipe applied
 into it:
 
@@ -54,20 +54,20 @@ recipe prints its exact next steps when it finishes.
 
 `mx add` reads the recipe manifest and works through it in order:
 
-1. **Options** — defaults from the manifest, overridden by `--domain` and any
+1. **Options**: defaults from the manifest, overridden by `--domain` and any
    `--opt key=value`. `mx recipes info <name>` lists what a recipe accepts;
    `rust-api`, for example, takes `rust`, `port` and `domain`.
-2. **Placeholders** — `{{SERVICE_NAME}}`, the port, the domain and the rest are
+2. **Placeholders**: `{{SERVICE_NAME}}`, the port, the domain and the rest are
    substituted through every template.
-3. **Directories** — the app's source tree is created.
-4. **Framework scaffold** (`init_app`, where a recipe declares one) — skipped if
+3. **Directories**: the app's source tree is created.
+4. **Framework scaffold** (`init_app`, where a recipe declares one): skipped if
    the app directory already exists.
-5. **Templates** — the app files, `docker/compose/<service>.yml` and
+5. **Templates**: the app files, `docker/compose/<service>.yml` and
    `<service>.dev.yml`, `docker/dockerfiles/<service>/app` and `app.prod`, and
    `docker/.config/.env.<service>`.
-6. **Router labels** — the `Host()` rule for your `--domain` and the
+6. **Router labels**: the `Host()` rule for your `--domain` and the
    `devmesh-traefik` wiring.
-7. **Post-install** — anything the recipe declares, such as generating secrets.
+7. **Post-install**: anything the recipe declares, such as generating secrets.
 
 Recipes that need backing services also drop `db.yml` / `redis.yml` in, once.
 
@@ -80,8 +80,8 @@ system fit together:
 
 Recipes are directories of templates plus a `recipe.json` manifest that declares
 options, placeholders, directories, templates, an optional `init_app` command and
-optional post-install steps. The full authoring guide — manifest schema,
-placeholder rules, the conformance tests a recipe has to pass — is in the corpus:
+optional post-install steps. The full authoring guide (manifest schema,
+placeholder rules, the conformance tests a recipe has to pass) is in the corpus:
 
 **→ [Recipe Authoring Guide](/docs/corpus/process/recipe-authoring-guide/)**
 

@@ -1,6 +1,6 @@
 ---
 title: Upgrade
-description: How mx upgrade is meant to keep projects current with the templates — and its current, broken, state.
+description: How mx upgrade is meant to keep projects current with the templates, and its current, broken, state.
 sidebar:
   order: 6
 ---
@@ -16,7 +16,7 @@ mx upgrade             # walk the changes interactively
 mx upgrade --yes       # accept everything, non-interactive
 ```
 
-:::danger[Currently broken — do not rely on this]
+:::danger[Currently broken. Do not rely on this]
 On the current build, `mx upgrade` fails before it does anything:
 
 ```
@@ -33,7 +33,7 @@ error: Configuration error: Project templates not found at ~/.mech-crate/templat
 
 Exit code `1`. `--diff` fails identically. The discovery step looks for a
 `templates/project/` directory that the shipped template layout does not
-contain — the scaffold templates live at the root of `templates/`, not under a
+contain. The scaffold templates live at the root of `templates/`, not under a
 `project/` subdirectory.
 
 Tracked as **`mech-crate-z5i`**. The red test
@@ -58,8 +58,8 @@ categorised:
 
 | Category | Paths | Behaviour |
 |---|---|---|
-| **Tooling** | `Makefile`, `make/*.mk`, `scripts/*.sh`, `scripts/*.mjs` | Offered for update — these are mx's |
-| **Config** | `docker/compose/`, `docker/dockerfiles/`, `docker/system/` | Added if missing, **never overwritten** — these are yours |
+| **Tooling** | `Makefile`, `make/*.mk`, `scripts/*.sh`, `scripts/*.mjs` | Offered for update (these are mx's) |
+| **Config** | `docker/compose/`, `docker/dockerfiles/`, `docker/system/` | Added if missing, **never overwritten** (these are yours) |
 | **Conditional** | `make/cloudflare.mk`, `scripts/cf-*.sh`, `infra/cloudflare/` | Only touched if the project has `infra/cloudflare/` |
 | **Skip** | `recipes/`, `router/` | Not part of a project upgrade |
 
@@ -68,13 +68,13 @@ An upgrade can improve how `make dev` composes them; it cannot rewrite what they
 say. That is what makes accepting an upgrade a low-stakes decision rather than a
 merge conflict.
 
-Conditional files are keyed on evidence rather than a config flag — the
+Conditional files are keyed on evidence rather than a config flag. The
 Cloudflare set is in scope exactly when `infra/cloudflare/` exists on disk, so a
 project that never opted in never sees those files offered.
 
 ## Recipes are upgraded separately
 
 `mx upgrade` covers the project skeleton. Service-level scaffolding comes from
-recipes and has its own path — `mx recipes apply <name>` re-applies a recipe to
+recipes and has its own path: `mx recipes apply <name>` re-applies a recipe to
 the current project, and `mx recipes versions <name>` lists what is available.
 See [Recipes](/docs/framework/recipes/).

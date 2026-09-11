@@ -16,9 +16,9 @@ without a per-project runbook.
 
 <ComposeLayering />
 
-Every service gets `docker/compose/<service>.yml` — the baseline, which describes
-the service as it ships — and `docker/compose/<service>.dev.yml` — the override,
-which describes what it needs while you are working on it.
+Every service gets two files. `docker/compose/<service>.yml` is the baseline,
+describing the service as it ships. `docker/compose/<service>.dev.yml` is the
+override, describing what it needs while you are working on it.
 
 ```bash
 make dev            # baseline + .dev.yml override, merged
@@ -49,7 +49,7 @@ services:
 
 Note what is *not* there: the application service publishes no HTTP host port in
 either file. That is the [router's](/docs/framework/router/) job. Backing
-services are the exception — a dev override exposes Postgres and Redis on their
+services are the exception: a dev override exposes Postgres and Redis on their
 conventional ports so `psql` and Redis GUIs work.
 
 ### Composition, not duplication
@@ -64,7 +64,7 @@ include:
     optional: true
 ```
 
-Two services that both need Postgres include the same `db.yml` — one database,
+Two services that both need Postgres include the same `db.yml`. One database,
 declared once. Marking an include `optional: true` lets a service degrade to
 running without it.
 
@@ -74,8 +74,8 @@ All under `docker/.config/`:
 
 | File | Holds | Committed |
 |---|---|---|
-| `.env.shared` | values every service needs — project name, ports, shared hostnames | yes |
-| `.env.secrets` | credentials, API keys, database passwords | **no** — gitignored |
+| `.env.shared` | values every service needs: project name, ports, shared hostnames | yes |
+| `.env.secrets` | credentials, API keys, database passwords | **no** (gitignored) |
 | `.env.<service>` | one service's settings | yes |
 
 `.env.secrets.template` *is* committed, with the keys and no values. `make init`
@@ -104,8 +104,8 @@ so for an application service the effective precedence is
 :::caution[The backing-service compose files list them the other way round]
 `db.yml` and `redis.yml` order theirs `.env.shared` → `.env.secrets` →
 `.env.<service>`, which puts secrets *above* shared for those two services. In
-practice it rarely bites, because the same key is seldom defined in both files —
-but if you are debugging a value that will not take, check which order the
+practice it rarely bites, because the same key is seldom defined in both files.
+But if you are debugging a value that will not take, check which order the
 compose file you are looking at actually uses. Do not assume; read the
 `env_file` block.
 :::
@@ -136,7 +136,7 @@ services:
 ```
 
 `DB_USER` and `DB_PASSWORD` are interpolated by Compose from the environment at
-`docker compose` time — they come from the env files, and the composed
+`docker compose` time. They come from the env files, and the composed
 `DATABASE_URL` is then pushed into the container. The dev override supplies
 `${DB_USER:-site}`-style defaults so a fresh clone starts without a populated
 secrets file.
@@ -145,13 +145,13 @@ secrets file.
 
 `docker/dockerfiles/<service>/app` is the development image and `app.prod` the
 shipped one. Both are usually multi-stage, and the compose files select a stage
-with `build.target` — that is how one dockerfile serves `make dev` and
+with `build.target`. That is how one dockerfile serves `make dev` and
 `make build s=api prod=1`.
 
 ## Further reading
 
-- [Docker assembly guide](/docs/corpus/docker/docker-assembly-guide/) — the
+- [Docker assembly guide](/docs/corpus/docker/docker-assembly-guide/): the
   corpus document on building these files well
-- [The folder contract](/docs/start/folder-contract/) — where `docker/` sits
-- [Infra credentials](/docs/framework/infra-credentials/) — provider credentials,
+- [The folder contract](/docs/start/folder-contract/): where `docker/` sits
+- [Infra credentials](/docs/framework/infra-credentials/): provider credentials,
   which live outside the project's env files
