@@ -163,6 +163,15 @@ Pass `--no-rag` to disable the corpus entirely (RAG tools then report offline).
 | `rag_find_related` | Discover related techniques from other docs |
 | `rag_health` | Report the active backend (`neon`/`local`/`offline`), doc/chunk counts, and embedding model |
 
+### Embedding Key (semantic vs lexical-only search)
+
+RAG search is hybrid (vector + trigram) **only when the server can embed the query**. The embedding key resolves at server startup, precedence high→low:
+
+1. `MX_RAG_EMBEDDING_API_KEY` env, then `OPENAI_API_KEY` env
+2. `embedding_api_key` in `~/.mech-crate/config/rag.toml`
+
+MCP launch configs (e.g. a checked-in `.mcp.json`) usually pass **no** env, so `rag.toml` is the reliable source for MCP servers — never put the key in a tracked file. Without a working key (missing, or the provider rejects it — e.g. exhausted OpenAI credits return `429 insufficient_quota`), every search silently degrades to trigram-only and results carry a `lexical-only` note. Diagnose with `mx rag status` (shows `Embedding key: configured / MISSING`). Config changes need an MCP server restart; `embedding_base_url` in the same file can point at any OpenAI-compatible provider (Ollama, LM Studio) — switching models requires `mx rag ingest --reembed`.
+
 ## Architecture
 
 ```
