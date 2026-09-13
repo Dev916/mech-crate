@@ -7,7 +7,6 @@ services:
       context: ../..
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
-    container_name: {{SERVICE_NAME}}-scheduler
     env_file:
       - ../.config/.env.shared
       - ../.config/.env.secrets

@@ -16,7 +16,6 @@ services:
       context: ../..
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
-    container_name: {{SERVICE_NAME}}
     env_file:
       - ../.config/.env.shared
       - ../.config/.env.secrets

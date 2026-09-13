@@ -28,7 +28,6 @@ services:
       # (make up / build / release) failed to resolve the target while `make
       # dev`'s `development` override hid it (bd:mech-crate-47j).
       target: production
-    container_name: {{SERVICE_SLUG}}
     restart: unless-stopped
     env_file:
       - ../.config/.env.shared

@@ -949,6 +949,21 @@ MechCrate uses a two-network pattern for services:
 
 ### Production (`service.yml`)
 
+Two rules the conformance suite enforces on every compose file a recipe ships
+(`crates/mx-lib/tests/templates_compose_hygiene.rs`), because `docker compose
+config` is blind to both:
+
+- **Never set `container_name`.** Container names are a Docker-daemon-wide
+  namespace, so two projects whose recipes both pin `db` cannot run at the same
+  time (`Conflict. The container name "/db" is already in use`). Leave it unset
+  and compose derives `<project>-<service>-<index>`, unique per project. Service
+  names are what `depends_on`, `make sh s=…` and Traefik labels address, and
+  those are unchanged.
+- **Only join an `external: true` network mx actually creates** — that is
+  `devmesh-traefik` (`mx router up`) or `mech-network` (`make init`). A network
+  nothing creates renders clean and then fails at `up` with
+  `network … declared as external, but could not be found`.
+
 ```yaml
 # {{SERVICE_NAME}} - Production Stack
 
@@ -962,7 +977,6 @@ services:
       context: ../..
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
-    container_name: {{SERVICE_NAME}}
     env_file:
       - ../.config/.env.secrets
       - ../.config/.env.shared
@@ -999,7 +1013,6 @@ services:
       context: ../..
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
-    container_name: {{SERVICE_NAME}}-worker
     env_file:
       - ../.config/.env.secrets
       - ../.config/.env.shared
@@ -1069,7 +1082,6 @@ Shared services use the implicit default network—no explicit network configura
 services:
   db:
     image: postgres:16-alpine
-    container_name: db
     env_file:
       - ../.config/.env.shared
       - ../.config/.env.secrets
@@ -1077,7 +1089,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", 'pg_isready -q -U "$${POSTGRES_USER:-postgres}" && psql -U "$${POSTGRES_USER:-postgres}" -d "$${POSTGRES_DB:-postgres}" -tAc "SELECT 1" > /dev/null']
       interval: 5s
       timeout: 3s
       retries: 5

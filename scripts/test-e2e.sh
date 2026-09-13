@@ -247,20 +247,22 @@ wait_for_url() {
 dump_diagnostics() {
     local service="$1" host="$2" project_dir="$3"
     local out="$E2E_LOG_DIR/diagnostics-${service}.log"
+    local cid
+    cid="$(container_id_for "$COMPOSE_PROJECT_NAME" "$service")"
 
     warn "collecting router diagnostics → $out"
     {
         echo "===== mx router status ====="; mx router status 2>&1 || true
         echo; echo "===== docker ps -a ====="; docker ps -a 2>&1 || true
-        echo; echo "===== container labels ($service) ====="
-        docker inspect "$service" --format '{{json .Config.Labels}}' 2>&1 || true
+        echo; echo "===== container labels ($service -> ${cid:-<not created>}) ====="
+        [[ -n "$cid" ]] && docker inspect "$cid" --format '{{json .Config.Labels}}' 2>&1 || true
         echo; echo "===== container state ($service) ====="
-        docker inspect "$service" --format '{{.State.Status}} exit={{.State.ExitCode}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>&1 || true
+        [[ -n "$cid" ]] && docker inspect "$cid" --format '{{.State.Status}} exit={{.State.ExitCode}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>&1 || true
         echo; echo "===== docker network inspect $ROUTER_NETWORK ====="
         docker network inspect "$ROUTER_NETWORK" 2>&1 || true
         echo; echo "===== make ps ====="; (cd "$project_dir" && make ps 2>&1) || true
         echo; echo "===== service logs (tail) ====="
-        docker logs --tail 200 "$service" 2>&1 || true
+        [[ -n "$cid" ]] && docker logs --tail 200 "$cid" 2>&1 || true
         echo; echo "===== router logs (tail) ====="
         docker logs --tail 100 "$ROUTER_CONTAINER" 2>&1 || true
         echo; echo "===== curl -v http://$host/ ====="
@@ -286,7 +288,15 @@ teardown_scaffold() {
         (cd "$project_dir" && COMPOSE_PROJECT_NAME="$compose_project" make down) \
             >> "$E2E_LOG_DIR/teardown.log" 2>&1 || true
     fi
-    docker rm -f "$service" >> "$E2E_LOG_DIR/teardown.log" 2>&1 || true
+    # Belt and braces for a project dir that never got scaffolded (so `make down`
+    # could not run): sweep by compose project label, not by container name —
+    # names are compose's to derive now (bd:mech-crate-xhf).
+    local leftovers
+    leftovers="$(docker ps -aq --filter "label=com.docker.compose.project=$compose_project" 2>/dev/null || true)"
+    if [[ -n "$leftovers" ]]; then
+        # shellcheck disable=SC2086  # one id per line, intentionally word-split
+        docker rm -f $leftovers >> "$E2E_LOG_DIR/teardown.log" 2>&1 || true
+    fi
     # Volumes are project-prefixed, so this filter can only ever match volumes
     # this run created.
     for vol in $(docker volume ls -q --filter "name=${compose_project}_" 2>/dev/null || true); do
@@ -336,31 +346,43 @@ teardown() {
 # The smoke itself
 # ─────────────────────────────────────────────────────────────────────────────
 
-# service_name_for <recipe> -> e2e-prefixed, alnum-only (also a container name)
+# service_name_for <recipe> -> e2e-prefixed, alnum-only (a compose SERVICE name;
+# the container compose derives from it is <compose project>-<service>-<index>)
 service_name_for() {
     printf 'e2e%s\n' "$(printf '%s' "$1" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
 }
 
-# guard_container_names <compose project> <names...>
-# Recipes hard-code `container_name` (db, redis, <service>), which is a global
-# namespace. A leftover from a previous E2E run is ours to remove; a container
-# belonging to anything else must abort the run rather than be clobbered.
-guard_container_names() {
-    local compose_project="$1"; shift
-    local name owner
-    for name in "$@"; do
-        docker inspect "$name" >/dev/null 2>&1 || continue
-        owner="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$name" 2>/dev/null || true)"
-        if [[ "$owner" == "$compose_project" ]]; then
-            info "removing leftover container '$name' from a previous E2E run"
-            docker rm -f "$name" >/dev/null 2>&1 || true
-        else
-            fail "container name '$name' is already taken by compose project '${owner:-<none>}'"
-            fail "this E2E run would clobber it — stop that stack (or rename it) and re-run"
-            return 1
-        fi
-    done
+# guard_compose_project <compose project>
+# Clear leftovers from a previous run of THIS script.
+#
+# Replaces the old guard_container_names (bd:mech-crate-xhf). That guard existed
+# because recipes hard-coded `container_name` (db, redis, <service>) — a
+# Docker-daemon-wide namespace — so a previous run's `db` had to be told apart
+# from some other stack's `db` before it could be removed, and a foreign owner
+# had to abort the run. No shipped compose file pins a name any more: compose
+# derives `<project>-<service>-<index>`, so nothing this run creates can collide
+# with another stack in the first place, and everything under our own project
+# label is unambiguously ours to delete.
+guard_compose_project() {
+    local compose_project="$1"
+    local leftovers
+    leftovers="$(docker ps -aq --filter "label=com.docker.compose.project=$compose_project" 2>/dev/null || true)"
+    if [[ -n "$leftovers" ]]; then
+        info "removing leftover containers under compose project '$compose_project' (previous E2E run)"
+        # shellcheck disable=SC2086  # one id per line, intentionally word-split
+        docker rm -f $leftovers >/dev/null 2>&1 || true
+    fi
     return 0
+}
+
+# container_id_for <compose project> <service>
+# Container names are compose's to derive now, so diagnostics resolve a container
+# through the compose labels instead of guessing its name.
+container_id_for() {
+    docker ps -aq \
+        --filter "label=com.docker.compose.project=$1" \
+        --filter "label=com.docker.compose.service=$2" \
+        2>/dev/null | head -1
 }
 
 smoke_recipe_impl() {
@@ -382,7 +404,7 @@ smoke_recipe_impl() {
     echo ""
     echo -e "${BOLD}═══ recipe: ${CYAN}${recipe}${NC}${BOLD} (service ${service}, compose project ${compose_project}) ═══${NC}"
 
-    guard_container_names "$compose_project" "$service" db redis || return 1
+    guard_compose_project "$compose_project" || return 1
     rm -rf "$project_dir"
 
     # Register for teardown BEFORE anything can fail (the EXIT trap is the safety
