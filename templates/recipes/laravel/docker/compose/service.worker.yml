@@ -11,8 +11,8 @@ services:
       target: production
     container_name: {{SERVICE_NAME}}-worker
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_MODE=horizon

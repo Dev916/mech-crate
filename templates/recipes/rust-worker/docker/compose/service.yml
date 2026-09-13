@@ -19,6 +19,14 @@ services:
       target: production
     restart: unless-stopped
     command: ["worker", "--workers={{WORKERS}}", "--batch-size={{BATCH_SIZE}}"]
+    # This recipe is db-bearing (see recipe.json `services`), but shipped with no
+    # env layering at all: the db container was initialized from `.env.secrets`
+    # while the worker never read it, so DB_USER/DB_PASSWORD/DB_NAME never reached
+    # the process. Documented layering, last one winning: shared → secrets → service.
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - RUST_LOG=info,{{SERVICE_SLUG}}=info
       - DATABASE_URL=postgres://{{SERVICE_SLUG}}:${DB_PASSWORD:-secret}@db:5432/{{SERVICE_SLUG}}
