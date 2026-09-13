@@ -3,11 +3,17 @@
 # ========================================
 # Traefik routes to this service via devmesh-traefik network
 
+# db + redis are part of this recipe's service set (see recipe.json `services`),
+# so the recipe ships their compose files next to this one and includes them
+# unconditionally — same shape as the rust-leptos / rust-api / laravel recipes.
+#
+# There is deliberately no `optional:` here: Compose's `include` long syntax
+# accepts only path / project_directory / env_file, so an `optional: true` key is
+# silently ignored and a missing sibling is a hard error, not a skip
+# (bd:mech-crate-eic).
 include:
-  - path: ../../docker/compose/db.yml
-    optional: true
-  - path: ../../docker/compose/redis.yml
-    optional: true
+  - ./db.yml
+  - ./redis.yml
 
 services:
   # ------------------------------------------

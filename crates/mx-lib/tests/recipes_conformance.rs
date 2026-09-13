@@ -266,6 +266,234 @@ fn explicit_domain_option_is_expanded_too() {
     );
 }
 
+// ── Composability of the installed project (bd:mech-crate-eic) ───────────────
+
+/// What `mx new` + `scripts/init.sh` put in `docker/.config/` before any recipe
+/// runs. Everything *else* a recipe's compose files reference is the recipe's own
+/// job to ship — which is exactly what the astro recipe got wrong.
+const SCAFFOLD_PROVIDED_ENV_FILES: &[&str] = &[
+    "docker/.config/.env.shared",
+    "docker/.config/.env.secrets.template",
+    // init.sh copies the template to .env.secrets on first run.
+    "docker/.config/.env.secrets",
+];
+
+/// Finish an installed recipe into something a human would actually run: add the
+/// env files `mx new`/`make init` supply, and the dirs the shipped compose files
+/// bind-mount.
+fn complete_project_like_mx_new(root: &Path) {
+    std::fs::create_dir_all(root.join("docker/.config")).unwrap();
+    for rel in SCAFFOLD_PROVIDED_ENV_FILES {
+        let path = root.join(rel);
+        if !path.exists() {
+            std::fs::write(&path, "# test fixture\n").unwrap();
+        }
+    }
+}
+
+/// Base (non-dev) then dev compose files, in the order `compose_context_files`
+/// from `templates/scripts/.bashrc` assembles them for `make dev` with no
+/// service argument.
+fn dev_compose_context(root: &Path) -> Vec<PathBuf> {
+    let dir = root.join("docker/compose");
+    let mut all: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("setup: read {}: {e}", dir.display()))
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "yml"))
+        .collect();
+    all.sort();
+
+    let (dev, base): (Vec<PathBuf>, Vec<PathBuf>) = all
+        .into_iter()
+        .partition(|p| p.to_string_lossy().ends_with(".dev.yml"));
+    base.into_iter().chain(dev).collect()
+}
+
+/// `include:` targets declared by one compose file, resolved against its own
+/// directory. Handles both the short (`- ./db.yml`) and long (`- path: ./db.yml`)
+/// forms; `path` may itself be a list.
+fn include_targets(compose_file: &Path) -> Vec<(String, PathBuf)> {
+    let body = std::fs::read_to_string(compose_file)
+        .unwrap_or_else(|e| panic!("setup: read {}: {e}", compose_file.display()));
+    let doc: serde_yaml::Value = serde_yaml::from_str(&body)
+        .unwrap_or_else(|e| panic!("{}: not valid YAML: {e}", compose_file.display()));
+    let base = compose_file.parent().unwrap();
+
+    let Some(entries) = doc.get("include").and_then(|v| v.as_sequence()) else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::new();
+    let mut push = |raw: &serde_yaml::Value| {
+        if let Some(p) = raw.as_str() {
+            out.push((p.to_string(), base.join(p)));
+        }
+    };
+    for entry in entries {
+        match entry {
+            serde_yaml::Value::String(_) => push(entry),
+            serde_yaml::Value::Mapping(map) => {
+                assert!(
+                    !map.contains_key(serde_yaml::Value::from("optional")),
+                    "{}: `include` has no `optional` field — Compose's long syntax accepts \
+                     only path / project_directory / env_file, so the key is silently ignored \
+                     and a missing sibling is a hard error (bd:mech-crate-eic)",
+                    compose_file.display()
+                );
+                match map.get(serde_yaml::Value::from("path")) {
+                    Some(serde_yaml::Value::Sequence(paths)) => paths.iter().for_each(&mut push),
+                    Some(v) => push(v),
+                    None => panic!(
+                        "{}: `include` entry without a `path`: {entry:?}",
+                        compose_file.display()
+                    ),
+                }
+            }
+            other => panic!(
+                "{}: unexpected `include` entry {other:?}",
+                compose_file.display()
+            ),
+        }
+    }
+    out
+}
+
+/// bd:mech-crate-eic — a recipe that `include:`s a sibling compose file must
+/// ship it. The astro recipe included `db.yml`/`redis.yml` with `optional: true`
+/// and shipped neither, and because `optional` is not a Compose field the key was
+/// ignored: every astro service scaffolded without db+redis siblings failed
+/// `make dev` outright with "open …/docker/compose/db.yml: no such file".
+#[test]
+fn every_recipe_include_resolves_to_a_file_the_recipe_ships() {
+    let mut missing: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for name in &shipped_recipe_names() {
+        let (project, _) = install_into_tempdir(name, "svc", &HashMap::new());
+        for compose in dev_compose_context(project.path()) {
+            for (declared, resolved) in include_targets(&compose) {
+                checked += 1;
+                if !resolved.is_file() {
+                    missing.push(format!(
+                        "{name}: docker/compose/{} includes `{declared}` which the recipe does not ship",
+                        compose.file_name().unwrap().to_string_lossy(),
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        checked >= 2,
+        "setup: expected the shipped recipes to declare compose includes, saw {checked}"
+    );
+    assert!(
+        missing.is_empty(),
+        "unresolvable includes:\n{}",
+        missing.join("\n")
+    );
+}
+
+/// bd:mech-crate-pos — project-side env config lives in `docker/.config/` (with
+/// the dot). The rust-api and rust-worker recipes mapped their service env file
+/// to `docker/config/.env.<svc>` and declared the dotless directory, so every
+/// `mx add` left a stray `docker/config/` tree that nothing reads.
+#[test]
+fn no_recipe_writes_into_a_dotless_docker_config_dir() {
+    let mut offenders: Vec<String> = Vec::new();
+
+    for name in &shipped_recipe_names() {
+        let rj = recipes_root().join(name).join("recipe.json");
+        let raw: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&rj).unwrap()).unwrap();
+
+        let dirs = raw["directories"].as_array().cloned().unwrap_or_default();
+        for d in dirs.iter().filter_map(|d| d.as_str()) {
+            if d == "docker/config" || d.starts_with("docker/config/") {
+                offenders.push(format!("{name}: directories[] declares `{d}`"));
+            }
+        }
+        let templates = raw["templates"].as_array().cloned().unwrap_or_default();
+        for to in templates.iter().filter_map(|t| t["to"].as_str()) {
+            if to.starts_with("docker/config/") {
+                offenders.push(format!("{name}: templates[].to writes `{to}`"));
+            }
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "project-side env config lives in `docker/.config/` (dotted); \
+         these write the dotless path instead:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// Is a usable `docker compose` on PATH? The config check below is a real
+/// compose invocation, so it self-skips where there is none (CI containers,
+/// sandboxes) rather than failing for the wrong reason.
+fn compose_available() -> bool {
+    std::process::Command::new("docker")
+        .args(["compose", "version"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// The regression net for the whole class: straight after `mx add`, the compose
+/// context `make dev` builds must parse for real. `docker compose config` is
+/// client-side — it resolves `include:`s, `env_file:`s and the merge of the dev
+/// overrides without touching the daemon — so it catches a missing include target
+/// or env file that the installer round-trip (which only asserts files appear)
+/// cannot see.
+#[test]
+fn every_recipe_yields_a_dev_compose_context_that_validates() {
+    if !compose_available() {
+        eprintln!("skipping: no usable `docker compose` on PATH");
+        return;
+    }
+
+    let mut failures: Vec<String> = Vec::new();
+
+    for name in &shipped_recipe_names() {
+        let (project, _) = install_into_tempdir(name, "svc", &HashMap::new());
+        complete_project_like_mx_new(project.path());
+
+        let files = dev_compose_context(project.path());
+        assert!(!files.is_empty(), "{name}: no compose files to validate");
+
+        let mut cmd = std::process::Command::new("docker");
+        cmd.current_dir(project.path())
+            // Never adopt another stack: this only parses, but pin the name anyway.
+            .args(["compose", "-p", "mx-conformance"]);
+        for f in &files {
+            cmd.arg("-f").arg(f);
+        }
+        let out = cmd
+            .arg("config")
+            .arg("--quiet")
+            .output()
+            .expect("setup: run docker compose config");
+
+        if !out.status.success() {
+            failures.push(format!(
+                "{name}: `docker compose config` failed ({}):\n{}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "the compose context `make dev` assembles does not validate:\n{}",
+        failures.join("\n\n")
+    );
+}
+
 // ── Known-broken lane (bd:mech-crate-ten) ────────────────────────────────────
 
 /// `make release app=<app>` shells into `apps/<app>` and runs `yarn release*`,
