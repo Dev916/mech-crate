@@ -46,7 +46,7 @@ export const DIAGRAMS: Record<DiagramName, DiagramMeta> = {
   'ai-loop': {
     title: 'The AI loop',
     caption:
-      'Agents read the corpus through the MCP rag_context tool. The research pipeline writes to it — but only through a pull request a human merges, so the corpus grows on purpose.',
+      'Agents read the corpus through the MCP rag_context tool. The research pipeline writes to it, but only through a pull request a human merges, so the corpus grows on purpose.',
   },
   'recipe-install-flow': {
     title: 'Recipe install flow',

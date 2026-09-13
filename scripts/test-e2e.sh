@@ -247,20 +247,22 @@ wait_for_url() {
 dump_diagnostics() {
     local service="$1" host="$2" project_dir="$3"
     local out="$E2E_LOG_DIR/diagnostics-${service}.log"
+    local cid
+    cid="$(container_id_for "$COMPOSE_PROJECT_NAME" "$service")"
 
     warn "collecting router diagnostics → $out"
     {
         echo "===== mx router status ====="; mx router status 2>&1 || true
         echo; echo "===== docker ps -a ====="; docker ps -a 2>&1 || true
-        echo; echo "===== container labels ($service) ====="
-        docker inspect "$service" --format '{{json .Config.Labels}}' 2>&1 || true
+        echo; echo "===== container labels ($service -> ${cid:-<not created>}) ====="
+        [[ -n "$cid" ]] && docker inspect "$cid" --format '{{json .Config.Labels}}' 2>&1 || true
         echo; echo "===== container state ($service) ====="
-        docker inspect "$service" --format '{{.State.Status}} exit={{.State.ExitCode}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>&1 || true
+        [[ -n "$cid" ]] && docker inspect "$cid" --format '{{.State.Status}} exit={{.State.ExitCode}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>&1 || true
         echo; echo "===== docker network inspect $ROUTER_NETWORK ====="
         docker network inspect "$ROUTER_NETWORK" 2>&1 || true
         echo; echo "===== make ps ====="; (cd "$project_dir" && make ps 2>&1) || true
         echo; echo "===== service logs (tail) ====="
-        docker logs --tail 200 "$service" 2>&1 || true
+        [[ -n "$cid" ]] && docker logs --tail 200 "$cid" 2>&1 || true
         echo; echo "===== router logs (tail) ====="
         docker logs --tail 100 "$ROUTER_CONTAINER" 2>&1 || true
         echo; echo "===== curl -v http://$host/ ====="
@@ -286,7 +288,15 @@ teardown_scaffold() {
         (cd "$project_dir" && COMPOSE_PROJECT_NAME="$compose_project" make down) \
             >> "$E2E_LOG_DIR/teardown.log" 2>&1 || true
     fi
-    docker rm -f "$service" >> "$E2E_LOG_DIR/teardown.log" 2>&1 || true
+    # Belt and braces for a project dir that never got scaffolded (so `make down`
+    # could not run): sweep by compose project label, not by container name —
+    # names are compose's to derive now (bd:mech-crate-xhf).
+    local leftovers
+    leftovers="$(docker ps -aq --filter "label=com.docker.compose.project=$compose_project" 2>/dev/null || true)"
+    if [[ -n "$leftovers" ]]; then
+        # shellcheck disable=SC2086  # one id per line, intentionally word-split
+        docker rm -f $leftovers >> "$E2E_LOG_DIR/teardown.log" 2>&1 || true
+    fi
     # Volumes are project-prefixed, so this filter can only ever match volumes
     # this run created.
     for vol in $(docker volume ls -q --filter "name=${compose_project}_" 2>/dev/null || true); do
@@ -336,103 +346,43 @@ teardown() {
 # The smoke itself
 # ─────────────────────────────────────────────────────────────────────────────
 
-# service_name_for <recipe> -> e2e-prefixed, alnum-only (also a container name)
+# service_name_for <recipe> -> e2e-prefixed, alnum-only (a compose SERVICE name;
+# the container compose derives from it is <compose project>-<service>-<index>)
 service_name_for() {
     printf 'e2e%s\n' "$(printf '%s' "$1" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
 }
 
-# guard_container_names <compose project> <names...>
-# Recipes hard-code `container_name` (db, redis, <service>), which is a global
-# namespace. A leftover from a previous E2E run is ours to remove; a container
-# belonging to anything else must abort the run rather than be clobbered.
-guard_container_names() {
-    local compose_project="$1"; shift
-    local name owner
-    for name in "$@"; do
-        docker inspect "$name" >/dev/null 2>&1 || continue
-        owner="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$name" 2>/dev/null || true)"
-        if [[ "$owner" == "$compose_project" ]]; then
-            info "removing leftover container '$name' from a previous E2E run"
-            docker rm -f "$name" >/dev/null 2>&1 || true
-        else
-            fail "container name '$name' is already taken by compose project '${owner:-<none>}'"
-            fail "this E2E run would clobber it — stop that stack (or rename it) and re-run"
-            return 1
-        fi
-    done
+# guard_compose_project <compose project>
+# Clear leftovers from a previous run of THIS script.
+#
+# Replaces the old guard_container_names (bd:mech-crate-xhf). That guard existed
+# because recipes hard-coded `container_name` (db, redis, <service>) — a
+# Docker-daemon-wide namespace — so a previous run's `db` had to be told apart
+# from some other stack's `db` before it could be removed, and a foreign owner
+# had to abort the run. No shipped compose file pins a name any more: compose
+# derives `<project>-<service>-<index>`, so nothing this run creates can collide
+# with another stack in the first place, and everything under our own project
+# label is unambiguously ours to delete.
+guard_compose_project() {
+    local compose_project="$1"
+    local leftovers
+    leftovers="$(docker ps -aq --filter "label=com.docker.compose.project=$compose_project" 2>/dev/null || true)"
+    if [[ -n "$leftovers" ]]; then
+        info "removing leftover containers under compose project '$compose_project' (previous E2E run)"
+        # shellcheck disable=SC2086  # one id per line, intentionally word-split
+        docker rm -f $leftovers >/dev/null 2>&1 || true
+    fi
     return 0
 }
 
-# bootstrap_secrets <project dir>
-# Some recipes ship `docker/.config/.env.secrets` with __GENERATE_*__ placeholders
-# and rely on a post_install generator to replace them. laravel installs and runs
-# one; rust-api copies the same laravel-derived template but ships no generator,
-# so its postgres would start with an empty POSTGRES_PASSWORD. Filling the
-# placeholders here (exactly what laravel's generate-secrets.sh does) keeps the
-# smoke honest about what it tests — scaffold → dev → router — instead of dying
-# on a recipe packaging gap. Tracked as a recipe defect, not an E2E behaviour.
-bootstrap_secrets() {
-    local project_dir="$1"
-    local secrets="$project_dir/docker/.config/.env.secrets"
-
-    [[ -f "$secrets" ]] || return 0
-    grep -q '__GENERATE_' "$secrets" || return 0
-
-    warn "recipe left __GENERATE_*__ placeholders in .env.secrets — filling them in (recipe defect)"
-    local pw key
-    pw="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32 || true)"
-    key="base64:$(openssl rand -base64 32)"
-    perl -pi -e "s/__GENERATE_DB_PASSWORD__/${pw}/g; s|__GENERATE_APP_KEY__|${key}|g" "$secrets"
-    # anything still unfilled would silently become an empty env value
-    if grep -q '__GENERATE_' "$secrets"; then
-        warn "unrecognised placeholders remain in $secrets:"
-        grep -n '__GENERATE_' "$secrets" || true
-    fi
-}
-
-# bootstrap_compose_env <project dir>
-# The recipes' env files reference each other (`.env.db` has
-# POSTGRES_PASSWORD=${DB_PASSWORD}, `.env.shared` has DB_PASSWORD=${<SVC>_DB_PASSWORD}),
-# but docker compose interpolates `env_file` values against the shell/`.env`
-# environment only — never against values defined in another env_file. Left
-# alone every one of them resolves to "" and postgres never becomes healthy.
-# Resolving them into `docker/compose/.env` (the project directory compose reads
-# for interpolation) is the same unblock a human would apply.
-bootstrap_compose_env() {
-    local project_dir="$1"
-    local config_dir="$project_dir/docker/.config"
-    local compose_env="$project_dir/docker/compose/.env"
-
-    [[ -d "$config_dir" ]] || return 0
-    # Don't clobber an env a recipe deliberately shipped.
-    [[ -f "$compose_env" ]] && return 0
-
-    local names
-    names="$(grep -ohE '\$\{[A-Za-z_][A-Za-z0-9_]*' "$config_dir"/.env.* "$project_dir"/docker/compose/*.yml 2>/dev/null \
-             | sed 's/^\${//' | sort -u || true)"
-    [[ -z "$names" ]] && return 0
-
-    # Subshell: sourcing the env files lets bash do the ${VAR} resolution that
-    # compose will not do, without leaking any of it into this script.
-    (
-        set +u
-        set -a
-        local f
-        # .env.secrets first: later files reference the secrets it defines.
-        for f in "$config_dir"/.env.secrets "$config_dir"/.env.shared "$config_dir"/.env.*; do
-            case "$f" in *.template|*.bak|*.example) continue ;; esac
-            # shellcheck disable=SC1090  # runtime-generated project env files
-            [[ -f "$f" ]] && . "$f"
-        done
-        set +a
-        local v val
-        for v in $names; do
-            eval "val=\${$v:-}"
-            [[ -n "$val" ]] && printf '%s=%s\n' "$v" "$val"
-        done
-    ) > "$compose_env"
-
-    info "resolved $(wc -l < "$compose_env" | tr -d ' ') interpolation vars into docker/compose/.env"
+# container_id_for <compose project> <service>
+# Container names are compose's to derive now, so diagnostics resolve a container
+# through the compose labels instead of guessing its name.
+container_id_for() {
+    docker ps -aq \
+        --filter "label=com.docker.compose.project=$1" \
+        --filter "label=com.docker.compose.service=$2" \
+        2>/dev/null | head -1
 }
 
 smoke_recipe_impl() {
@@ -454,7 +404,7 @@ smoke_recipe_impl() {
     echo ""
     echo -e "${BOLD}═══ recipe: ${CYAN}${recipe}${NC}${BOLD} (service ${service}, compose project ${compose_project}) ═══${NC}"
 
-    guard_container_names "$compose_project" "$service" db redis || return 1
+    guard_compose_project "$compose_project" || return 1
     rm -rf "$project_dir"
 
     # Register for teardown BEFORE anything can fail (the EXIT trap is the safety
@@ -481,9 +431,12 @@ smoke_recipe_impl() {
     health_path="$(health_path_for "$recipe")"
     ok "URL discovered from compose labels: http://${host}${health_path}"
 
-    bootstrap_secrets "$project_dir"
-    bootstrap_compose_env "$project_dir"
-
+    # Nothing is fixed up between `mx add` and `make dev`: booting unaided is the
+    # property under test (bd:mech-crate-rqc). `make dev` runs scripts/init.sh,
+    # which runs scripts/generate-secrets.sh, which fills the credentials and
+    # materializes the `${…}` references compose cannot resolve from a sibling
+    # env file. A hand-written bootstrap here would hide a regression in exactly
+    # that path.
     run_step "${recipe}-make-dev" env -C "$project_dir" make dev "s=$service" || {
         dump_diagnostics "$service" "$host" "$project_dir"
         return 1

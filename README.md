@@ -39,7 +39,10 @@ mx makes the *subset* the unit of work. Every service gets its own **atomic comp
 ```bash
 make dev                 # the whole stack
 make dev s=api           # just the service you're working on
+make dev s="api worker"  # or the handful the feature actually touches
 ```
+
+The quotes in `s="api worker"` are required, because make splits on whitespace and an unquoted second name reads as another goal. `dev`, `up`, `down`, `stop`, `restart` and `logs` all take a list, since the compose verb underneath accepts several service operands. `build`, `run`, `exec` and `sh` act on exactly one image or container, and refuse a list out loud rather than silently using the first name.
 
 Baseline files describe production shape; dev overrides add hot-reload mounts, debug ports, and relaxed health checks. Nothing about "what runs where" lives in tribal knowledge.
 
@@ -53,7 +56,9 @@ The **mx router** is a single global Traefik instance that every mx project regi
 http://api.localhost        http://admin.localhost        http://docs.localhost
 ```
 
-Multiple ecosystems coexist on one machine. Switching contexts is `cd` — not teardown. One router, installed once (`mx router install && mx router up`), serves everything.
+Multiple ecosystems coexist on one machine. Switching contexts is `cd` — not teardown. One router, installed once (`mx router install && mx router up`), serves everything. Container names no longer stand in the way either: with `container_name` gone from every shipped compose file, two projects that both declare a `db` service coexist.
+
+Where the limit actually is, stated plainly: different projects with different service names and domains work, which is the ordinary case. Two copies of the *same* shape still collide below the router, because dev overrides publish fixed host ports for Postgres and Redis, and the Traefik router names in the labels are not qualified by project. Both are tracked (`mech-crate-1a0`, `mech-crate-298`) and neither is fixed yet.
 
 ### Scaffolding should carry wisdom, not boilerplate
 
@@ -68,13 +73,18 @@ mx upgrade --diff             # review what newer scaffolding would change
 mx upgrade                    # adopt it
 ```
 
-Projects don't fork away from the framework: `mx upgrade` keeps existing projects current with the templates as they improve. (`mx upgrade` is currently mid-repair against the shipped template layout — it's [mech-crate-z5i](tests/KNOWN_BROKEN.md), with a red test asserting the fixed behavior. More on that lane below.)
+Projects don't fork away from the framework: `mx upgrade` keeps existing projects current with the templates as they improve. It reads the shipped template layout, offers mx's own tooling files for update, never overwrites your compose files or dockerfiles, keeps a `.bak` beside anything it replaces, and reports "Project is up to date!" on a second run. (This was [mech-crate-z5i](tests/KNOWN_BROKEN.md) until its red test went green and joined the gate.)
+
+Two migrations ride with it, both documented at [Upgrade](https://mechcrate.dev/docs/framework/upgrade/):
+
+- Projects now pin `COMPOSE_PROJECT_NAME` per project, so containers started under the old shared default are orphaned until you clear them once. `make doctor` names them.
+- **Breaking: container names are no longer fixed.** The shipped compose files used to pin `container_name: db`, `container_name: api` and the rest. Container names are a Docker-daemon-wide namespace, so once project names were pinned, two projects both declaring `db` still failed with `Conflict. The container name "/db" is already in use`. The pins are gone, and Compose derives `<COMPOSE_PROJECT_NAME>-<service>-<index>` instead (`myproj-db-1`). **Service** names are unchanged: `depends_on`, `make sh s=db`, the Traefik labels and the `include:` graph all address services. What breaks is a script that addressed a *container* by a fixed name, such as `docker exec db …` or `docker logs api`. Use `make exec s=db c=…` / `make logs s=api`, or `docker compose -p "$COMPOSE_PROJECT_NAME" exec db …`. The one exception is the global router container, which is still `mx-router`: installed once per machine, nothing to collide with.
 
 ### The cobbled-together everything else
 
 The concerns every team solves badly, differently, per-project — mx standardizes once:
 
-- **Environment config**: a single documented loading order — `.env.shared` → `.env.secrets` (gitignored) → `.env.<service>`, all under `docker/.config/`.
+- **Environment config**: a single documented loading order, `.env.shared` → `.env.secrets` (gitignored) → `.env.<service>`, all under `docker/.config/`. Last one wins, and it is that order in *every* compose file mx ships, application services and backing services alike. Nine files used to disagree; a conformance test over every `env_file` list in `templates/` now holds the rule instead of authoring habit.
 - **A consistent CLI**: `make dev / up / down / logs / sh / ps / build / doctor` behave identically in every project. (`mx` mirrors the same verbs globally.)
 - **Filesystem discipline**: 1:1 host-to-container mounts under `docker/system/` — what you see is what the container sees.
 - **Documentation**: `mx docs` compiles project Markdown to PDF/HTML.
@@ -133,6 +143,8 @@ make init                            # initialize environment
 make dev                             # develop at http://api.localhost
 ```
 
+No hand edit in between. `make init` generates the development credentials the database needs, so `make dev` reaches a healthy Postgres on a tree that nobody has touched.
+
 ## Recipes
 
 | Recipe | Status | What it carries |
@@ -145,7 +157,9 @@ make dev                             # develop at http://api.localhost
 | `rust-worker` | ✅ | High-performance job worker with Redis pub/sub, PostgreSQL, and local LLM evaluation |
 | `zola` | ✅ | Zola static site generator — single binary, no dependencies |
 
-All seven recipes are apply-verified by the test suite (installer round-trip conformance tests).
+All seven recipes are apply-verified by the test suite (installer round-trip conformance tests), and the assembled dev config of every one of them has to pass `docker compose config` straight after `mx add` — a recipe may not reference a compose file it does not ship. Where a recipe declares a framework initializer (`astro`, `nuxt`, `zola`), `mx add` runs it, so the app arrives as the framework's own starter would make it with mx's wiring layered on top. Pass `--opt force_init=true` to start that app over: it deletes `apps/<service>/` and re-runs the initializer, so it is destructive by design.
+
+**A recipe boots unaided.** `mx new`, `mx add <svc> --recipe <r>`, `make dev`, with no hand edit in between, for every recipe that brings Postgres with it. `scripts/init.sh` used to copy `.env.secrets.template` verbatim and leave `DB_USER` / `DB_PASSWORD` / `DB_NAME` empty, which Postgres refuses to start on. `scripts/generate-secrets.sh` is now the single generation point every recipe shares: `make init` runs it, `make dev` runs `make init`, and it fills only values that are still empty or still a placeholder, so it never rotates a credential out from under a running database. `REDIS_PASSWORD` stays blank on purpose, because the shipped Redis wants no auth. `make doctor` names any key still unset, and any value still holding a `${VAR}` reference that Compose cannot resolve from a sibling env file.
 
 `mx recipes list` and `mx recipes info <name>` show what's installed; the [Recipe Authoring Guide](docs/development/RECIPE_AUTHORING_GUIDE.md) covers writing your own.
 

@@ -1,6 +1,6 @@
 ---
 title: Your first project
-description: mx new, mx add, make dev — a service answering on api.localhost in five commands.
+description: mx new, mx add, make dev. A service answering on api.localhost in five commands.
 sidebar:
   order: 3
 ---
@@ -22,8 +22,8 @@ That is the whole path. What follows is what each step actually does.
 
 ## `mx new my-app`
 
-Creates the project skeleton — `Makefile`, `make/`, `scripts/`, `apps/` and the
-`docker/` tree — and copies the shared Docker config. Nothing is running yet;
+Creates the project skeleton (`Makefile`, `make/`, `scripts/`, `apps/` and the
+`docker/` tree) and copies the shared Docker config. Nothing is running yet;
 this is the [folder contract](/docs/start/folder-contract/) on disk.
 
 Two flags are worth knowing:
@@ -51,33 +51,56 @@ brings with it. `mx add` lands, for a typical recipe:
 
 `--domain` is what makes the service reachable at `http://api.localhost` rather
 than a port. Omit it and the recipe defaults to `<service>.localhost`. Extra
-recipe options go through `--opt key=value` — `mx recipes info` lists which ones
+recipe options go through `--opt key=value`. `mx recipes info` lists which ones
 a recipe accepts.
 
 Recipes that also declare backing services (Postgres, Redis) drop their compose
 files in at the same time, so `docker/compose/` grows `db.yml` and `redis.yml`
 on the first `mx add` that needs them.
 
-:::note[The app skeleton is a skeleton]
-`mx add` gives you the operational layer — compose, dockerfile, env, routing —
-plus a source tree with the recipe's structure and a health endpoint. You still
-run the framework's own install step (`npm install`, `cargo build`, `composer
-install`) the first time. Each recipe prints its exact next steps when it
-finishes.
+:::note[What lands, and what you still run]
+`mx add` gives you the operational layer (compose, dockerfile, env, routing) plus
+a source tree with the recipe's structure and a health endpoint. Where a recipe
+declares a framework initializer, `mx add` runs it: `astro`, `nuxt` and `zola`
+call their own starter and print `Scaffolded with: <command>`, so the app arrives
+as the framework would have made it with mx's wiring layered on top. You still run
+the dependency install (`npm install`, `cargo build`, `composer install`) the
+first time. Each recipe prints its exact next steps when it finishes.
+
+A second `mx add` over a service that already has an app skips the scaffolder and
+says so. To start that app over from the framework's own starter, the three
+recipes with an initializer accept `--opt force_init=true`, which **deletes**
+`apps/<service>/` and re-runs the initializer before mx's wiring is layered back
+on. It is destructive by design; anything you wrote in that directory goes with
+it.
 :::
 
 ## `make doctor`
 
-Checks Docker, Compose and Make, then the project structure — `Makefile`,
+Checks Docker, Compose and Make, then the project structure (`Makefile`,
 `make/`, `scripts/`, `docker/compose/`, `docker/.config/`, the secrets file and
-the Docker network — and lists the services it found. It exits non-zero if
+the Docker network) and lists the services it found. It exits non-zero if
 something is missing, so it is safe to put in front of a script.
 
 ## `make init`
 
 Creates `docker/.config/.env.secrets` from `.env.secrets.template` if it does not
-exist yet, and ensures the project network. Idempotent — run it whenever you are
-not sure.
+exist yet, generates a real development value for every credential still empty or
+still a placeholder, resolves any `${VAR}` references in the other env files into
+literals, and ensures the project network. Idempotent, so run it whenever you are
+not sure: a value that is already real, generated earlier or typed by you, is
+never overwritten.
+
+That is what makes the quickstart above hold with **no hand edits**. `mx new`,
+`mx add` with a recipe that brings Postgres, then `make dev`, and the database
+comes up with credentials the application can actually authenticate with.
+`make dev` runs the same step on every start, so a service added later is covered
+too. There is nothing to fill in first.
+
+`REDIS_PASSWORD` stays blank deliberately, because the shipped Redis runs without
+auth and a password there would break clients that build
+`redis://:$REDIS_PASSWORD@redis:6379`. `make doctor` knows that and does not flag
+it, while it does name any other key left without a value.
 
 ## `make dev`
 
@@ -85,12 +108,18 @@ Starts the stack with the dev overrides merged in: source mounts, debug logging,
 relaxed health checks. Two shapes:
 
 ```bash
-make dev            # everything in docker/compose/
-make dev s=api      # just this service (and what it depends on)
+make dev                # everything in docker/compose/
+make dev s=api          # just this service (and what it depends on)
+make dev s="api site"   # a named subset, quotes required
 ```
 
+The quotes matter: make splits on whitespace, so `s=api site` would read `site`
+as a second goal. `dev`, `up`, `down`, `stop`, `restart` and `logs` accept a
+list. `build`, `run`, `exec` and `sh` act on one container or image and say so
+rather than quietly taking the first name.
+
 `make dev` stops the existing services first, so it is also the "restart into a
-clean state" command. `make up` is the same thing without the dev overrides —
+clean state" command. `make up` is the same thing without the dev overrides:
 the baseline compose files alone, which is what ships.
 
 Then:
@@ -115,6 +144,6 @@ service listening on 3000 internally and never collide.
 
 ## Next
 
-- [The folder contract](/docs/start/folder-contract/) — what you just created
-- [The router](/docs/framework/router/) — how the hostname routing works
-- [Recipes](/docs/framework/recipes/) — what is available, and what each carries
+- [The folder contract](/docs/start/folder-contract/): what you just created
+- [The router](/docs/framework/router/): how the hostname routing works
+- [Recipes](/docs/framework/recipes/): what is available, and what each carries

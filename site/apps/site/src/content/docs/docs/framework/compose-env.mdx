@@ -16,15 +16,23 @@ without a per-project runbook.
 
 <ComposeLayering />
 
-Every service gets `docker/compose/<service>.yml` — the baseline, which describes
-the service as it ships — and `docker/compose/<service>.dev.yml` — the override,
-which describes what it needs while you are working on it.
+Every service gets two files. `docker/compose/<service>.yml` is the baseline,
+describing the service as it ships. `docker/compose/<service>.dev.yml` is the
+override, describing what it needs while you are working on it.
 
 ```bash
-make dev            # baseline + .dev.yml override, merged
-make dev s=api      # just this service's files
-make up             # baseline alone — the same file that ships
+make dev                # baseline + .dev.yml override, merged
+make dev s=api          # just this service's files
+make dev s="api site"   # a named subset: both services and their deps
+make up                 # baseline alone — the same file that ships
 ```
+
+The quotes in `s="api site"` are required. Make splits on whitespace, so an
+unquoted second name is read as a second goal rather than as part of the value.
+`dev`, `up`, `down`, `stop`, `restart` and `logs` all take a list, because the
+compose verb underneath accepts several service operands. `build`, `run`, `exec`
+and `sh`/`bash` act on exactly one image or container, and they refuse a list out
+loud rather than silently using the first name.
 
 `make dev` brings the existing services down first, so it doubles as "restart
 into a known state".
@@ -49,7 +57,7 @@ services:
 
 Note what is *not* there: the application service publishes no HTTP host port in
 either file. That is the [router's](/docs/framework/router/) job. Backing
-services are the exception — a dev override exposes Postgres and Redis on their
+services are the exception: a dev override exposes Postgres and Redis on their
 conventional ports so `psql` and Redis GUIs work.
 
 ### Composition, not duplication
@@ -61,12 +69,61 @@ without owning them:
 include:
   - path: ./db.yml
   - path: ./redis.yml
-    optional: true
 ```
 
-Two services that both need Postgres include the same `db.yml` — one database,
-declared once. Marking an include `optional: true` lets a service degrade to
-running without it.
+Two services that both need Postgres include the same `db.yml`. One database,
+declared once.
+
+Include only a file the recipe actually ships. Compose's long-form `include`
+accepts `path`, `project_directory` and `env_file` and nothing else, so an
+`optional: true` key is silently ignored rather than honoured, and a missing
+sibling is a hard error instead of a skip. Every installed recipe's assembled dev
+config has to pass `docker compose config` straight after `mx add`, which is the
+gate that now catches this class.
+
+## Container names
+
+Services are named by you; containers are named by Compose. No compose file mx
+ships sets `container_name`, and a recipe may not either, so the name on disk is
+always Compose's own `<COMPOSE_PROJECT_NAME>-<service>-<index>`. In a project
+directory called `myproj`, the database container is `myproj-db-1`.
+
+:::caution[Breaking change: container names are no longer fixed]
+The shipped compose files used to pin `container_name: db`, `container_name: api`
+and so on. Container names are a Docker-daemon-wide namespace, so once every
+project pinned its own `COMPOSE_PROJECT_NAME`, two mx projects that both declared
+`db` still collided with `Conflict. The container name "/db" is already in use`.
+The pins are gone.
+
+**Service** names did not change. `depends_on`, `make sh s=db`, the Traefik
+labels and the `include:` graph all address services, and they behave exactly as
+before. What breaks is a script that addressed a *container* by a fixed name:
+
+```bash
+docker exec db psql -U postgres        # no longer resolves
+docker logs api                        # no longer resolves
+```
+
+Use the project's own verbs, or name the project explicitly:
+
+```bash
+make sh s=db                           # shell into it
+make exec s=db c=psql                  # one command in it
+make logs s=api                        # tail it
+docker compose -p "$COMPOSE_PROJECT_NAME" exec db psql -U postgres
+```
+
+One container keeps a fixed name on purpose: the global router, `mx-router`. It
+is installed once per machine rather than per project, so there is nothing for it
+to collide with, and `mx router` addresses it by that name.
+
+A related change rides along. The Postgres healthcheck now authenticates as the
+role the container is actually configured with, read from the container's own
+environment. It used to fall back to `postgres` and report healthy while the
+role the app connects as did not exist. A project whose credentials are wrong now
+shows the db container as UNHEALTHY, which is the honest answer, where before it
+went green and the application failed later with an authentication error.
+:::
 
 ## The three env layers
 
@@ -74,14 +131,32 @@ All under `docker/.config/`:
 
 | File | Holds | Committed |
 |---|---|---|
-| `.env.shared` | values every service needs — project name, ports, shared hostnames | yes |
-| `.env.secrets` | credentials, API keys, database passwords | **no** — gitignored |
+| `.env.shared` | values every service needs: project name, ports, shared hostnames | yes |
+| `.env.secrets` | credentials, API keys, database passwords | **no** (gitignored) |
 | `.env.<service>` | one service's settings | yes |
 
 `.env.secrets.template` *is* committed, with the keys and no values. `make init`
-copies it to `.env.secrets` if that file does not exist, which is why `make init`
-is in the quickstart and is safe to re-run. `make doctor` warns when the secrets
-file is missing. Generate values with `make make-key BYTES=32 FORMAT=hex`.
+copies it to `.env.secrets` if that file does not exist, and then fills it: it
+generates a real development value for every credential that is still empty or
+still one of the `__GENERATE_*__` / `CHANGE_ME` placeholders the templates ship.
+A value that is already real, whether an earlier run generated it or you typed
+it, is never touched, so `make init` cannot rotate credentials out from under a
+running database. `make dev` runs `init.sh` on every start, which is why a
+service added with `mx add` after `mx new` comes up with working credentials
+without a hand edit.
+
+One key stays deliberately blank: `REDIS_PASSWORD`. The shipped Redis runs
+without auth, and a generated password there would break every client that
+builds `redis://:$REDIS_PASSWORD@redis:6379` against a server that wants none.
+
+`make doctor` reports on the same file, cheaply and without Docker. It names any
+key that has no value yet, and any value still holding a `${VAR}` reference,
+which is a latent empty: Compose interpolates a `${…}` inside an `env_file`
+value from the compose project directory's own `.env`, never from a sibling env
+file, so such a value reaches the container as an empty string.
+`scripts/generate-secrets.sh` resolves those references into literals for that
+reason. Generate a one-off secret of your own with
+`make make-key BYTES=32 FORMAT=hex`.
 
 ### Precedence, precisely
 
@@ -89,69 +164,91 @@ Compose applies `env_file` entries in order and **later entries win**. Then the
 `environment:` block wins over all of them, and a value already exported in your
 shell wins over the compose file's interpolation defaults.
 
-The order the shipped recipes emit is:
+**Every** compose file mx ships lists them in one order, and always has the same
+one:
 
 ```yaml
 env_file:
-  - ../.config/.env.secrets
   - ../.config/.env.shared
+  - ../.config/.env.secrets
   - ../.config/.env.<service>
 ```
 
-so for an application service the effective precedence is
-`environment:` → `.env.<service>` → `.env.shared` → `.env.secrets`.
+So the effective precedence, highest first, is `environment:` →
+`.env.<service>` → `.env.secrets` → `.env.shared`. A credential in
+`.env.secrets` beats the same key in `.env.shared`, and one service's
+`.env.<service>` beats both. That holds for application services and for the
+backing services alike: `db.yml` and `redis.yml` follow it too.
 
-:::caution[The backing-service compose files list them the other way round]
-`db.yml` and `redis.yml` order theirs `.env.shared` → `.env.secrets` →
-`.env.<service>`, which puts secrets *above* shared for those two services. In
-practice it rarely bites, because the same key is seldom defined in both files —
-but if you are debugging a value that will not take, check which order the
-compose file you are looking at actually uses. Do not assume; read the
-`env_file` block.
-:::
+This used to be true of some files and not others. The application services in
+four recipes, plus all four of laravel's compose fragments, listed `.env.secrets`
+*first*, which inverted it for exactly the layer most likely to collide, and the
+zola recipe omitted `.env.secrets` altogether. They were corrected, and the rule
+is now held by a conformance test over every compose file in `templates/` rather
+than by authoring habit: `every_env_file_list_follows_the_documented_precedence_order`
+and `every_env_file_list_carrying_shared_also_carries_secrets` in
+`crates/mx-lib/tests/templates_env_precedence.rs`. You can read the order off any
+shipped file and trust that the next one says the same thing.
 
 ### A worked example
 
-This site's own compose file (`site/docker/compose/site.yml`) is a plain
+What `mx add api --recipe rust-api` lands in `docker/compose/api.yml` is a plain
 instance of all of it:
 
 ```yaml
+include:
+  - path: ./db.yml
+
 services:
-  site:
+  api:
     build:
-      context: ../../apps/site
-      dockerfile: ../../docker/dockerfiles/site/app
-      target: runner
+      context: ../..
+      dockerfile: docker/dockerfiles/api/app
+      target: production
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
-      - ../.config/.env.site
+      - ../.config/.env.secrets
+      - ../.config/.env.api
     environment:
-      - NODE_ENV=production
-      - PORT=4321
-      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - RUST_ENV=production
+      - RUST_LOG=info,api=debug
     networks:
       - default
       - devmesh-traefik
+    depends_on:
+      db:
+        condition: service_healthy
 ```
 
-`DB_USER` and `DB_PASSWORD` are interpolated by Compose from the environment at
-`docker compose` time — they come from the env files, and the composed
-`DATABASE_URL` is then pushed into the container. The dev override supplies
-`${DB_USER:-site}`-style defaults so a fresh clone starts without a populated
-secrets file.
+The database URL is not in that `environment:` block, and that placement is the
+point. `docker/.config/.env.api` carries it:
+
+```
+DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME}
+```
+
+and `scripts/generate-secrets.sh` resolves those references into literals before
+anything starts, reading the credentials it generated in `.env.secrets`. It has
+to: Compose does not interpolate an `env_file` value from a sibling env file, so
+a `${DB_PASSWORD}` left as a reference here would reach the container empty and
+Postgres would refuse to initialize. Literals are the only form that arrives.
+
+One consequence worth knowing. Once resolved, a derived value is a copy, so
+changing `DB_PASSWORD` in `.env.secrets` later does not re-derive `DATABASE_URL`
+in `.env.api`. Blank the derived value and re-run `make init` to have it
+regenerated. `make doctor` reports anything left unset.
 
 ## Dockerfiles
 
 `docker/dockerfiles/<service>/app` is the development image and `app.prod` the
 shipped one. Both are usually multi-stage, and the compose files select a stage
-with `build.target` — that is how one dockerfile serves `make dev` and
+with `build.target`. That is how one dockerfile serves `make dev` and
 `make build s=api prod=1`.
 
 ## Further reading
 
-- [Docker assembly guide](/docs/corpus/docker/docker-assembly-guide/) — the
+- [Docker assembly guide](/docs/corpus/docker/docker-assembly-guide/): the
   corpus document on building these files well
-- [The folder contract](/docs/start/folder-contract/) — where `docker/` sits
-- [Infra credentials](/docs/framework/infra-credentials/) — provider credentials,
+- [The folder contract](/docs/start/folder-contract/): where `docker/` sits
+- [Infra credentials](/docs/framework/infra-credentials/): provider credentials,
   which live outside the project's env files

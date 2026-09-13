@@ -4,7 +4,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: db
     env_file:
       - ../.config/.env.shared
       - ../.config/.env.secrets
@@ -13,7 +12,20 @@ services:
       - db_data:/var/lib/postgresql/data
       - ../system/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      # Read the role and database from the CONTAINER's environment, not the
+      # compose CLI's (bd:mech-crate-v6z). `${DB_USER}` is interpolated by the
+      # compose CLI from the compose PROJECT DIRECTORY's `.env`, which no mx
+      # scaffold has — so the `:-postgres` fallback always won, and the probe
+      # asked about a role that stopped existing once credentials became
+      # per-project (bd:mech-crate-rqc). `$$` defers interpolation to runtime,
+      # where POSTGRES_USER/POSTGRES_DB arrive from `.env.db` via `env_file`.
+      #
+      # `pg_isready` alone cannot fail on a broken role: it reports "accepting
+      # connections" (exit 0) for a role that does not exist, because the server
+      # answered — which is all it asks. Verified live against a database with no
+      # `postgres` role. So the probe authenticates as well; `psql` exits 2 on
+      # `FATAL: role "…" does not exist`.
+      test: ["CMD-SHELL", 'pg_isready -q -U "$${POSTGRES_USER:-postgres}" && psql -U "$${POSTGRES_USER:-postgres}" -d "$${POSTGRES_DB:-postgres}" -tAc "SELECT 1" > /dev/null']
       interval: 5s
       timeout: 3s
       retries: 5
