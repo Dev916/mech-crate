@@ -1,6 +1,6 @@
 ---
 title: Upgrade
-description: How mx upgrade keeps a project current with the templates, what it will never overwrite, and the compose project name migration.
+description: How mx upgrade keeps a project current with the templates, what it will never overwrite, and the two migrations you can feel (the compose project name, and container names).
 sidebar:
   order: 6
 ---
@@ -148,6 +148,67 @@ pass `-p` yourself if you work that way. And two project directories that happen
 to share a directory name still derive the same project name, so either name them
 distinctly or export `COMPOSE_PROJECT_NAME` in your own environment, which wins
 over the default.
+
+## Migrating: container names
+
+A second behavioural change rides in the same set, and it is the one most likely
+to break something you wrote.
+
+The shipped compose files used to pin `container_name: db`, `container_name: api`
+and so on. With project names pinned per project, that became a hard blocker
+rather than a cosmetic choice: container names are a Docker-daemon-wide
+namespace, so two projects whose compose files both declared `db` could not run
+at the same time. The second one failed with
+`Conflict. The container name "/db" is already in use`. Those pins are gone from
+every template and every recipe, and a conformance test keeps them gone.
+
+Compose now derives the name itself:
+
+```
+<COMPOSE_PROJECT_NAME>-<service>-<index>      e.g. myproj-db-1
+```
+
+**Service names did not change.** `depends_on`, the `include:` graph, the Traefik
+labels and every `s=<service>` on the `make` line address services, so all of
+that behaves exactly as before. Upgrading does not change a single compose file
+of yours either, because compose files are yours and an upgrade never rewrites
+them. What changes is what you get after you adopt a newer template or apply a
+newer recipe, and what breaks meanwhile is anything that addressed a *container*
+by a fixed name:
+
+```bash
+# before
+docker exec db psql -U postgres
+docker logs -f api
+
+# after
+make exec s=db c=psql
+make logs s=api
+docker compose -p "$COMPOSE_PROJECT_NAME" exec db psql -U postgres
+docker compose -p "$COMPOSE_PROJECT_NAME" logs -f api
+```
+
+The project's own verbs are the stable interface, and they were always the
+intended one. Reach for the explicit `docker compose -p` form when you need
+something the verbs do not cover.
+
+One exception: the global router container is still `mx-router`. It is installed
+once per machine rather than per project, so it has nothing to collide with, and
+`mx router` addresses it by that name.
+
+:::note[What this does and does not unblock]
+Two projects of the same shape no longer collide on container names. That is the
+whole of the claim. Running two same-shape stacks fully concurrently is still
+blocked by two separate issues: dev overrides publish fixed host ports for
+Postgres and Redis, so the second stack's `5432` is taken, and the Traefik router
+names in the labels are not qualified by project, so two projects shipping the
+same service name register the same router. Both are tracked
+(`mech-crate-1a0`, `mech-crate-298`) and neither is fixed yet.
+
+Different projects with *different* service names and domains do coexist, which
+is the ordinary case and what the [router](/docs/framework/router/) is for. It is
+specifically two copies of the same shape that hit these limits.
+:::
 
 ## Recipes are upgraded separately
 

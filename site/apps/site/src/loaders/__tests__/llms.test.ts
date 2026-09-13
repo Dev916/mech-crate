@@ -382,6 +382,34 @@ describe('agentInstructions', () => {
     expect(text).toContain('https://mechcrate.dev/docs/project/known-broken/');
   });
 
+  it('names the container-name migration, and what still addresses a service', () => {
+    // The second thing an upgrade costs. A container is no longer reachable by a
+    // fixed name, so an agent carrying `docker exec db` forward from an older
+    // project silently targets nothing. The bullet has to say both halves: the
+    // derived shape, and that service names did NOT move.
+    expect(text).toMatch(/container_name/);
+    expect(text).toMatch(/<COMPOSE_PROJECT_NAME>-<service>-<index>/);
+    expect(text).toMatch(/docker exec db/);
+    expect(text).toMatch(/mx-router/);
+    expect(text).toMatch(/[Ss]ervice names are unchanged/);
+  });
+
+  it('tells an agent not to hand-fill the secrets file', () => {
+    // The worst available failure: an agent that believes the credentials are a
+    // manual step invents one, which is harder to undo than the empty value it
+    // replaced. `make init` generates them, and `make dev` runs `make init`.
+    expect(text).toMatch(/no hand edit to start/i);
+    expect(text).toMatch(/make init/);
+    expect(text).toMatch(/REDIS_PASSWORD/);
+    expect(text).toContain('https://mechcrate.dev/docs/start/first-project/');
+  });
+
+  it('gives the multi-service syntax with its quoting rule', () => {
+    expect(text).toContain('make dev s="api site"');
+    expect(text).toMatch(/quotes are required/);
+    expect(text).toMatch(/refuse a list/);
+  });
+
   it('documents the markdown twins with a worked example', () => {
     expect(text).toContain('https://mechcrate.dev/docs/start/install.md');
     expect(text).toContain('rel="alternate"');

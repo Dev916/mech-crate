@@ -949,9 +949,10 @@ MechCrate uses a two-network pattern for services:
 
 ### Production (`service.yml`)
 
-Two rules the conformance suite enforces on every compose file a recipe ships
-(`crates/mx-lib/tests/templates_compose_hygiene.rs`), because `docker compose
-config` is blind to both:
+Three rules the conformance suite enforces on every compose file a recipe ships,
+because `docker compose config` is blind to all three. The first two live in
+`crates/mx-lib/tests/templates_compose_hygiene.rs`, the third in
+`crates/mx-lib/tests/templates_env_precedence.rs`:
 
 - **Never set `container_name`.** Container names are a Docker-daemon-wide
   namespace, so two projects whose recipes both pin `db` cannot run at the same
@@ -963,6 +964,12 @@ config` is blind to both:
   `devmesh-traefik` (`mx router up`) or `mech-network` (`make init`). A network
   nothing creates renders clean and then fails at `up` with
   `network … declared as external, but could not be found`.
+- **List `env_file` in the documented order: `.env.shared`, then
+  `.env.secrets`, then `.env.<service>`.** Compose applies the entries in order
+  and the last one wins, so any other order silently inverts the layering for
+  whichever key is defined twice. A service that reads `.env.shared` must also
+  read `.env.secrets`; a db-bearing recipe that omits it ships a service whose
+  credentials never arrive.
 
 ```yaml
 # {{SERVICE_NAME}} - Production Stack
@@ -978,8 +985,12 @@ services:
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
     env_file:
-      - ../.config/.env.secrets
+      # The documented layering, last one winning. Enforced over every compose
+      # file in templates/ by
+      # every_env_file_list_follows_the_documented_precedence_order in
+      # crates/mx-lib/tests/templates_env_precedence.rs.
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_MODE=app
@@ -1014,8 +1025,8 @@ services:
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_MODE=worker
