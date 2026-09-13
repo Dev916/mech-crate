@@ -208,18 +208,72 @@ deduplicate_services() {
     echo "$result"
 }
 
-# Get compose files for a service
-# Usage: compose_context_files "service" "add_dev"
+# ─────────────────────────────────────────────────────────────────────────────
+# Service selection
+#
+# `s=` takes ONE service or a whitespace-separated list (`make dev s="api site"`)
+# and arrives here as a single argument — the make layer quotes it, or the second
+# name would become a make goal (bd:mech-crate-3kq).
+#
+# Which targets take a list is decided by the verb underneath, not by taste:
+#
+#   dev, up, down, stop, restart, logs   list  — compose takes N service operands
+#   build, run, exec, sh/bash            one   — one image / one container
+#
+# The single-service targets refuse a list out loud (mech_require_single_service)
+# rather than quietly acting on the first name.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Append " -f <file> " to a compose-file argument string, at most once.
+# Two selected services that both pull in db.yml (or a re-selected service
+# already in the saved context) would otherwise repeat it: compose tolerates the
+# repetition, but every command line mx echoes would carry the noise.
+# Usage: files=$(mech_append_compose_file "$files" docker/compose/db.yml)
+mech_append_compose_file() {
+    local files="$1" file="$2"
+    case " $files " in
+        *" -f $file "*) printf '%s' "$files" ;;
+        *) printf '%s -f %s ' "$files" "$file" ;;
+    esac
+}
+
+# Refuse a service list for a target that acts on exactly one image/container.
+# Silently taking the first name is the failure this exists to prevent.
+# Usage: mech_require_single_service "$1" "make build" || exit 1
+mech_require_single_service() {
+    local value="$1" label="${2:-this command}"
+    # Intentionally unquoted: this is the split that counts the names.
+    set -- $value
+    [ "$#" -le 1 ] && return 0
+
+    print_error "$label takes a single service only - got $# ('$value')"
+    echo "  Run it once per service, e.g.: $label s=$1"
+    return 1
+}
+
+# Get compose files for one service, a service list, or the whole project
+# Usage: compose_context_files "service [service ...]" "add_dev"
 # Returns: -f file1.yml -f file2.yml ...
+#
+# Every requested name contributes its own docker/compose/<name>.yml (plus
+# <name>.dev.yml when add_dev is true). A name with no compose file is reported
+# by name and the whole context comes back empty — starting the subset that
+# happens to resolve would be worse than refusing.
 compose_context_files() {
     local dir=tmp/up
     local files=""
-    local service=$1
     local add_dev=$2
-    local base_file=""
+    local service=""
+    local missing=""
+
+    # Intentionally unquoted: one or more service names arrive as a single
+    # whitespace-separated argument, and this is the split. No names at all (an
+    # empty or whitespace-only s=) means "the whole project", which is how make
+    # treats it too.
+    set -- ${1:-}
 
     # If no service provided, build a context across all base compose files.
-    if [[ -z "${service:-}" ]]; then
+    if [ "$#" -eq 0 ]; then
         shopt -s nullglob
         local base_files=(docker/compose/*.yml)
         shopt -u nullglob
@@ -260,40 +314,54 @@ compose_context_files() {
         return 0
     fi
 
-    base_file="docker/compose/${service}.yml"
-
-    # Check if base file exists for the requested service
-    if [ -f "$base_file" ]; then
-        files+=" -f $base_file "
-    else
+    # Every requested name must resolve, or nothing does. Report each miss by
+    # name: "no service configuration found" for the whole list leaves the
+    # caller guessing which of them was the typo.
+    for service in "$@"; do
+        if [ ! -f "docker/compose/${service}.yml" ]; then
+            missing="$missing $service"
+        fi
+    done
+    if [ -n "$missing" ]; then
+        for service in $missing; do
+            echo "No compose file for service '$service' (docker/compose/${service}.yml)" >&2
+        done
         echo ""
         return 0
     fi
 
-    # Enable nullglob to handle no .txt files scenario
+    for service in "$@"; do
+        files=$(mech_append_compose_file "$files" "docker/compose/${service}.yml")
+    done
+
+    # Fold in the context saved by previous runs (tmp/up/*.txt), one -f pair at a
+    # time so a file already selected above is not repeated.
     shopt -s nullglob
-
-    # Check if there are any .txt files in the specified directory
-    local txt_files=("$dir"/*.txt)
-
-    if [ ${#txt_files[@]} -gt 0 ]; then
-        # Concatenate all .txt files' contents (existing context)
-        files+=$(cat "$dir"/*.txt)
-    fi
-
-    # Disable nullglob after use
+    local ctx_file token prev=""
+    for ctx_file in "$dir"/*.txt; do
+        prev=""
+        # Intentionally unquoted: the saved context is a flat "-f a.yml -f b.yml".
+        for token in $(cat "$ctx_file"); do
+            if [ "$prev" = "-f" ]; then
+                files=$(mech_append_compose_file "$files" "$token")
+            fi
+            prev="$token"
+        done
+    done
     shopt -u nullglob
 
-    # Add dev override file if requested
+    # Add dev override files if requested
     if [ "$add_dev" = "true" ]; then
-        if [ -f "docker/compose/${service}.dev.yml" ]; then
-            files+=" -f docker/compose/${service}.dev.yml"
-        fi
+        for service in "$@"; do
+            if [ -f "docker/compose/${service}.dev.yml" ]; then
+                files=$(mech_append_compose_file "$files" "docker/compose/${service}.dev.yml")
+            fi
+        done
     fi
 
     # Check if a compose file exists for the current processor architecture
     if [ -f "docker/compose/$(uname -m).yml" ]; then
-        files+=" -f docker/compose/$(uname -m).yml"
+        files=$(mech_append_compose_file "$files" "docker/compose/$(uname -m).yml")
     fi
 
     # Return the concatenated contents
