@@ -27,10 +27,10 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - **Accept:** astro non-dev build path resolves; /api/health 200 on fresh scaffold; no unmapped payload files left; force_init implemented + tested; recipes conformance green for all 7; `make test` green.
 
 ### Task 4: multi-service selection — `make dev s="a b"` (bd mech-crate-3kq)
-- [ ] templates/make/dev.mk expands the s= value unquoted (second name becomes a make goal) and templates/scripts/.bashrc `compose_context_files` resolves exactly one docker/compose/${service}.yml. Fix both: quote the pass-through in the .mk layer and loop over a whitespace-separated service list in compose_context_files (each name contributes its compose file + dev override when present). Sweep the OTHER targets that take s= (up/stop/restart/logs/build at minimum): make each honor a list where the underlying script loops, or fail with a clear "single service only" message — no silent first-service-wins. Record which targets accept lists.
-- [ ] Compose project-name invariant: multi-service calls still carry `-p "$COMPOSE_PROJECT_NAME"` (the wave-1 test must stay green untouched).
-- [ ] Tests: template-level assertions on quoting + list handling (parse the generated commands with a docker stub if needed).
-- [ ] Live E2E: scratch project with TWO services (e.g. rust-api + astro), `make dev s="api site"` (real names) brings up exactly the selected pair and their deps; `make dev s=api` single-service path unchanged.
+- [x] templates/make/dev.mk expands the s= value unquoted (second name becomes a make goal) and templates/scripts/.bashrc `compose_context_files` resolves exactly one docker/compose/${service}.yml. Fix both: quote the pass-through in the .mk layer and loop over a whitespace-separated service list in compose_context_files (each name contributes its compose file + dev override when present). Sweep the OTHER targets that take s= (up/stop/restart/logs/build at minimum): make each honor a list where the underlying script loops, or fail with a clear "single service only" message — no silent first-service-wins. Record which targets accept lists.
+- [x] Compose project-name invariant: multi-service calls still carry `-p "$COMPOSE_PROJECT_NAME"` (the wave-1 test must stay green untouched).
+- [x] Tests: template-level assertions on quoting + list handling (parse the generated commands with a docker stub if needed).
+- [x] Live E2E: scratch project with TWO services (e.g. rust-api + astro), `make dev s="api site"` (real names) brings up exactly the selected pair and their deps; `make dev s=api` single-service path unchanged.
 - **Accept:** multi-service selection proven live; non-dev s= targets either work with lists or refuse loudly; `make test` green.
 
 ### Task 5: compose hygiene — external network + container_name (bd mech-crate-4n4 + xhf)
