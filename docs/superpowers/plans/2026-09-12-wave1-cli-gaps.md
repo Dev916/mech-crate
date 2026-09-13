@@ -32,8 +32,8 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - **Accept:** scaffolders proven to execute (astro/nuxt live); recipes conformance still green for all 7; `make test` green.
 
 ### Task 5: docs rider + ship
-- [ ] Lift the honesty markers the fixes retire: site framework/upgrade page (z5i banner → working feature with real output), site recipes page + README recipe notes if they reference eic/0uq behavior, llms.txt agent-instructions "mx upgrade is mid-repair" line (src/loaders/lib/llms.ts), and any KNOWN_BROKEN cross-references. Add the COMPOSE_PROJECT_NAME migration note (T2) to the upgrade/compose docs.
-- [ ] Scoreboard: tests/KNOWN_BROKEN.md counts updated for every un-ignored test; `make test-known-broken` output consistent.
-- [ ] Full gates: `make test`, `make check`; site: `npm test` + `npx astro build` (docs edits ride site.yml on merge). `mx rag ingest --dry-run` 0 warnings.
-- [ ] Push branch; PR base main titled `fix: Wave 1 CLI gaps — mx upgrade, compose isolation, astro include, recipe scaffolders`; body: per-fix summary with lane tests un-ignored, docs lifted, migration note; watch site.yml + ci.yml to green. Do NOT merge.
+- [x] Lift the honesty markers the fixes retire: site framework/upgrade page (z5i banner → working feature with real output), site recipes page + README recipe notes if they reference eic/0uq behavior, llms.txt agent-instructions "mx upgrade is mid-repair" line (src/loaders/lib/llms.ts), and any KNOWN_BROKEN cross-references. Add the COMPOSE_PROJECT_NAME migration note (T2) to the upgrade/compose docs.
+- [x] Scoreboard: tests/KNOWN_BROKEN.md counts updated for every un-ignored test; `make test-known-broken` output consistent.
+- [x] Full gates: `make test`, `make check`; site: `npm test` + `npx astro build` (docs edits ride site.yml on merge). `mx rag ingest --dry-run` 0 warnings.
+- [x] Push branch; PR base main titled `fix: Wave 1 CLI gaps — mx upgrade, compose isolation, astro include, recipe scaffolders`; body: per-fix summary with lane tests un-ignored, docs lifted, migration note; watch site.yml + ci.yml to green. Do NOT merge.
 - **Accept:** PR open, both workflows green, honesty markers lifted, scoreboard consistent.
