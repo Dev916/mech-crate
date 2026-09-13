@@ -1,6 +1,6 @@
 ---
 title: Techniques corpus & RAG
-description: Set up the techniques corpus — rag.toml, a Neon project or a local pgvector container, OpenAI or any OpenAI-compatible embeddings endpoint — and know exactly where your text goes.
+description: Set up the techniques corpus (rag.toml, a Neon project or a local pgvector container, OpenAI or any OpenAI-compatible embeddings endpoint) and know exactly where your text goes.
 sidebar:
   order: 3
 ---
@@ -8,13 +8,13 @@ sidebar:
 The techniques corpus is the retrieval half of the [AI layer](/docs/ai/): the
 markdown under `docs/development/` chunked, embedded and stored in Postgres with
 pgvector, queried by the `rag_*` [MCP tools](/docs/ai/mcp-server/). Everything
-in it is also published here under [Techniques Corpus](/docs/corpus/) — same
+in it is also published here under [Techniques Corpus](/docs/corpus/): same
 source files, two renderings.
 
 ## What you need
 
 1. **A Postgres with pgvector.** A [Neon](https://neon.tech) project or a local
-   container — mx does not care which.
+   container (mx does not care which).
 2. **An embeddings endpoint.** OpenAI by default; any OpenAI-compatible
    `/embeddings` endpoint works.
 
@@ -58,7 +58,7 @@ The API key comes from `MX_RAG_EMBEDDING_API_KEY`, falling back to
 This is worth being precise about, because "local-first" is easy to overclaim.
 
 **The store is yours.** Documents, chunks and embedding vectors live in the
-Postgres you pointed `database_url` at — your Neon project or your container.
+Postgres you pointed `database_url` at: your Neon project or your container.
 There is no MechCrate service in the path, no shared index, and no vendor
 holding your corpus. Retrieval at query time is a SQL query against your own
 database.
@@ -69,8 +69,9 @@ embedded, and each `rag_*` query sends the query string the same way. That is a
 real egress, and it is on by default.
 
 **The escape hatch is one line.** Point `embedding_base_url` at a local
-OpenAI-compatible server — Ollama, LM Studio — and set `embedding_model` to
-whatever it serves; ingestion and queries then stay on your machine end to end:
+OpenAI-compatible server such as Ollama or LM Studio, and set `embedding_model`
+to whatever it serves; ingestion and queries then stay on your machine end to
+end:
 
 ```toml
 embedding_base_url = "http://localhost:11434/v1"
@@ -94,13 +95,13 @@ mx rag gaps       # mine weak-scoring queries for research topics
 
 `mx rag ingest` takes `--path <dir>` (defaults to `<mech-crate root>/docs/development`),
 `--clear` (drop existing docs and chunks first), `--force` (re-ingest unchanged
-docs), `--reembed`, and `--dry-run` — the last of which parses and chunks with no
+docs), `--reembed`, and `--dry-run`. That last one parses and chunks with no
 database and no embeddings at all, which is what the research pipeline uses as a
 pre-flight check.
 
 `mx rag gaps` takes `--days <n>` (default 30) and `--min-count <n>` (default 2).
 It reads the query log for searches that scored badly and clusters them into
-themes — the corpus telling you what it does not know, which feeds the
+themes: the corpus telling you what it does not know, which feeds the
 [research pipeline](/docs/ai/research-pipeline/).
 
 `mx rag status` is the same picture `rag_health` gives an agent:
@@ -116,24 +117,24 @@ Techniques Corpus Status
 
 ## Honest limits
 
-- **The lexical arm is weak.** Retrieval is meant to be hybrid — vector plus a
-  pg_trgm lexical arm — and the lexical half currently contributes far less
+- **The lexical arm is weak.** Retrieval is meant to be hybrid (vector plus a
+  pg_trgm lexical arm), and the lexical half currently contributes far less
   separation than it should. It is measured, not guessed: with the vector arm
   held equal, the lexical arm separates a relevant from an irrelevant chunk by
   **2.18× / 0.0062 of final score**, against a target of ≥5× / ≥0.05. Tracked as
   [`mech-crate-4jw`](/docs/project/known-broken/) with a red test.
 - **The corpus is only what got merged.** 66 documents. Ask outside that surface
-  and you get weak hits — visible in `mx rag gaps`, which is the intended
+  and you get weak hits, visible in `mx rag gaps`, which is the intended
   feedback loop rather than an embarrassment to hide.
 - **Ingest is not automatic.** Merging a document does not put it in your store;
   `mx rag ingest` does.
 
 ## Deeper
 
-- [`appendix-rag`](/docs/corpus/ml/appendix-rag/) — retrieval-augmented
+- [`appendix-rag`](/docs/corpus/ml/appendix-rag/): retrieval-augmented
   generation from first principles
-- [`rag-retrieval-fusion-and-chunking`](/docs/corpus/ml/rag-retrieval-fusion-and-chunking/)
-  — hybrid fusion and chunking for code corpora; the document that measured the
+- [`rag-retrieval-fusion-and-chunking`](/docs/corpus/ml/rag-retrieval-fusion-and-chunking/):
+  hybrid fusion and chunking for code corpora; the document that measured the
   lexical arm
-- [`pgvector-rust-batch-embedding`](/docs/corpus/database/pgvector-rust-batch-embedding/)
-  — pgvector in Rust and concurrent batch embedding
+- [`pgvector-rust-batch-embedding`](/docs/corpus/database/pgvector-rust-batch-embedding/):
+  pgvector in Rust and concurrent batch embedding

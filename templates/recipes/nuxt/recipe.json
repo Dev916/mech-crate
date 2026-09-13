@@ -24,8 +24,8 @@
     },
     "init_cmd": {
       "flag": "--init-cmd",
-      "default": "CI=true NUXI_TELEMETRY_DISABLED=1 npx nuxi@latest init {{SERVICE_NAME}} --template minimal --no-install",
-      "description": "Command to scaffold the Nuxt app (runs from ./apps)"
+      "default": "CI=true NUXI_TELEMETRY_DISABLED=1 npx nuxi@latest init {{SERVICE_NAME}} --template minimal --no-install --no-gitInit --packageManager npm",
+      "description": "Command to scaffold the Nuxt app (runs from ./apps; must be non-interactive and must create {{SERVICE_NAME}}/)"
     },
     "force_init": {
       "flag": "--force-init",

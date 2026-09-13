@@ -17,14 +17,21 @@
 // not reach for `wrangler pages deploy`.
 //
 // ---------------------------------------------------------------------------
-// CONTENT TYPES  (/llms.txt and /llms-full.txt)
+// RESPONSE HEADERS  (public/_headers)
 // ---------------------------------------------------------------------------
-// Cloudflare's static-asset server derives `Content-Type` from the file
-// extension, so `.txt` is served as `text/plain; charset=utf-8` and renders in
-// the browser rather than downloading. No `_headers` file is needed — that is a
-// Pages mechanism, and it is precisely one of the reasons this is not Pages.
-// `.github/workflows/site.yml` re-asserts this against a local workerd via
-// `wrangler dev` before anything is deployed.
+// `_headers` is NOT Pages-only. An earlier revision of this comment said it was
+// — that was wrong. Workers static assets support it: `wrangler deploy` uploads
+// `dist/_headers` as part of the assets manifest, and Cloudflare's asset worker
+// applies the rules to every asset response (`wrangler dev` runs that same
+// worker under workerd locally). `public/_headers` is where the immutable cache
+// on `/_astro/*`, the site-wide HSTS/nosniff/referrer-policy, and the explicit
+// text/plain on the llms artefacts live; read it for the syntax and its limits.
+//
+// Cloudflare's asset server also derives `Content-Type` from the file extension
+// on its own, so `.txt` would render inline even with no `_headers` at all; the
+// rules for `/llms.txt` and `/llms-full.txt` pin that rather than rely on it.
+// `.github/workflows/site.yml` re-asserts the whole set against a local workerd
+// via `wrangler dev` before anything is deployed.
 //
 // ---------------------------------------------------------------------------
 // PREREQUISITES (nothing below works until these exist — see the workflow header)

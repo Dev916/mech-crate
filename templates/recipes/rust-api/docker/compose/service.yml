@@ -11,10 +11,9 @@ services:
       context: ../..
       dockerfile: docker/dockerfiles/{{SERVICE_NAME}}/app
       target: production
-    container_name: {{SERVICE_NAME}}
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - RUST_ENV=production

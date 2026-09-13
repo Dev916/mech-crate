@@ -29,17 +29,17 @@ endif
 # Main Build Targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-build: ## Build image (s=[service] t=[tag] prod=[0|1] push=[0|1])
-	@$(MAKE) _build service=$(call get_service) tag=$(call get_tag) mode=$(BUILD_MODE) push=$(PUSH_IMAGE)
+build: ## Build image (s=[service] t=[tag] prod=[0|1] push=[0|1] - one service)
+	@$(MAKE) _build service="$(call get_service)" tag="$(call get_tag)" mode=$(BUILD_MODE) push=$(PUSH_IMAGE)
 
-build-dev: ## Build development image (s=[service] t=[tag])
-	@$(MAKE) _build service=$(call get_service) tag=$(call get_tag) mode=dev push=0
+build-dev: ## Build development image (s=[service] t=[tag] - one service)
+	@$(MAKE) _build service="$(call get_service)" tag="$(call get_tag)" mode=dev push=0
 
-build-prod: ## Build production image (s=[service] t=[tag] push=[0|1])
-	@$(MAKE) _build service=$(call get_service) tag=$(call get_tag) mode=prod push=$(PUSH_IMAGE)
+build-prod: ## Build production image (s=[service] t=[tag] push=[0|1] - one service)
+	@$(MAKE) _build service="$(call get_service)" tag="$(call get_tag)" mode=prod push=$(PUSH_IMAGE)
 
 _build:
-	@./scripts/build.sh $(service) $(tag) $(mode) $(push) $(nocache)
+	@./scripts/build.sh "$(service)" "$(tag)" $(mode) $(push) $(nocache)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Multi-Platform Builds (for CI/CD)
@@ -47,6 +47,6 @@ _build:
 
 .PHONY: build-multiplatform
 
-build-multiplatform: ## Build multi-platform production image (s=[service] t=[tag])
+build-multiplatform: ## Build multi-platform production image (s=[service] t=[tag] - one service)
 	@echo "Building multi-platform image..."
-	@./scripts/build.sh $(call get_service) $(call get_tag) prod 0 --platform=linux/amd64,linux/arm64
+	@./scripts/build.sh "$(call get_service)" "$(call get_tag)" prod 0 --platform=linux/amd64,linux/arm64
