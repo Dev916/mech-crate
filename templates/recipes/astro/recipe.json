@@ -1,24 +1,16 @@
 {
   "name": "astro",
-  "title": "Astro 5 + Vue 3 SSR",
-  "description": "Full-stack Astro 5 with Vue 3 islands, SSR, shadcn-vue, PrimeVue, global state, and Cloudflare deployment",
-  "version": "2.0",
+  "title": "Astro",
+  "description": "Astro app scaffolded by create-astro, wired into the mx stack with Postgres, Redis, Traefik routing and dev/prod Docker builds",
+  "version": "2.1",
 
   "features": [
-    "Astro 5.x SSR with Node adapter (standalone mode)",
-    "Vue 3 islands (script setup + Composition API)",
-    "shadcn-vue UI primitives",
-    "PrimeVue 4 advanced components",
-    "Tailwind CSS + Apple-inspired design",
-    "Global state store (Pinia)",
-    "Redis connection (ioredis)",
-    "PostgreSQL connection (Drizzle ORM)",
-    "Type-safe API routes",
-    "Cloudflare Containers ready",
-    "Dev/Prod Docker builds",
-    "BilingualText support",
-    "Environment variables (PUBLIC_ prefix for client)",
-    "FRP-style reactive patterns"
+    "App scaffolded by `create-astro` itself — the framework owns package.json and the app tree",
+    "Dependency-free /api/health endpoint (works on a fresh scaffold)",
+    "PostgreSQL + Redis siblings, wired via DATABASE_URL / REDIS_URL",
+    "Traefik routing on a .localhost domain",
+    "Dev/Prod Docker builds (hot-reload dev stage, static-or-SSR production stage)",
+    "Environment variables (PUBLIC_ prefix for client)"
   ],
 
   "services": [
@@ -41,17 +33,7 @@
     "force_init": {
       "flag": "--force-init",
       "default": "false",
-      "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS)"
-    },
-    "bilingual": {
-      "flag": "--bilingual",
-      "default": "false",
-      "description": "Enable bilingual text support (EN/JA)"
-    },
-    "primevue": {
-      "flag": "--primevue",
-      "default": "true",
-      "description": "Include PrimeVue components"
+      "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS). Set with `mx add <name> --recipe astro --opt force_init=true`"
     }
   },
 
@@ -71,22 +53,7 @@
   },
 
   "directories": [
-    "apps/{{SERVICE_NAME}}/src/components",
-    "apps/{{SERVICE_NAME}}/src/components/ui",
-    "apps/{{SERVICE_NAME}}/src/components/layout",
-    "apps/{{SERVICE_NAME}}/src/layouts",
-    "apps/{{SERVICE_NAME}}/src/pages",
     "apps/{{SERVICE_NAME}}/src/pages/api",
-    "apps/{{SERVICE_NAME}}/src/stores",
-    "apps/{{SERVICE_NAME}}/src/lib",
-    "apps/{{SERVICE_NAME}}/src/lib/api",
-    "apps/{{SERVICE_NAME}}/src/lib/db",
-    "apps/{{SERVICE_NAME}}/src/lib/redis",
-    "apps/{{SERVICE_NAME}}/src/lib/utils",
-    "apps/{{SERVICE_NAME}}/src/types",
-    "apps/{{SERVICE_NAME}}/src/styles",
-    "apps/{{SERVICE_NAME}}/public",
-    "apps/{{SERVICE_NAME}}/drizzle",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
     "docker/.config"
@@ -117,11 +84,12 @@
   ],
 
   "notes": [
-    "Astro 5.x with SSR enabled by default (Node adapter standalone mode)",
-    "Use Vue components with client:load or client:visible for hydration",
-    "Pinia store for global state management",
-    "API routes under src/pages/api/",
+    "`create-astro` owns the app: package.json, tsconfig.json, astro.config.mjs and the starter pages are the scaffolder's, not this recipe's (bd:mech-crate-874)",
+    "This recipe installs infra (compose, Dockerfiles, env) plus one app file: a dependency-free src/pages/api/health.ts",
+    "Output mode is the app's call. The default scaffold has no adapter, so `astro build` emits a static dist/ and the production stage serves it with the scaffold's own `preview` script; run `astro add node` in the app and the same stage execs dist/server/entry.mjs instead (bd:mech-crate-47j)",
+    "API routes under src/pages/api/; add `export const prerender = false` only once an adapter is configured",
     "Environment variables: PUBLIC_ prefix for client-side access",
-    "Server-only vars (DATABASE_URL, SESSION_SECRET) are not exposed to client"
+    "Server-only vars (DATABASE_URL, SESSION_SECRET) are not exposed to client",
+    "Re-scaffold an app from scratch with `mx add <name> --recipe astro --opt force_init=true` (deletes apps/<name> first)"
   ]
 }

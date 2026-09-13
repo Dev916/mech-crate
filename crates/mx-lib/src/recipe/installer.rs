@@ -90,7 +90,19 @@ impl RecipeInstaller {
         // (health endpoint, README, Docker glue) wins every collision with the
         // framework's starter files.
         if let Some(init_app) = &recipe.init_app {
-            result.init_app = Some(self.run_init_app(init_app, project_root, &placeholders)?);
+            // `force_init` is the escape hatch out of `skip_if_exists`: it is
+            // honored only by recipes that declare the option, so a recipe that
+            // never opted in cannot have its app deleted (bd:mech-crate-puy).
+            let force_init = recipe.options.contains_key(FORCE_INIT_OPTION)
+                && option_is_true(
+                    option_values
+                        .get(FORCE_INIT_OPTION)
+                        .map(String::as_str)
+                        .or_else(|| recipe.get_option_default(FORCE_INIT_OPTION))
+                        .unwrap_or_default(),
+                );
+            result.init_app =
+                Some(self.run_init_app(init_app, project_root, &placeholders, force_init)?);
         }
 
         // Create directories
@@ -142,17 +154,45 @@ impl RecipeInstaller {
     }
 
     /// Run the recipe's app scaffolder, unless the target already holds an app.
+    ///
+    /// With `force_init`, an existing app at the target is deleted first so the
+    /// scaffolder re-runs over a clean tree — the semantics the astro/nuxt/zola
+    /// recipes document for the option.
     fn run_init_app(
         &mut self,
         init_app: &super::InitApp,
         project_root: &Path,
         placeholders: &HashMap<String, String>,
+        force_init: bool,
     ) -> Result<InitAppOutcome> {
         let target_rel = match &init_app.target_dir {
             Some(t) => Some(self.interpolate(t, placeholders)?),
             None => None,
         };
         let target = target_rel.as_ref().map(|rel| project_root.join(rel));
+
+        // Delete before the guard is consulted, so the scaffolder sees the same
+        // empty target a fresh `mx add` would.
+        let mut reinitialized = false;
+        if force_init {
+            if let (Some(rel), Some(path)) = (target_rel.as_deref(), target.as_deref()) {
+                if !is_inside_project(rel) {
+                    return Err(Error::CommandFailed(format!(
+                        "force_init refuses to delete `{rel}`: a recipe's init_app.target_dir \
+                         must be a relative path inside the project, and this one escapes it"
+                    )));
+                }
+                if path_is_occupied(path) {
+                    tracing::warn!("force_init: deleting {} before re-init", path.display());
+                    if path.is_dir() {
+                        std::fs::remove_dir_all(path)?;
+                    } else {
+                        std::fs::remove_file(path)?;
+                    }
+                    reinitialized = true;
+                }
+            }
+        }
 
         if init_app_decision(init_app.skip_if_exists, target.as_deref())
             == InitAppDecision::SkipExisting
@@ -223,6 +263,12 @@ impl RecipeInstaller {
             }
         }
 
+        if reinitialized {
+            return Ok(InitAppOutcome::Reinitialized {
+                command,
+                target_dir: target_rel.unwrap_or_default(),
+            });
+        }
         Ok(InitAppOutcome::Ran { command })
     }
 
@@ -450,6 +496,33 @@ impl RecipeInstaller {
     }
 }
 
+/// Recipe option name for the `skip_if_exists` escape hatch.
+const FORCE_INIT_OPTION: &str = "force_init";
+
+/// Read a recipe option value as a boolean.
+///
+/// Option values arrive as strings (from `recipe.json` defaults or `--opt k=v`),
+/// so the usual spellings a human would type all have to mean the same thing.
+fn option_is_true(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+/// Is `rel` a relative path that stays inside the project root?
+///
+/// `force_init` deletes this path, so a `target_dir` that is absolute or climbs
+/// out with `..` is refused rather than resolved.
+fn is_inside_project(rel: &str) -> bool {
+    let path = Path::new(rel);
+    path.is_relative()
+        && path.components().count() > 0
+        && path
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+}
+
 /// Whether a recipe's `init_app` scaffolder should run for a given target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InitAppDecision {
@@ -495,6 +568,14 @@ pub enum InitAppOutcome {
     Ran {
         /// Fully interpolated command line handed to `sh -c`.
         command: String,
+    },
+    /// `force_init` was set and the target held an app: it was deleted and the
+    /// scaffolder re-ran over a clean tree.
+    Reinitialized {
+        /// Fully interpolated command line handed to `sh -c`.
+        command: String,
+        /// Project-relative target directory that was deleted first.
+        target_dir: String,
     },
     /// Skipped because the target already holds an app; carries the
     /// project-relative target directory.
@@ -771,6 +852,190 @@ mod tests {
             msg.contains("wrote nothing") && msg.contains("apps/svc"),
             "error must name the empty target: {msg}"
         );
+    }
+
+    // ── force_init escape hatch (bd:mech-crate-puy) ──────────────────────────
+
+    /// A recipe shaped like astro/nuxt/zola: a scaffolder guarded by
+    /// `skip_if_exists`, plus the `force_init` option those three declare.
+    fn forceable_recipe() -> Recipe {
+        serde_json::from_value(serde_json::json!({
+            "name": "demo",
+            "options": {
+                "force_init": {
+                    "flag": "--force-init",
+                    "default": "false",
+                    "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first"
+                }
+            },
+            "placeholders": { "SERVICE_NAME": { "source": "name" } },
+            "init_app": {
+                "cwd": "apps",
+                "target_dir": "apps/{{SERVICE_NAME}}",
+                "skip_if_exists": true,
+                "command": "mkdir -p {{SERVICE_NAME}} && printf 'fresh\\n' > {{SERVICE_NAME}}/package.json"
+            }
+        }))
+        .unwrap()
+    }
+
+    /// Lay down an "existing app" at `apps/svc` with a sentinel only a delete
+    /// can remove.
+    fn seed_existing_app(project: &Path) {
+        std::fs::create_dir_all(project.join("apps/svc")).unwrap();
+        std::fs::write(project.join("apps/svc/package.json"), "mine\n").unwrap();
+        std::fs::write(project.join("apps/svc/sentinel.txt"), "survivor\n").unwrap();
+    }
+
+    #[test]
+    fn force_init_deletes_the_existing_app_and_re_runs_the_scaffolder() {
+        let temp = TempDir::new().unwrap();
+        let templates = temp.path().join("templates");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(templates.join("recipes/demo")).unwrap();
+        seed_existing_app(&project);
+
+        let mut installer = RecipeInstaller::new(&templates).unwrap();
+        let options = HashMap::from([("force_init".to_string(), "true".to_string())]);
+        let result = installer
+            .install(&forceable_recipe(), &project, "svc", &options)
+            .unwrap();
+
+        assert!(
+            matches!(
+                result.init_app,
+                Some(InitAppOutcome::Reinitialized { ref target_dir, .. }) if target_dir == "apps/svc"
+            ),
+            "force_init must report the re-init it performed: {:?}",
+            result.init_app
+        );
+        assert!(
+            !project.join("apps/svc/sentinel.txt").exists(),
+            "force_init must delete the old app before re-scaffolding"
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.join("apps/svc/package.json")).unwrap(),
+            "fresh\n",
+            "the scaffolder must have re-run over a clean target"
+        );
+    }
+
+    #[test]
+    fn without_force_init_an_existing_app_is_still_skipped() {
+        let temp = TempDir::new().unwrap();
+        let templates = temp.path().join("templates");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(templates.join("recipes/demo")).unwrap();
+        seed_existing_app(&project);
+
+        let mut installer = RecipeInstaller::new(&templates).unwrap();
+        let result = installer
+            .install(&forceable_recipe(), &project, "svc", &HashMap::new())
+            .unwrap();
+
+        assert_eq!(
+            result.init_app,
+            Some(InitAppOutcome::SkippedExisting {
+                target_dir: "apps/svc".to_string()
+            }),
+            "the declared `force_init` default is false — nothing may be deleted"
+        );
+        assert!(project.join("apps/svc/sentinel.txt").exists());
+    }
+
+    /// The escape hatch is recipe-declared. A recipe with no `force_init` option
+    /// has not opted into having its target deleted, so the value is inert.
+    #[test]
+    fn force_init_is_inert_for_a_recipe_that_does_not_declare_it() {
+        let temp = TempDir::new().unwrap();
+        let templates = temp.path().join("templates");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(templates.join("recipes/demo")).unwrap();
+        seed_existing_app(&project);
+
+        let mut recipe = forceable_recipe();
+        recipe.options.remove("force_init");
+
+        let mut installer = RecipeInstaller::new(&templates).unwrap();
+        let options = HashMap::from([("force_init".to_string(), "true".to_string())]);
+        let result = installer
+            .install(&recipe, &project, "svc", &options)
+            .unwrap();
+
+        assert_eq!(
+            result.init_app,
+            Some(InitAppOutcome::SkippedExisting {
+                target_dir: "apps/svc".to_string()
+            }),
+            "a recipe that declares no force_init option must not honor one"
+        );
+        assert!(project.join("apps/svc/sentinel.txt").exists());
+    }
+
+    /// Forcing a target that holds nothing is just a fresh scaffold — the
+    /// `Reinitialized` outcome is reserved for "your app was deleted".
+    #[test]
+    fn force_init_on_an_absent_target_reports_a_plain_run() {
+        let temp = TempDir::new().unwrap();
+        let templates = temp.path().join("templates");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(templates.join("recipes/demo")).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+
+        let mut installer = RecipeInstaller::new(&templates).unwrap();
+        let options = HashMap::from([("force_init".to_string(), "yes".to_string())]);
+        let result = installer
+            .install(&forceable_recipe(), &project, "svc", &options)
+            .unwrap();
+
+        assert!(
+            matches!(result.init_app, Some(InitAppOutcome::Ran { .. })),
+            "nothing was deleted, so this is a plain run: {:?}",
+            result.init_app
+        );
+    }
+
+    /// `force_init` is `rm -rf` with a recipe-supplied path. A `target_dir` that
+    /// climbs out of the project is refused rather than obeyed.
+    #[test]
+    fn force_init_refuses_a_target_dir_that_escapes_the_project() {
+        let temp = TempDir::new().unwrap();
+        let templates = temp.path().join("templates");
+        let project = temp.path().join("project");
+        std::fs::create_dir_all(templates.join("recipes/demo")).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        let outside = temp.path().join("precious");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("keep.txt"), "do not delete\n").unwrap();
+
+        let mut recipe = forceable_recipe();
+        recipe.init_app.as_mut().unwrap().target_dir = Some("../precious".to_string());
+
+        let mut installer = RecipeInstaller::new(&templates).unwrap();
+        let options = HashMap::from([("force_init".to_string(), "true".to_string())]);
+        let err = installer
+            .install(&recipe, &project, "svc", &options)
+            .expect_err("a target_dir escaping the project must not be deleted");
+
+        let msg = err.to_string();
+        assert!(
+            msg.contains("force_init") && msg.contains("../precious"),
+            "error must name the refused path: {msg}"
+        );
+        assert!(
+            outside.join("keep.txt").exists(),
+            "nothing outside the project may be deleted"
+        );
+    }
+
+    #[test]
+    fn force_init_reads_the_usual_truthy_spellings() {
+        for yes in ["true", "TRUE", "1", "yes", "on"] {
+            assert!(option_is_true(yes), "{yes} should read as true");
+        }
+        for no in ["false", "0", "no", "off", "", "maybe"] {
+            assert!(!option_is_true(no), "{no} should read as false");
+        }
     }
 
     #[test]
