@@ -70,7 +70,7 @@ A build-time loader (`src/loaders/corpus.ts`, TypeScript, runs inside Astro's co
 - `docs/development/INDEX.md` — generated index; the site builds its own navigation
 - `docs/development/APPLE_DESIGN_GUIDELINES.md`, `APPLE_DESIGN_QUICK_GUIDE.md` — derivative summaries of Apple's HIG; little value beyond the original and closest to republishing someone else's content
 
-**Never published** (loader scope, not frontmatter): `docs/superpowers/` (specs/plans), `docs/unyform/` (internal integration notes), `docs/architecture-review-2026-03-07.md` and `docs/product-structure.md` (internal point-in-time thinking), `docs/research-source.txt`.
+**Never published** (loader scope, not frontmatter): `docs/superpowers/` (specs/plans), `docs/unyform/` (internal integration notes), `docs/architecture-review-2026-03-07.md` and `docs/product-structure.md` (internal point-in-time thinking), `docs/research-source.txt`, and **subdirectories of `docs/development/`** — notably `docs/development/repos/` (internal repo profiles; see `2026-09-01-repo-profiles-corpus-design.md` §3 D3). The flat scan in `sources.ts` is a tested contract (`sources.test.ts`), not an accident.
 
 Everything else publishes — including `RESEARCH_LOG.md`, `RESEARCH_BACKLOG.md`, `sources.md`, and `instructions.md` (agent execution rules are AI-layer content).
 

@@ -11,7 +11,7 @@ Query the mx MCP techniques corpus before committing to an implementation approa
 
 ## Core loop
 
-1. **Describe the work.** Call `mcp__mx__rag_context` with `working_on` = 1–2 sentences about the current task. Add `language` (rust/typescript/php/python/...) and `category` (theory | patterns | architecture | concurrency | api-design | database | frontend | docker | infra | shell | blockchain | ml | security | process) when obvious. Keep `limit` at 5 or less.
+1. **Describe the work.** Call `mcp__mx__rag_context` with `working_on` = 1–2 sentences about the current task. Add `language` (rust/typescript/php/python/...) and `category` (theory | patterns | architecture | concurrency | api-design | database | frontend | docker | infra | shell | blockchain | ml | security | process | repos) when obvious. `repos` holds profiles of our own repositories — use it for "what does <repo> do / how is it built / which repo handles X". Keep `limit` at 5 or less.
 2. **Drill down only if deciding.** Choosing between two approaches → `mcp__mx__rag_compare_approaches`. Need code shape for a chosen pattern in a language → `mcp__mx__rag_find_implementation`. Expanding around a chosen doc → `mcp__mx__rag_find_related`.
 3. **Apply as advisory, not gospel.** Returned techniques are patterns, not requirements. Adopt what fits the codebase's existing conventions; skip what doesn't. When a technique shapes a plan or PR, cite its source doc path (e.g. `docs/development/appendix-rust-concurrency.md`).
 4. **Never block on the corpus.** If tools return the offline message or nothing relevant: note it in one line and proceed with your own judgment. `mcp__mx__rag_health` diagnoses; `mx rag ingest` re-ingests; do NOT stop work to repair the corpus unless the user asks.

@@ -41,3 +41,4 @@ site/docker/.config/.env*
 
 # llvm-cov profiles written by instrumented child processes (mx self-update --refresh-cache under make coverage)
 *.profraw
+__pycache__/
