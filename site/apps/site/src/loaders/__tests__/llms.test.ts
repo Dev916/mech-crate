@@ -368,12 +368,46 @@ describe('agentInstructions', () => {
     expect(text).toMatch(/[Dd]o not invent flags/);
   });
 
-  it('says out loud that mx upgrade is broken', () => {
-    // The honesty rule: a model that plans work around `mx upgrade` wastes a
-    // user's afternoon, so the file says so where the model will read it.
-    expect(text).toMatch(/`mx upgrade` is mid-repair/);
+  it('says out loud what mx upgrade costs an agent that runs it', () => {
+    // The honesty rule that used to make this file say `mx upgrade` was
+    // mid-repair. Discovery is fixed, so the awkward fact moved rather than
+    // disappeared: an agent that upgrades a project with containers up finds
+    // them orphaned under the old compose project name, and `make down` blind
+    // to them. Saying so here is the point of the block.
+    expect(text).toMatch(/`mx upgrade` works/);
+    expect(text).toMatch(/COMPOSE_PROJECT_NAME/);
+    expect(text).toMatch(/orphaned/);
+    expect(text).toMatch(/make doctor/);
     expect(text).toContain('https://mechcrate.dev/docs/framework/upgrade/');
     expect(text).toContain('https://mechcrate.dev/docs/project/known-broken/');
+  });
+
+  it('names the container-name migration, and what still addresses a service', () => {
+    // The second thing an upgrade costs. A container is no longer reachable by a
+    // fixed name, so an agent carrying `docker exec db` forward from an older
+    // project silently targets nothing. The bullet has to say both halves: the
+    // derived shape, and that service names did NOT move.
+    expect(text).toMatch(/container_name/);
+    expect(text).toMatch(/<COMPOSE_PROJECT_NAME>-<service>-<index>/);
+    expect(text).toMatch(/docker exec db/);
+    expect(text).toMatch(/mx-router/);
+    expect(text).toMatch(/[Ss]ervice names are unchanged/);
+  });
+
+  it('tells an agent not to hand-fill the secrets file', () => {
+    // The worst available failure: an agent that believes the credentials are a
+    // manual step invents one, which is harder to undo than the empty value it
+    // replaced. `make init` generates them, and `make dev` runs `make init`.
+    expect(text).toMatch(/no hand edit to start/i);
+    expect(text).toMatch(/make init/);
+    expect(text).toMatch(/REDIS_PASSWORD/);
+    expect(text).toContain('https://mechcrate.dev/docs/start/first-project/');
+  });
+
+  it('gives the multi-service syntax with its quoting rule', () => {
+    expect(text).toContain('make dev s="api site"');
+    expect(text).toMatch(/quotes are required/);
+    expect(text).toMatch(/refuse a list/);
   });
 
   it('documents the markdown twins with a worked example', () => {

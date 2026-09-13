@@ -9,6 +9,38 @@ use walkdir::WalkDir;
 use crate::error::{Error, Result};
 use crate::paths;
 
+/// Template subtrees the upgrader owns, relative to `templates/`.
+///
+/// These mirror what `mx new` lays down (see
+/// `crates/mx-cli/src/commands/new.rs::copy_templates`): the shipped layout has
+/// no `templates/project/` wrapper — scaffold files sit at the top level.
+///
+/// Everything outside this scope belongs to someone else and must never be
+/// force-fed into an existing project:
+///
+/// - `recipes/`, `router/` — not project scaffolding at all.
+/// - `docker/compose/`, `docker/system/`, `docker/dockerfiles/` — owned by the
+///   recipe that installs a service. `scripts/.bashrc` builds a service-less
+///   `make dev` context by globbing `docker/compose/*.yml`, so seeding the
+///   reference stack here would silently boot postgres, redis, nginx and
+///   traefik for a project that never asked for them.
+/// - `docker/config/env.<service>` — likewise recipe-owned; `mx new` copies
+///   only the two shared files below.
+/// - `infra/` — written by `mx infra setup`, which expands `{{PROJECT_NAME}}`
+///   placeholders; copying the raw templates back would undo that expansion.
+/// - `scripts/<subdir>/**` — `mx new` copies only the top-level files of
+///   `templates/scripts/`, so nested helper bundles (e.g. `scripts/md2pdf/`)
+///   are not part of the scaffold. They are walked here but categorized
+///   [`FileCategory::Skip`], so discovery never offers to add them.
+const SCAFFOLD_DIRS: &[&str] = &["make", "scripts"];
+
+/// Individual template files the upgrader owns, relative to `templates/`.
+const SCAFFOLD_FILES: &[&str] = &[
+    "Makefile.template",
+    "docker/config/env.shared",
+    "docker/config/env.secrets.template",
+];
+
 /// File category for upgrade decisions
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileCategory {
@@ -72,10 +104,22 @@ impl ProjectUpgrader {
                     FileCategory::Tooling
                 }
             }
-            path if path.starts_with("scripts/")
-                && (path.ends_with(".sh") || path.ends_with(".mjs")) =>
-            {
-                if path.starts_with("scripts/cf-") {
+            // `scripts/` — owned file-for-file with what `mx new` lays down.
+            // `copy_templates` copies every TOP-LEVEL file of
+            // `templates/scripts/`, extension or not, so the old `.sh`/`.mjs`
+            // extension test silently skipped `scripts/.bashrc` — the helper
+            // library every other script sources. `mx upgrade` would refresh
+            // `dev.sh`/`up.sh` and never the library they depend on.
+            //
+            // Nested subtrees (e.g. `scripts/md2pdf/`) are NOT copied by
+            // `mx new`, so upgrade must not add them either — that would break
+            // the scope invariant pinned by
+            // `upgrade_discovery_scope_mirrors_mx_new`.
+            path if path.starts_with("scripts/") => {
+                let rel = &path["scripts/".len()..];
+                if rel.is_empty() || rel.contains('/') {
+                    FileCategory::Skip
+                } else if rel.starts_with("cf-") {
                     FileCategory::Conditional("cloudflare".to_string())
                 } else {
                     FileCategory::Tooling
@@ -135,30 +179,60 @@ impl ProjectUpgrader {
         }
     }
 
+    /// Template-relative paths inside the upgrader's scope, in stable order.
+    ///
+    /// Reads the SHIPPED `templates/` layout — `Makefile.template`, `make/`,
+    /// `scripts/` and the two shared `docker/config/` files — rather than a
+    /// `templates/project/` subtree, which has never existed in the published
+    /// tree. See [`SCAFFOLD_DIRS`] for what is deliberately left out.
+    pub fn scaffold_template_files(&self) -> Result<Vec<String>> {
+        let mut rels = Vec::new();
+
+        for file in SCAFFOLD_FILES {
+            if self.templates_dir.join(file).is_file() {
+                rels.push((*file).to_string());
+            }
+        }
+
+        for dir in SCAFFOLD_DIRS {
+            let root = self.templates_dir.join(dir);
+            if !root.is_dir() {
+                continue;
+            }
+
+            for entry in WalkDir::new(&root)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+            {
+                let rel = entry
+                    .path()
+                    .strip_prefix(&self.templates_dir)
+                    .map_err(|e| Error::Other(e.to_string()))?
+                    .to_str()
+                    .ok_or_else(|| Error::Other("Invalid path".into()))?
+                    .replace(std::path::MAIN_SEPARATOR, "/");
+                rels.push(rel);
+            }
+        }
+
+        rels.sort();
+        Ok(rels)
+    }
+
     /// Discover all upgrade entries
     pub fn discover_upgrades(&self) -> Result<Vec<UpgradeEntry>> {
         let mut entries = Vec::new();
-        let templates_project_dir = self.templates_dir.join("project");
 
-        if !templates_project_dir.exists() {
+        if !self.templates_dir.is_dir() {
             return Err(Error::Config(format!(
                 "Project templates not found at {}",
-                templates_project_dir.display()
+                self.templates_dir.display()
             )));
         }
 
-        for entry in WalkDir::new(&templates_project_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let rel_path = entry
-                .path()
-                .strip_prefix(&templates_project_dir)
-                .map_err(|e| Error::Other(e.to_string()))?
-                .to_str()
-                .ok_or_else(|| Error::Other("Invalid path".into()))?;
-
+        for rel_path in self.scaffold_template_files()? {
+            let rel_path = rel_path.as_str();
             let category = self.categorize_file(rel_path);
 
             // Skip files marked for skipping
@@ -181,7 +255,7 @@ impl ProjectUpgrader {
             let project_path = self
                 .project_dir
                 .join(self.template_to_project_path(rel_path));
-            let template_path = entry.path().to_path_buf();
+            let template_path = self.templates_dir.join(rel_path);
 
             let action = if !project_path.exists() {
                 UpgradeAction::Add
@@ -296,27 +370,36 @@ mod tests {
         std::fs::write(path, contents).unwrap();
     }
 
-    /// A synthetic `templates/project/` tree covering every categorization arm.
+    /// A synthetic `templates/` tree in the SHIPPED layout — scaffold files at
+    /// the top level, no `project/` wrapper — covering every categorization arm
+    /// plus the subtrees discovery must leave alone.
     fn synthetic_templates(root: &Path) {
-        let p = root.join("project");
+        let p = root;
         // Tooling
-        write(&p, "make/dev.mk", "dev-mk-v2\n");
-        write(&p, "scripts/setup.sh", "setup-v2\n");
-        write(&p, "Makefile.template", "makefile-v2\n");
+        write(p, "make/dev.mk", "dev-mk-v2\n");
+        write(p, "scripts/setup.sh", "setup-v2\n");
+        write(p, "scripts/.bashrc", "bashrc-v2\n");
+        write(p, "Makefile.template", "makefile-v2\n");
         // Conditional (cloudflare)
-        write(&p, "make/cloudflare.mk", "cf-mk-v2\n");
-        write(&p, "scripts/cf-deploy.sh", "cf-deploy-v2\n");
-        write(&p, "infra/cloudflare/wrangler.toml", "cf-toml-v2\n");
-        // Config (add-only)
-        write(&p, "docker/compose/app.yml", "compose-v2\n");
-        write(&p, "docker/config/env.app", "env-app-v2\n");
-        write(&p, "docker/system/traefik.yml", "system-v2\n");
-        write(&p, "docker/dockerfiles/Dockerfile.app", "dockerfile-v2\n");
+        write(p, "make/cloudflare.mk", "cf-mk-v2\n");
+        write(p, "scripts/cf-deploy.sh", "cf-deploy-v2\n");
+        // Config (add-only): the two shared env files `mx new` copies
+        write(p, "docker/config/env.shared", "env-shared-v2\n");
+        write(p, "docker/config/env.secrets.template", "env-secrets-v2\n");
+        // Out of scope — recipe-owned service pieces and infra templates
+        write(p, "docker/compose/app.yml", "compose-v2\n");
+        write(p, "docker/config/env.app", "env-app-v2\n");
+        write(p, "docker/system/traefik.yml", "system-v2\n");
+        write(p, "docker/dockerfiles/Dockerfile.app", "dockerfile-v2\n");
+        write(p, "infra/cloudflare/wrangler.toml", "cf-toml-v2\n");
         // Skip
-        write(&p, "recipes/astro/recipe.json", "{}\n");
-        write(&p, "router/docker-compose.yml", "router-v2\n");
-        write(&p, "project/nested.txt", "nested\n");
-        write(&p, "README.md", "readme\n");
+        write(p, "recipes/astro/recipe.json", "{}\n");
+        write(p, "router/docker-compose.yml", "router-v2\n");
+        write(p, "project/nested.txt", "nested\n");
+        write(p, "README.md", "readme\n");
+        // Nested helper bundle under scripts/ — walked, never adopted.
+        write(p, "scripts/md2pdf/md2pdf.ts", "md2pdf-v2\n");
+        write(p, "scripts/md2pdf/package.json", "{}\n");
     }
 
     fn entry_for<'a>(entries: &'a [UpgradeEntry], template_rel: &str) -> Option<&'a UpgradeEntry> {
@@ -340,6 +423,17 @@ mod tests {
             ("scripts/setup.sh", FileCategory::Tooling),
             ("scripts/gen.mjs", FileCategory::Tooling),
             ("Makefile.template", FileCategory::Tooling),
+            // bd:mech-crate-12p — `mx new` copies every top-level file of
+            // `templates/scripts/`, extension or not. The extension-based arm
+            // used to drop `.bashrc` (and any other extension-less helper) into
+            // Skip, so `mx upgrade` refreshed dev.sh/up.sh but never the helper
+            // library they source — the COMPOSE_PROJECT_NAME pin could never
+            // reach an existing project.
+            ("scripts/.bashrc", FileCategory::Tooling),
+            // `scripts/notes.txt` follows from the same rule: `mx new` ships it,
+            // so upgrade owns it. (It used to be Skip, which is precisely the
+            // bug above.)
+            ("scripts/notes.txt", FileCategory::Tooling),
             // docker config → add-only
             ("docker/compose/app.yml", FileCategory::Config),
             ("docker/config/env.app", FileCategory::Config),
@@ -355,7 +449,11 @@ mod tests {
             ("project/nested.txt", FileCategory::Skip),
             ("README.md", FileCategory::Skip),
             ("make/notes.txt", FileCategory::Skip),
-            ("scripts/notes.txt", FileCategory::Skip),
+            // Nested bundles under scripts/ are not copied by `mx new`, so
+            // upgrade must never add them.
+            ("scripts/md2pdf/md2pdf.ts", FileCategory::Skip),
+            ("scripts/md2pdf/package.json", FileCategory::Skip),
+            ("scripts/md2pdf/README.md", FileCategory::Skip),
         ];
 
         for (rel, expected) in cases {
@@ -436,6 +534,8 @@ mod tests {
             "router/docker-compose.yml",
             "project/nested.txt",
             "README.md",
+            "scripts/md2pdf/md2pdf.ts",
+            "scripts/md2pdf/package.json",
         ] {
             assert!(
                 entry_for(&entries, skipped).is_none(),
@@ -455,11 +555,7 @@ mod tests {
         assert!(!up.is_feature_enabled("cloudflare"));
         let entries = up.discover_upgrades().unwrap();
 
-        for cond in [
-            "make/cloudflare.mk",
-            "scripts/cf-deploy.sh",
-            "infra/cloudflare/wrangler.toml",
-        ] {
+        for cond in ["make/cloudflare.mk", "scripts/cf-deploy.sh"] {
             assert!(
                 entry_for(&entries, cond).is_none(),
                 "{cond} is cloudflare-conditional and the feature is off"
@@ -480,11 +576,9 @@ mod tests {
         assert!(up.is_feature_enabled("cloudflare"));
         let entries = up.discover_upgrades().unwrap();
 
-        for cond in [
-            "make/cloudflare.mk",
-            "scripts/cf-deploy.sh",
-            "infra/cloudflare/wrangler.toml",
-        ] {
+        // `infra/cloudflare/**` is deliberately out of discovery scope even with
+        // the feature on — see `upgrade_discovery_scope_mirrors_mx_new`.
+        for cond in ["make/cloudflare.mk", "scripts/cf-deploy.sh"] {
             let e = entry_for(&entries, cond)
                 .unwrap_or_else(|| panic!("{cond} missing with cloudflare enabled"));
             assert_eq!(
@@ -527,11 +621,15 @@ mod tests {
         let p = tempfile::tempdir().unwrap();
         synthetic_templates(t.path());
         // Existing config with *different* content must still not be updated.
-        write(p.path(), "docker/compose/app.yml", "hand-edited-by-user\n");
+        write(
+            p.path(),
+            "docker/.config/.env.shared",
+            "hand-edited-by-user\n",
+        );
 
         let entries = upgrader(t.path(), p.path()).discover_upgrades().unwrap();
 
-        let existing = entry_for(&entries, "docker/compose/app.yml").unwrap();
+        let existing = entry_for(&entries, "docker/config/env.shared").unwrap();
         assert_eq!(existing.category, FileCategory::Config);
         assert!(
             matches!(existing.action, UpgradeAction::Skip),
@@ -539,7 +637,7 @@ mod tests {
             existing.action
         );
 
-        let missing = entry_for(&entries, "docker/system/traefik.yml").unwrap();
+        let missing = entry_for(&entries, "docker/config/env.secrets.template").unwrap();
         assert!(
             matches!(missing.action, UpgradeAction::Add),
             "missing config should be added, got {:?}",
@@ -555,16 +653,67 @@ mod tests {
 
         let entries = upgrader(t.path(), p.path()).discover_upgrades().unwrap();
 
-        let env = entry_for(&entries, "docker/config/env.app").unwrap();
-        assert_eq!(env.project_path, p.path().join("docker/.config/.env.app"));
+        let env = entry_for(&entries, "docker/config/env.shared").unwrap();
+        assert_eq!(
+            env.project_path,
+            p.path().join("docker/.config/.env.shared")
+        );
+    }
+
+    /// Discovery owns exactly what `mx new` lays down. Recipe-owned service
+    /// pieces and `mx infra setup`-owned templates must never be force-fed into
+    /// an existing project: `scripts/.bashrc` builds a service-less `make dev`
+    /// context by globbing `docker/compose/*.yml`, so seeding the reference
+    /// stack would boot postgres/redis/nginx/traefik unasked, and the `infra/`
+    /// templates still carry `{{PROJECT_NAME}}` placeholders that
+    /// `mx infra setup` expands.
+    #[test]
+    fn upgrade_discovery_scope_mirrors_mx_new() {
+        let t = tempfile::tempdir().unwrap();
+        let p = tempfile::tempdir().unwrap();
+        synthetic_templates(t.path());
+        // Cloudflare on: even then, infra templates stay out of scope.
+        std::fs::create_dir_all(p.path().join("infra/cloudflare")).unwrap();
+
+        let entries = upgrader(t.path(), p.path()).discover_upgrades().unwrap();
+
+        for out_of_scope in [
+            "docker/compose/app.yml",
+            "docker/system/traefik.yml",
+            "docker/dockerfiles/Dockerfile.app",
+            "docker/config/env.app",
+            "infra/cloudflare/wrangler.toml",
+        ] {
+            assert!(
+                entry_for(&entries, out_of_scope).is_none(),
+                "{out_of_scope} is recipe/infra-owned and must stay out of the upgrade set"
+            );
+        }
+
+        // The skeleton `mx new` copies is in scope — including the
+        // extension-less helper library (bd:mech-crate-12p).
+        for in_scope in [
+            "Makefile.template",
+            "make/dev.mk",
+            "scripts/setup.sh",
+            "scripts/.bashrc",
+            "docker/config/env.shared",
+            "docker/config/env.secrets.template",
+        ] {
+            assert!(
+                entry_for(&entries, in_scope).is_some(),
+                "{in_scope} is part of the project skeleton and must be discovered"
+            );
+        }
     }
 
     #[test]
     fn upgrade_discovery_errors_when_project_templates_missing() {
         let t = tempfile::tempdir().unwrap();
         let p = tempfile::tempdir().unwrap();
+        let missing = t.path().join("no-such-templates");
 
-        let err = upgrader(t.path(), p.path())
+        let err = upgrader(&missing, p.path())
             .discover_upgrades()
             .unwrap_err();
         assert!(
@@ -573,17 +722,14 @@ mod tests {
         );
     }
 
-    // ── Known-broken lane (bd:mech-crate-z5i) ────────────────────────────
+    // ── Real shipped layout (was bd:mech-crate-z5i) ──────────────────────
 
-    /// `discover_upgrades()` reads `<templates>/project/`, but the shipped
-    /// `templates/` tree has no `project/` subdirectory — scaffold files live
-    /// at the top level (`make/`, `scripts/`, `docker/`, `Makefile.template`).
-    /// So `mx upgrade` errors out for every real installation.
-    ///
-    /// This test asserts the FIXED behavior against the repo's real layout and
-    /// is expected to be RED until bd:mech-crate-z5i lands.
+    /// Regression net for bd:mech-crate-z5i: `discover_upgrades()` used to read
+    /// `<templates>/project/`, but the shipped `templates/` tree has no
+    /// `project/` subdirectory — scaffold files live at the top level
+    /// (`make/`, `scripts/`, `docker/`, `Makefile.template`), so `mx upgrade`
+    /// errored out for every real installation.
     #[test]
-    #[ignore = "bd:mech-crate-z5i fix mx upgrade: reads non-existent templates/project/"]
     fn upgrade_discovery_works_against_real_templates_layout() {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -607,9 +753,107 @@ mod tests {
             "discover_upgrades() must succeed against the shipped templates/ layout, got: {:?}",
             result.as_ref().err()
         );
+        let entries = result.unwrap();
         assert!(
-            !result.unwrap().is_empty(),
+            !entries.is_empty(),
             "discover_upgrades() must find scaffold files in the shipped templates/ layout"
         );
+
+        // The real skeleton: Makefile.template → Makefile, make modules, scripts.
+        let mk = entry_for(&entries, "Makefile.template")
+            .expect("the shipped Makefile.template must be discovered");
+        assert_eq!(mk.project_path, project.path().join("Makefile"));
+        assert!(
+            entry_for(&entries, "make/dev.mk").is_some(),
+            "the shipped make/ modules must be discovered"
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.template_path.to_string_lossy().contains("/scripts/")),
+            "the shipped scripts/ must be discovered"
+        );
+
+        // And nothing recipe- or infra-owned rides along. `scripts/md2pdf/` is
+        // a nested helper bundle `mx new` never copies — upgrade must not add
+        // it either (bd:mech-crate-12p).
+        for forbidden in [
+            "/recipes/",
+            "/router/",
+            "/docker/compose/",
+            "/infra/",
+            "/scripts/md2pdf/",
+        ] {
+            assert!(
+                !entries
+                    .iter()
+                    .any(|e| e.template_path.to_string_lossy().contains(forbidden)),
+                "{forbidden} must stay out of the upgrade set"
+            );
+        }
+    }
+
+    /// bd:mech-crate-12p — `mx upgrade` must deliver the SHIPPED
+    /// `templates/scripts/.bashrc`. It is the helper library every other script
+    /// sources (`compose_context_files`, `run_service_in_context`, and the
+    /// `COMPOSE_PROJECT_NAME` pin of bd:mech-crate-71u), but the old
+    /// extension-based categorization arm classified it `Skip`, so upgrade
+    /// refreshed `dev.sh`/`up.sh` and left the library they depend on frozen at
+    /// whatever version the project was scaffolded with.
+    #[test]
+    fn upgrade_discovers_the_shipped_extensionless_script_helpers() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("crates/mx-lib should sit two levels below the repo root")
+            .to_path_buf();
+        let templates = repo_root.join("templates");
+        assert!(
+            templates.join("scripts/.bashrc").is_file(),
+            "setup: templates/scripts/.bashrc must exist"
+        );
+
+        let project = tempfile::tempdir().unwrap();
+        crate::test_support::scaffold_project(project.path());
+        // A project scaffolded with a stale helper library: upgrade must offer
+        // to update it, not skip it.
+        std::fs::write(project.path().join("scripts/.bashrc"), "stale-helpers\n").unwrap();
+
+        let entries = upgrader(&templates, project.path())
+            .discover_upgrades()
+            .unwrap();
+
+        let bashrc = entry_for(&entries, "scripts/.bashrc")
+            .expect("the shipped scripts/.bashrc must be discovered");
+        assert_eq!(bashrc.category, FileCategory::Tooling);
+        assert_eq!(
+            bashrc.project_path,
+            project.path().join("scripts/.bashrc"),
+            "dotfiles map straight through, no path remap"
+        );
+        assert!(
+            matches!(bashrc.action, UpgradeAction::Update),
+            "a stale scripts/.bashrc must be offered as an Update, got {:?}",
+            bashrc.action
+        );
+
+        // Every other extension-less top-level file in templates/scripts/ rides
+        // the same rule — the test must not hard-code only `.bashrc`.
+        for entry in std::fs::read_dir(templates.join("scripts"))
+            .unwrap()
+            .flatten()
+        {
+            let path = entry.path();
+            if !path.is_file() || path.extension().is_some() {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let rel = format!("scripts/{name}");
+            assert_eq!(
+                upgrader(&templates, project.path()).categorize_file(&rel),
+                FileCategory::Tooling,
+                "{rel} is copied by `mx new` and must be upgrade-owned"
+            );
+        }
     }
 }

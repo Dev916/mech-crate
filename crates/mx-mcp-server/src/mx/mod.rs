@@ -315,10 +315,15 @@ impl MakeExecutor {
         working_dir: &Path,
     ) -> McpResult<CommandOutput> {
         // For shell commands, we need to execute differently since it's interactive
-        // Instead, we provide information about how to shell in
+        // Instead, we provide information about how to shell in.
+        //
+        // The fallback goes through `docker compose exec <service>`, never
+        // `docker exec <name>`: no shipped compose file pins a `container_name`
+        // any more (bd:mech-crate-xhf), so the container is called
+        // `<project>-<service>-<index>` and only the SERVICE name is stable.
         let output = format!(
-            "To shell into service '{}', run:\n  cd {:?} && make sh s={}\n\nOr use docker exec directly:\n  docker exec -it {} bash",
-            service, working_dir, service, service
+            "To shell into service '{}', run:\n  cd {:?} && make sh s={}\n\nOr through compose directly (container names are compose-derived, so address the service):\n  cd {:?} && docker compose -p \"$COMPOSE_PROJECT_NAME\" exec {} sh",
+            service, working_dir, service, working_dir, service
         );
 
         Ok(CommandOutput {

@@ -1,116 +1,95 @@
-# {{SERVICE_NAME}} - Astro 5 + Vue 3 SSR
+# {{SERVICE_NAME}} — Astro
 
-Full-stack Astro 5 application with Vue 3 islands, SSR, and Apple-inspired design.
+An Astro app scaffolded by `create-astro`, wired into the mx stack.
 
-## Stack
+## Who owns what
 
-- **Astro 5** - Islands architecture, SSR with Node adapter
-- **Vue 3** - Composition API, `<script setup>`
-- **shadcn-vue** - UI primitives (via Radix Vue)
-- **PrimeVue 4** - Advanced UI components
-- **Tailwind CSS** - Utility-first styling
-- **Pinia** - Global state management
-- **Drizzle ORM** - Type-safe database queries
-- **PostgreSQL** - Primary database
-- **Redis** - Caching and sessions
-- **Docker** - Containerized deployment
+The framework scaffolder owns your app: `package.json`, `tsconfig.json`,
+`astro.config.mjs`, the starter pages, and every dependency you add. This recipe
+owns the infrastructure around it — Docker builds, compose files, env templates,
+Traefik routing — plus exactly one app file: `src/pages/api/health.ts`, a
+dependency-free health endpoint the container healthcheck probes.
+
+That means this app starts minimal on purpose. Add what you need the normal way:
+
+```bash
+npx astro add vue tailwind        # frameworks and integrations
+npm install drizzle-orm ioredis   # whatever the app actually uses
+```
 
 ## Getting Started
 
 ```bash
-# Install dependencies
+# With Docker (recommended — brings up Postgres and Redis too)
+make dev s={{SERVICE_NAME}}
+
+# Or directly
 npm install
-
-# Start development server
 npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm run start
 ```
+
+Your service is routed at `http://{{DOMAIN}}` once the stack is up. Check
+`http://{{DOMAIN}}/api/health`.
 
 ## Docker
 
 ```bash
-# Development
-docker compose -f docker/compose/{{SERVICE_NAME}}.yml -f docker/compose/{{SERVICE_NAME}}.dev.yml up
+# Development (hot reload, source bind-mounted)
+make dev s={{SERVICE_NAME}}
 
-# Production
-docker compose -f docker/compose/{{SERVICE_NAME}}.yml up -d
+# Production-shaped image
+make build s={{SERVICE_NAME}}
 ```
 
-## Project Structure
+The Dockerfile's `production` stage serves whatever `astro build` produced. With
+the default scaffold that is a static `dist/`, served by the `preview` script.
+Run `npx astro add node` and the same stage execs `dist/server/entry.mjs`
+instead — no Dockerfile change needed.
 
+## Re-scaffolding
+
+`mx add` never overwrites an app that already has files in it. To start the app
+over from a clean scaffold (this **deletes** `apps/{{SERVICE_NAME}}`):
+
+```bash
+mx add {{SERVICE_NAME}} --recipe astro --opt force_init=true
 ```
-src/
-├── components/      # Vue components
-│   ├── ui/          # shadcn-vue primitives
-│   └── layout/      # Layout components
-├── layouts/         # Astro layouts
-├── pages/           # Astro pages & API routes
-│   └── api/         # API endpoints
-├── stores/          # Pinia stores
-├── lib/             # Utilities
-│   ├── db/          # Database (Drizzle)
-│   └── redis/       # Redis client
-├── styles/          # Global CSS
-└── types/           # TypeScript types
-```
-
-## Features
-
-- **SSR by default** - Fast initial loads, SEO-friendly
-- **Vue islands** - Interactive components hydrate on demand
-- **Type-safe everywhere** - TypeScript strict mode enabled
-- **Global state** - Pinia store with theme, language, notifications
-- **Database ready** - PostgreSQL with Drizzle ORM migrations
-- **Caching** - Redis for sessions and data caching
-- **Apple design** - Carefully crafted typography and spacing
-- **Cloudflare ready** - Multi-stage Docker builds
 
 ## Environment Variables
 
-Astro uses Vite's environment variable handling with a key distinction:
+Astro uses Vite's environment variable handling, with one key distinction:
 
-- **`PUBLIC_` prefix** - Available on both server AND client
-- **No prefix** - Server-side only (for security)
+- **`PUBLIC_` prefix** — available on both server AND client
+- **No prefix** — server-side only (for security)
 
 ### Server-Only Variables (never exposed to client)
 
 ```env
-# These are ONLY accessible in Astro frontmatter and API routes
 NODE_ENV=development
 PORT=4321
-DATABASE_URL=postgres://user:pass@localhost:5432/db
-REDIS_URL=redis://localhost:6379
+DATABASE_URL=postgres://user:pass@db:5432/db
+REDIS_URL=redis://redis:6379
 SESSION_SECRET=your-secret-key
-API_SECRET_KEY=your-api-key
 ```
 
 ### Public Variables (accessible everywhere)
 
 ```env
-# These are accessible in both server code AND client-side Vue components
 PUBLIC_APP_NAME={{SERVICE_NAME}}
-PUBLIC_APP_URL=http://localhost:4321
-PUBLIC_API_BASE_URL=http://localhost:4321/api
-PUBLIC_ENABLE_ANALYTICS=false
-PUBLIC_ENABLE_DEBUG_MODE=true
+PUBLIC_APP_URL=http://{{DOMAIN}}
+PUBLIC_API_BASE_URL=http://{{DOMAIN}}/api
 ```
 
-### Usage Examples
+Values come from `docker/.config/.env.shared`, `.env.secrets` and
+`.env.{{SERVICE_NAME}}`, layered in that order — last one wins.
+
+### Usage
 
 **In Astro frontmatter (server-side):**
 
 ```astro
 ---
-// Server-side only vars (safe to use)
-const dbUrl = import.meta.env.DATABASE_URL;
-const secret = import.meta.env.SESSION_SECRET;
-
-// Public vars also work here
+const dbUrl = import.meta.env.DATABASE_URL;     // server-only, safe here
 const appName = import.meta.env.PUBLIC_APP_NAME;
 ---
 ```
@@ -120,56 +99,21 @@ const appName = import.meta.env.PUBLIC_APP_NAME;
 ```typescript
 // src/pages/api/data.ts
 export const GET: APIRoute = async () => {
-  // All env vars are accessible here
   const dbUrl = import.meta.env.DATABASE_URL;
-  const apiKey = import.meta.env.API_SECRET_KEY;
   // ...
 };
 ```
 
-**In Vue components (client-side):**
+**In client components:**
 
-```vue
-<script setup lang="ts">
-// ✅ PUBLIC_ vars work in Vue components
-const appName = import.meta.env.PUBLIC_APP_NAME;
-const apiUrl = import.meta.env.PUBLIC_API_BASE_URL;
-
-// ❌ Server-only vars are undefined here (as expected!)
-const dbUrl = import.meta.env.DATABASE_URL; // undefined
-</script>
+```ts
+const appName = import.meta.env.PUBLIC_APP_NAME;   // ✅ PUBLIC_ vars reach the client
+const dbUrl = import.meta.env.DATABASE_URL;        // ❌ undefined here, as intended
 ```
 
-### Type Safety
+## Output Mode
 
-Environment variables are typed in `src/env.d.ts`:
-
-```typescript
-interface ImportMetaEnv {
-  // Server-only
-  readonly DATABASE_URL: string;
-  readonly SESSION_SECRET: string;
-
-  // Public (client + server)
-  readonly PUBLIC_APP_NAME: string;
-  readonly PUBLIC_API_BASE_URL: string;
-}
-```
-
-## Vue Islands (Hydration Directives)
-
-Use client directives to control when Vue components hydrate:
-
-```astro
-<!-- Load immediately -->
-<Hero client:load />
-
-<!-- Load when visible -->
-<Features client:visible />
-
-<!-- Load when browser is idle -->
-<Analytics client:idle />
-
-<!-- Load based on media query -->
-<MobileMenu client:media="(max-width: 768px)" />
-```
+The default scaffold has no adapter, so Astro prerenders everything at build time
+— including `src/pages/api/health.ts`, which lands as `dist/api/health`. Add
+`export const prerender = false` to a route only *after* configuring an adapter
+(`npx astro add node`), or the build will fail.

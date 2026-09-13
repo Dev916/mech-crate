@@ -45,10 +45,46 @@ print_info "Checking project structure..."
 [[ -d "docker/.config" ]] && print_success "docker/.config/ exists" || print_warn "docker/.config/ missing"
 
 # Check for secrets file
+#
+# A value check, not just an existence check, and deliberately a cheap one: no
+# docker, no compose, just string comparison. An empty or still-placeholder
+# credential is the failure that used to show up as "db container unhealthy"
+# minutes into `make dev` — postgres refuses to initialize with an empty
+# POSTGRES_PASSWORD. The rules for "unset" live in scripts/.bashrc, shared with
+# scripts/generate-secrets.sh, so the two can never disagree.
 if [[ -f "docker/.config/.env.secrets" ]]; then
     print_success "Secrets file exists"
+
+    unset_secrets="$(mech_unset_secret_keys docker/.config/.env.secrets)"
+    if [[ -n "$unset_secrets" ]]; then
+        print_warn "These keys in docker/.config/.env.secrets have no value yet:"
+        while IFS= read -r key; do
+            [[ -n "$key" ]] && echo "    - $key"
+        done <<< "$unset_secrets"
+        print_warn "Run 'make init' to generate dev values (it never overwrites one you set)."
+    else
+        print_success "Secrets all have values"
+    fi
+
+    # A `${VAR}` left in any env file is a latent empty: compose interpolates
+    # env_file values from the compose project directory's .env, never from a
+    # sibling env file, so the container receives nothing.
+    dangling=""
+    for env_file in docker/.config/.env.*; do
+        [[ -f "$env_file" ]] || continue
+        [[ "$env_file" == *.template ]] && continue
+        while IFS= read -r ref_line; do
+            [[ -n "$ref_line" ]] && dangling+="    - $env_file: $ref_line\n"
+        done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=.*\$\{' "$env_file" 2>/dev/null || true)
+    done
+    if [[ -n "$dangling" ]]; then
+        print_warn "These env values still reference a variable compose cannot resolve"
+        print_warn "from a sibling env file, so they arrive empty in the container:"
+        echo -en "$dangling"
+        print_warn "Run 'make init' to materialize them as literals."
+    fi
 else
-    print_warn "Secrets file missing - copy from .env.secrets.template"
+    print_warn "Secrets file missing - run 'make init' to create and fill it"
 fi
 
 # Check Docker network
@@ -57,6 +93,63 @@ if docker network inspect "$NETWORK_NAME" &>/dev/null; then
     print_success "Docker network '$NETWORK_NAME' exists"
 else
     print_warn "Docker network '$NETWORK_NAME' not found - run 'make init'"
+fi
+
+# Check compose project name
+#
+# Every script here pins `-p "$COMPOSE_PROJECT_NAME"` (see scripts/.bashrc), so
+# this project's containers live in their own namespace. Migration hazard: a
+# project whose containers were started BEFORE that pin landed ran under the
+# name compose derives from the compose file's parent directory — "compose",
+# shared by every mx project on the machine. Those containers are now orphaned:
+# `make down`/`make ps` under the pinned name cannot see them.
+#
+# One `docker ps` surfaces it. Only the legacy default namespace is inspected —
+# containers under any other project name belong to another stack and are none
+# of this project's business. Ownership is settled by compose's own
+# `project.working_dir` label, so an orphan of THIS project is never confused
+# with another project that is also sitting in the shared default namespace.
+echo ""
+print_info "Checking compose project name..."
+print_success "Compose project name: $COMPOSE_PROJECT_NAME"
+legacy_project="$(mech_compose_project_name "$(pwd)/docker/compose")"
+if [[ "$legacy_project" == "$COMPOSE_PROJECT_NAME" ]]; then
+    : # nothing to migrate from
+elif command -v docker &> /dev/null && docker ps --format '{{.ID}}' &>/dev/null; then
+    declared_services=""
+    for yml in docker/compose/*.yml; do
+        if [[ -f "$yml" && ! "$(basename "$yml")" =~ \.dev\.yml$ ]]; then
+            declared_services+=" $(basename "$yml" .yml)"
+        fi
+    done
+
+    orphans=""
+    neighbours=""
+    while IFS='|' read -r proj svc name wdir; do
+        [[ "$proj" == "$legacy_project" ]] || continue
+        [[ " $declared_services " == *" $svc "* ]] || continue
+        if [[ "$wdir" == "$(pwd)/docker/compose" ]]; then
+            orphans+="    - $name (service '$svc')\n"
+        else
+            neighbours+="    - $name (service '$svc', from $wdir)\n"
+        fi
+    done < <(docker ps --format '{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}|{{.Names}}|{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null)
+
+    if [[ -n "$orphans" ]]; then
+        print_warn "These containers are THIS project's, but still running under the old"
+        print_warn "shared project name '$legacy_project' - 'make down' won't see them:"
+        echo -en "$orphans"
+        print_warn "Remove them once with: docker rm -f <name>   then 'make dev' again."
+    else
+        print_success "No orphans left under the old '$legacy_project' project name"
+    fi
+    if [[ -n "$neighbours" ]]; then
+        print_info "Another stack is using the shared default project name '$legacy_project':"
+        echo -en "$neighbours"
+        print_info "Left alone - pinning '$COMPOSE_PROJECT_NAME' is what keeps this project out of it."
+    fi
+else
+    print_warn "Docker not reachable - skipped the compose project name check"
 fi
 
 # List available services

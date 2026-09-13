@@ -317,7 +317,16 @@ export interface AgentInstructionsOptions {
  * Every claim here is checkable against the site, and the awkward ones are
  * stated rather than smoothed over — a model that installs mx from a package
  * registry that does not exist, or that invents a plausible flag, wastes a user's
- * afternoon. Honesty about `mx upgrade` is deliberate for the same reason.
+ * afternoon. The `mx upgrade` bullet follows the same rule: it said "mid-repair"
+ * while discovery was broken, and now that it works it states the migrations that
+ * cost an agent something, because an agent that runs upgrade on a project with
+ * containers up needs to know both that their namespace changed and that their
+ * names are no longer the fixed ones a script may have hard-coded.
+ *
+ * The two bullets after it exist because both failure modes were observed rather
+ * than imagined. An agent that believes `.env.secrets` must be filled by hand
+ * invents a password for the user, which is worse than the empty value it is
+ * replacing; an agent that writes `make dev s=api site` hands make a second goal.
  */
 export function agentInstructions(options: AgentInstructionsOptions = {}): string[] {
   const { origin = SITE_ORIGIN, categories = [], generatedAt } = options;
@@ -334,7 +343,9 @@ export function agentInstructions(options: AgentInstructionsOptions = {}): strin
     '',
     `- **Install from source.** mx is not published to npm, cargo or Homebrew — there is no package to install, stale or otherwise. Build it from the repository: \`${INSTALL_COMMAND}\`, which puts a release binary in \`~/.local/bin\`. See ${url('/docs/start/install/')}.`,
     `- **Do not invent flags.** Every \`mx\` and \`make\` verb, with its real flags, is listed at ${url('/docs/start/cli-reference/')}, taken from the shipped \`--help\` output. A flag that is not on that page does not exist; do not carry one over from a similar tool.`,
-    `- **\`mx upgrade\` is mid-repair.** On the current build it fails before doing anything, so do not plan work around it. What it is meant to do, and where it stops, is at ${url('/docs/framework/upgrade/')}; every open defect with a red test behind it is at ${url('/docs/project/known-broken/')}.`,
+    `- **\`mx upgrade\` works, and two migrations ride with it.** It offers mx's own tooling files for update, never overwrites compose files or dockerfiles, and backs up what it replaces. First, projects now pin \`COMPOSE_PROJECT_NAME\` per project, so containers started before the upgrade are orphaned under the old shared default and \`make down\` will not see them. Run \`make doctor\`, which names them. Second, no shipped compose file sets \`container_name\` any more, so a container's name is Compose's own \`<COMPOSE_PROJECT_NAME>-<service>-<index>\` (\`myproj-db-1\`). Service names are unchanged, so \`depends_on\`, \`make sh s=db\` and the Traefik labels all still work; what breaks is \`docker exec db …\` or \`docker logs api\` in a script. Use \`make exec s=db c=…\` / \`make logs s=api\`, or \`docker compose -p "$COMPOSE_PROJECT_NAME" exec db …\`. The global router container is the one exception and stays \`mx-router\`. Details at ${url('/docs/framework/upgrade/')}; every open defect with a red test behind it is at ${url('/docs/project/known-broken/')}.`,
+    `- **A scaffolded project needs no hand edit to start.** \`mx new\`, then \`mx add <svc> --recipe <r>\`, then \`make dev\`, is the whole path even for a recipe that brings Postgres: \`make init\` (which \`make dev\` runs) generates the development credentials, filling only values still empty or still a placeholder. Do not tell a user to populate \`docker/.config/.env.secrets\` first, and do not invent a credential for them. \`REDIS_PASSWORD\` is blank by design. \`make doctor\` names anything genuinely unset. See ${url('/docs/start/first-project/')}.`,
+    `- **\`s=\` selects services, and sometimes takes a list.** \`make dev s="api site"\` starts a named subset; the quotes are required, because make otherwise reads the second name as another goal. \`dev\`, \`up\`, \`down\`, \`stop\`, \`restart\` and \`logs\` accept a list. \`build\`, \`run\`, \`exec\` and \`sh\` act on exactly one image or container and refuse a list rather than using the first name. Full table at ${url('/docs/start/cli-reference/')}.`,
     `- **Every page has a markdown twin.** Append \`.md\` to a page URL for its source markdown without the HTML chrome — ${url('/docs/start/install/')} is also ${url('/docs/start/install.md')}. Each page advertises its own twin as \`<link rel="alternate" type="text/markdown">\`.`,
     `- **Retrieve in bulk instead of crawling.** ${retrieval.length} concatenated files carry the same text as the pages:`,
     ...retrieval.map((file) => `  - ${file}`),

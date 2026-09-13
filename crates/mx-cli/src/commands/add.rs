@@ -8,7 +8,7 @@ use console::style;
 use dialoguer::Select;
 
 use mx_lib::project::ProjectDetector;
-use mx_lib::recipe::RecipeInstaller;
+use mx_lib::recipe::{InitAppOutcome, RecipeInstaller};
 use mx_lib::{is_initialized, templates_dir};
 
 /// Add a service to the project
@@ -74,11 +74,44 @@ impl AddCommand {
             }
         }
 
+        // Recipes with an app scaffolder shell out to `npm create` / `nuxi init`
+        // / `zola init`, which download before they print anything. Say so, or a
+        // minute of silence reads as a hang.
+        if recipe.init_app.is_some() {
+            println!(
+                "{} Scaffolding the app (running the framework's own initializer)…",
+                style("→").cyan()
+            );
+        }
+
         // Install the recipe
         let result = installer.install(&recipe, &project_root, &self.name, &option_values)?;
 
         // Print results
         println!();
+        match &result.init_app {
+            Some(InitAppOutcome::Ran { command }) => {
+                println!("Scaffolded with: {}", style(command).dim());
+            }
+            Some(InitAppOutcome::Reinitialized {
+                command,
+                target_dir,
+            }) => {
+                println!(
+                    "{} force_init: deleted {} and re-scaffolded",
+                    style("!").yellow().bold(),
+                    style(target_dir).dim()
+                );
+                println!("Scaffolded with: {}", style(command).dim());
+            }
+            Some(InitAppOutcome::SkippedExisting { target_dir }) => {
+                println!(
+                    "Scaffolder skipped: {} already holds an app",
+                    style(target_dir).dim()
+                );
+            }
+            None => {}
+        }
         println!(
             "{} Service added: {}",
             style("✓").green().bold(),
