@@ -32,3 +32,4 @@ Format: `- [ ] <topic> — <one-line why> (added YYYY-MM-DD by <who>)`
 - [ ] PostgreSQL 19 GA (Sept 2026): verify pgvector compatibility before any Neon/local PG major upgrade (added 2026-08-14 by technique-research)
 - [ ] Local-inference hardware re-check: rumored high-memory M5 Ultra Mac Studio (~Oct 2026) vs the current 96GB ceiling; revisit local-vs-API math only if it ships (added 2026-08-14 by technique-research)
 - [ ] MCP Tasks V2 wire protocol — V1 was too involved for client adoption; re-check when the redesign lands in released SDKs (added 2026-08-14 by technique-research)
+- [ ] real-time streaming voice-agent pipelines (STT/LLM/TTS staging, turn-taking, barge-in) — no corpus coverage; needed for meeting-agent work (added 2026-08-26 by techniques-skill)

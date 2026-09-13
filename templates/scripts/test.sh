@@ -11,7 +11,7 @@ service=$1
 if [ -n "$service" ]; then
     print_info "Running tests for $service..."
     files=$(compose_context_files "$service" "true")
-    docker compose $files run --rm "$service" npm test
+    docker compose -p "$COMPOSE_PROJECT_NAME" $files run --rm "$service" npm test
 else
     print_info "Running all tests..."
     # Run tests for each service that has a test command
@@ -20,7 +20,7 @@ else
             svc=$(basename "$yml" .yml)
             print_info "Testing $svc..."
             files=$(compose_context_files "$svc" "true")
-            docker compose $files run --rm "$svc" npm test 2>/dev/null || true
+            docker compose -p "$COMPOSE_PROJECT_NAME" $files run --rm "$svc" npm test 2>/dev/null || true
         fi
     done
 fi

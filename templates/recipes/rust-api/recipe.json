@@ -55,7 +55,7 @@
     "apps/{{SERVICE_NAME}}/src/infra/config",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
-    "docker/config"
+    "docker/.config"
   ],
   
   "templates": [
@@ -70,7 +70,6 @@
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
-    { "from": "config/env.service", "to": "docker/config/.env.{{SERVICE_NAME}}" },
     { "from": "config/env.db", "to": "docker/.config/.env.db" },
 
     { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" },

@@ -49,6 +49,10 @@ if [ -z "$SERVICE" ]; then
     exit 1
 fi
 
+# One image, one tag, one Dockerfile per run: a list has no meaning here
+# (bd:mech-crate-3kq).
+mech_require_single_service "$SERVICE" "make build" || exit 1
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Determine Dockerfile
 # ─────────────────────────────────────────────────────────────────────────────

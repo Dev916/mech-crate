@@ -21,7 +21,8 @@ is built from the repository's own index rather than transcribed, so it cannot
 drift into flattery. If a row is on this page, the defect is open today.
 
 The same posture runs through the docs: the [upgrade](/docs/framework/upgrade/)
-page says `mx upgrade` is broken, the [RAG setup](/docs/ai/rag-setup/) page says
-the lexical retrieval arm underperforms by a measured factor, and
-[testing](/docs/framework/testing/) links the CI runs where each gate was proven
-to fail rather than asserting that it would.
+page documents the migration its own fix imposes on you rather than only the good
+news, the [RAG setup](/docs/ai/rag-setup/) page says the lexical retrieval arm
+underperforms by a measured factor, and [testing](/docs/framework/testing/) links
+the CI runs where each gate was proven to fail rather than asserting that it
+would.

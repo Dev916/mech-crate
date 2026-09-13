@@ -54,9 +54,10 @@ inspect what a recipe would install before installing it. This is where an agent
 gets a working service instead of a directory of guesses. The recipe carries
 the compose files, dockerfile, env conventions and router labels with it.
 
-`mx_upgrade` is currently broken by
-[`mech-crate-z5i`](/docs/project/known-broken/); see
-[Upgrade](/docs/framework/upgrade/).
+`mx_upgrade` carries template improvements into a project that already exists.
+What it will offer and what it will never overwrite is on
+[Upgrade](/docs/framework/upgrade/), including the compose project name migration
+an agent should read before accepting a run on a project with containers up.
 
 ### Operate (18 tools)
 

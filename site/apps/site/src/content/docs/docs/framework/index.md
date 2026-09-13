@@ -15,7 +15,7 @@ operational, and the honest state of each part.
 | [Recipes](/docs/framework/recipes/) | What ships, what each recipe carries, measured status, and how to author one |
 | [Compose &amp; env conventions](/docs/framework/compose-env/) | Baseline + dev override layering; the three env layers and their real precedence |
 | [Infra credentials](/docs/framework/infra-credentials/) | `mx infra`: where provider credentials live, global versus per-project |
-| [Upgrade](/docs/framework/upgrade/) | Keeping a project current with the templates, and why it is currently broken |
+| [Upgrade](/docs/framework/upgrade/) | Keeping a project current with the templates, what is never overwritten, and the compose project name migration |
 | [Testing](/docs/framework/testing/) | The gates, why they are proven rather than assumed, and the known-broken lane |
 | [Cloudflare deploy](/docs/framework/cloudflare-deploy/) | The `cf-*` targets, and how this site is meant to ship |
 | [Remote blueprints](/docs/framework/unyform/) | The optional Unyform integration |
