@@ -19,7 +19,6 @@ services:
       context: ../../apps/site
       dockerfile: ../../docker/dockerfiles/site/app
       target: runner
-    container_name: site
     restart: unless-stopped
     env_file:
       - ../.config/.env.secrets

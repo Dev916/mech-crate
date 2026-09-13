@@ -90,3 +90,6 @@ tokio-test = "0.4"
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 proptest = { workspace = true }
+# Compose-file introspection in the recipe conformance sweep (already a
+# first-order dependency of this crate; listed here so integration tests see it).
+serde_yaml = { workspace = true }

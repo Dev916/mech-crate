@@ -15,10 +15,11 @@ services:
       target: production
       args:
         - ZOLA_VERSION=${ZOLA_VERSION:-{{ZOLA_VERSION}}}
-    container_name: {{SERVICE_SLUG}}
     restart: unless-stopped
     env_file:
+      # Documented layering, last one winning: shared → secrets → service.
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - APP_ENV=production

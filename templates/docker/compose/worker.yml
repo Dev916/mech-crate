@@ -6,7 +6,6 @@ services:
       context: ../..
       dockerfile: docker/dockerfiles/app/app
       target: production
-    container_name: worker
     command: npm run worker
     env_file:
       - ../.config/.env.shared

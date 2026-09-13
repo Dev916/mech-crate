@@ -13,7 +13,6 @@ services:
       target: development
       args:
         - ZOLA_VERSION=${ZOLA_VERSION:-{{ZOLA_VERSION}}}
-    container_name: {{SERVICE_SLUG}}-dev
     environment:
       - APP_ENV=development
       - ZOLA_PORT={{PORT}}
