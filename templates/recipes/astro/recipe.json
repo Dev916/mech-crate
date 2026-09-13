@@ -35,8 +35,8 @@
     },
     "init_cmd": {
       "flag": "--init-cmd",
-      "default": "CI=true npm create astro@latest {{SERVICE_NAME}} -- --template minimal --no-install",
-      "description": "Command to scaffold the Astro app (runs from ./apps)"
+      "default": "CI=true npm create astro@latest {{SERVICE_NAME}} -- --template minimal --no-install --no-git --no-ai --skip-houston --yes",
+      "description": "Command to scaffold the Astro app (runs from ./apps; must be non-interactive and must create {{SERVICE_NAME}}/)"
     },
     "force_init": {
       "flag": "--force-init",

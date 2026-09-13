@@ -82,41 +82,174 @@ fn every_shipped_recipe_parses_into_the_typed_struct() {
 
 // ── Installer round-trip ─────────────────────────────────────────────────────
 
+/// Marker the stub scaffolder leaves behind, standing in for the framework
+/// markers (`package.json`, `config.toml`) the real tools write.
+const SCAFFOLD_MARKER: &str = ".mx-scaffolder-ran";
+
+/// Offline stand-in for a recipe's network scaffolder.
+///
+/// Every recipe that declares an `init_app` routes its command through the
+/// `init_cmd` option, so the suite swaps in a shell one-liner that does what the
+/// real scaffolders do — create `<service>/` and drop a marker in it — with no
+/// npm, npx, zola or network. The installer still walks its real code path: the
+/// skip decision, cwd creation, `sh -c`, outcome reporting.
+fn stub_init_cmd() -> String {
+    format!("mkdir -p {{{{SERVICE_NAME}}}} && printf 'stub scaffolder\\n' > {{{{SERVICE_NAME}}}}/{SCAFFOLD_MARKER}")
+}
+
 /// Install `recipe_name` into a fresh tempdir project and return the project root.
 ///
-/// `init_app` is neutralised by pre-creating its `target_dir`: every recipe that
-/// declares one sets `skip_if_exists`, so the network scaffolder (`npm create
-/// astro`, `nuxi init`, `zola init`) never runs from the test suite.
-fn install_into_tempdir(
+/// Installs into `project`, which lets a caller run two `mx add`s over the same
+/// tree. The recipe's scaffolder is replaced by [`stub_init_cmd`].
+fn install_into(
+    project: &Path,
     recipe_name: &str,
     service: &str,
     options: &HashMap<String, String>,
-) -> (tempfile::TempDir, mx_lib::recipe::InstallResult) {
-    let project = tempfile::tempdir().expect("setup: tempdir");
+) -> mx_lib::recipe::InstallResult {
     let mut installer = mx_lib::recipe::RecipeInstaller::new(templates_root())
         .expect("setup: build a recipe installer");
     let recipe = installer
         .load_recipe(recipe_name)
         .unwrap_or_else(|e| panic!("setup: load recipe {recipe_name}: {e}"));
 
+    let mut options = options.clone();
     if let Some(init_app) = &recipe.init_app {
-        assert!(
-            init_app.skip_if_exists && init_app.target_dir.is_some(),
-            "setup: {recipe_name} declares an init_app the test cannot neutralise \
-             (needs skip_if_exists + target_dir); it would shell out to the network"
+        // The override only bites if the recipe takes its command from the
+        // option. A recipe that hardcodes `npm create ...` in `init_app.command`
+        // would make this suite shell out to the network — fail loudly instead.
+        assert_eq!(
+            init_app.command.trim(),
+            "{{INIT_CMD}}",
+            "setup: {recipe_name} hardcodes its init_app command instead of taking it \
+             from the `init_cmd` option, so the suite cannot stub it out and would \
+             shell out to the network"
         );
-        let target = init_app
-            .target_dir
-            .as_ref()
-            .unwrap()
-            .replace("{{SERVICE_NAME}}", service);
-        std::fs::create_dir_all(project.path().join(target)).expect("setup: pre-create target_dir");
+        assert!(
+            init_app.target_dir.is_some(),
+            "setup: {recipe_name} declares an init_app without a target_dir, so a \
+             re-run would re-scaffold over an existing app"
+        );
+        options
+            .entry("init_cmd".to_string())
+            .or_insert_with(stub_init_cmd);
     }
 
-    let result = installer
-        .install(&recipe, project.path(), service, options)
-        .unwrap_or_else(|e| panic!("{recipe_name}: install failed: {e}"));
+    installer
+        .install(&recipe, project, service, &options)
+        .unwrap_or_else(|e| panic!("{recipe_name}: install failed: {e}"))
+}
+
+/// Install `recipe_name` into a fresh tempdir project and return the project root.
+fn install_into_tempdir(
+    recipe_name: &str,
+    service: &str,
+    options: &HashMap<String, String>,
+) -> (tempfile::TempDir, mx_lib::recipe::InstallResult) {
+    let project = tempfile::tempdir().expect("setup: tempdir");
+    let result = install_into(project.path(), recipe_name, service, options);
     (project, result)
+}
+
+// ── The scaffolder actually runs (bd:mech-crate-0uq) ─────────────────────────
+
+/// Recipes shipping an `init_app`, by name.
+fn recipes_with_a_scaffolder() -> Vec<String> {
+    shipped_recipe_names()
+        .into_iter()
+        .filter(|name| {
+            let rj = recipes_root().join(name).join("recipe.json");
+            mx_lib::recipe::Recipe::load(&rj)
+                .map(|r| r.init_app.is_some())
+                .unwrap_or(false)
+        })
+        .collect()
+}
+
+/// bd:mech-crate-0uq — mx created the recipe's `directories` (which start with
+/// `apps/<svc>/…`) *before* `init_app`, so the `skip_if_exists` guard tripped on a
+/// directory mx had just made and the framework scaffolder never ran: every astro
+/// / nuxt / zola app landed with nothing but the recipe's health endpoint, and the
+/// Docker build then failed on a missing `package.json`.
+///
+/// Asserts the fixed contract: the scaffolder runs, and its output survives the
+/// directory and template passes that follow it.
+#[test]
+fn every_recipe_with_a_scaffolder_runs_it_and_keeps_its_output() {
+    let names = recipes_with_a_scaffolder();
+    assert!(
+        names.len() >= 3,
+        "setup: expected the astro/nuxt/zola recipes to declare an init_app, found {names:?}"
+    );
+
+    for name in &names {
+        let (project, result) = install_into_tempdir(name, "svc", &HashMap::new());
+
+        match result.init_app {
+            Some(mx_lib::recipe::InitAppOutcome::Ran { ref command }) => {
+                assert!(
+                    command.contains(SCAFFOLD_MARKER) && command.contains("svc"),
+                    "{name}: init_cmd reached the shell unexpanded: {command}"
+                );
+            }
+            other => panic!(
+                "{name}: the app scaffolder did not run on a fresh install: {other:?} \
+                 (bd:mech-crate-0uq)"
+            ),
+        }
+
+        let marker = project.path().join("apps/svc").join(SCAFFOLD_MARKER);
+        assert!(
+            marker.is_file(),
+            "{name}: scaffolder output was wiped by the rest of the install \
+             (expected {})",
+            marker.display()
+        );
+    }
+}
+
+/// The recipe's own payload must land *on top of* the scaffolded app — that is
+/// what makes "scaffolder first" safe: mx-specific wiring wins collisions.
+#[test]
+fn recipe_files_layer_on_top_of_the_scaffolded_app() {
+    for (recipe, service, mx_file) in [
+        ("astro", "docs", "apps/docs/src/pages/api/health.ts"),
+        ("nuxt", "site", "apps/site/server/api/health.get.ts"),
+        ("zola", "blog", "apps/blog/config.toml"),
+    ] {
+        let (project, _) = install_into_tempdir(recipe, service, &HashMap::new());
+        assert!(
+            project.path().join(mx_file).is_file(),
+            "{recipe}: {mx_file} missing — recipe payload did not land over the scaffold"
+        );
+        assert!(
+            project
+                .path()
+                .join(format!("apps/{service}"))
+                .join(SCAFFOLD_MARKER)
+                .is_file(),
+            "{recipe}: scaffold marker missing — the payload pass clobbered the app"
+        );
+    }
+}
+
+/// A second `mx add` over a scaffolded app must not re-run the scaffolder: the
+/// tools refuse a populated target, and the user's app is not ours to overwrite.
+#[test]
+fn a_second_add_over_a_scaffolded_app_skips_the_scaffolder() {
+    for name in &recipes_with_a_scaffolder() {
+        let project = tempfile::tempdir().expect("setup: tempdir");
+        install_into(project.path(), name, "svc", &HashMap::new());
+        let again = install_into(project.path(), name, "svc", &HashMap::new());
+
+        assert_eq!(
+            again.init_app,
+            Some(mx_lib::recipe::InitAppOutcome::SkippedExisting {
+                target_dir: "apps/svc".to_string()
+            }),
+            "{name}: re-running `mx add` re-scaffolded over an existing app"
+        );
+    }
 }
 
 /// The regression net for the whole "installer chokes on a recipe payload" class:

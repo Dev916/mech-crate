@@ -32,7 +32,7 @@
     "init_cmd": {
       "flag": "--init-cmd",
       "default": "yes \"\" | zola init {{SERVICE_NAME}}",
-      "description": "Command to scaffold the Zola site (runs from ./apps; should create {{SERVICE_NAME}}/)"
+      "description": "Command to scaffold the Zola site (runs from ./apps; must be non-interactive and must create {{SERVICE_NAME}}/)"
     },
     "force_init": {
       "flag": "--force-init",
