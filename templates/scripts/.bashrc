@@ -66,6 +66,119 @@ mech_compose_project_name() {
 : "${COMPOSE_PROJECT_NAME:=$(mech_compose_project_name)}"
 export COMPOSE_PROJECT_NAME
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dev credentials
+#
+# THIS FILE IS THE AUTHORITATIVE SOURCE of what counts as an unset credential,
+# which keys are deliberately left blank, and how a generated dev value is
+# shaped. `scripts/generate-secrets.sh` writes the values; `scripts/doctor.sh`
+# reports what is still missing. Both read the rules from here so they can never
+# disagree about whether a project is healthy.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Credentials the shipped stack deliberately leaves blank.
+#
+# The bundled redis runs `redis-server` with no `--requirepass`, so a generated
+# REDIS_PASSWORD would break every client that builds
+# `redis://:$REDIS_PASSWORD@redis:6379` against a server that wants no auth.
+# Blank is the correct dev value, and doctor must not nag about it.
+MECH_BLANK_BY_DESIGN_KEYS="REDIS_PASSWORD"
+
+# True when a value is not a real credential: empty, or still one of the
+# placeholder conventions the templates ship.
+# Usage: mech_secret_is_unset "<value>"
+mech_secret_is_unset() {
+    local value="$1"
+    [ -n "$value" ] || return 0
+    case "$value" in
+        __GENERATE_*__ | CHANGE_ME* | changeme | your-*-here) return 0 ;;
+    esac
+    return 1
+}
+
+# True when this key is meant to stay blank (see MECH_BLANK_BY_DESIGN_KEYS).
+# Usage: mech_secret_is_blank_by_design "<key>"
+mech_secret_is_blank_by_design() {
+    local key="$1" candidate
+    for candidate in $MECH_BLANK_BY_DESIGN_KEYS; do
+        [ "$key" = "$candidate" ] && return 0
+    done
+    return 1
+}
+
+# Classify a key so the generator knows what shape of value it needs.
+# Echoes one of: db_user | db_name | app_key | random | none.
+# "none" means "not a credential" — the generator leaves it alone rather than
+# filling an unrelated empty setting with 32 random characters.
+mech_secret_kind() {
+    case "$1" in
+        APP_KEY | *_APP_KEY) echo app_key ;;
+        DB_USER | *_DB_USER) echo db_user ;;
+        DB_NAME | *_DB_NAME) echo db_name ;;
+        *PASSWORD* | *PASSWD* | *SECRET* | *TOKEN* | *SALT* | *KEY) echo random ;;
+        *) echo none ;;
+    esac
+}
+
+# A random alphanumeric dev secret. Never a fixed default: a password shipped in
+# the templates is the same password on every machine that ever ran `mx new`.
+# Usage: mech_random_secret [length]
+mech_random_secret() {
+    local len="${1:-32}"
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex "$(((len + 1) / 2))" | cut -c "1-${len}"
+    else
+        # dd bounds the read so `tr` never takes SIGPIPE from a downstream
+        # `head` — which, under `set -o pipefail`, would fail the whole script.
+        # 256 bytes yields ~150 alphanumerics, comfortably more than needed.
+        dd if=/dev/urandom bs=1 count=256 2>/dev/null |
+            LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c "1-${len}"
+    fi
+}
+
+# A Laravel-style application key. Harmless for recipes that ignore APP_KEY.
+mech_random_app_key() {
+    if command -v openssl >/dev/null 2>&1; then
+        printf 'base64:%s\n' "$(openssl rand -base64 32)"
+    else
+        printf 'base64:%s\n' "$(mech_random_secret 44)"
+    fi
+}
+
+# A postgres-safe identifier derived from the project directory, for the db role
+# and database name. Postgres folds unquoted identifiers to lower case and
+# rejects a leading digit, so: lowercase, non-alphanumerics to '_', digit-leading
+# names prefixed.
+mech_db_identifier() {
+    local name
+    name="$(mech_compose_project_name "${1:-}" | tr '-' '_')"
+    case "$name" in
+        [0-9]*) name="db_$name" ;;
+    esac
+    printf '%s\n' "$name"
+}
+
+# Keys in an env file whose value is still unset (empty or a placeholder),
+# excluding the ones that are blank by design. One key per line.
+# Usage: mech_unset_secret_keys <env-file>
+mech_unset_secret_keys() {
+    local file="$1" line key value
+    [ -f "$file" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            '' | '#'*) continue ;;
+            *=*) ;;
+            *) continue ;;
+        esac
+        key="${line%%=*}"
+        value="${line#*=}"
+        mech_secret_is_blank_by_design "$key" && continue
+        if mech_secret_is_unset "$value"; then
+            printf '%s\n' "$key"
+        fi
+    done < "$file"
+}
+
 # Deduplicate compose file arguments
 # Prevents duplicate -f flags when composing multiple services
 deduplicate_services() {

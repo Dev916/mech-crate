@@ -363,78 +363,6 @@ guard_container_names() {
     return 0
 }
 
-# bootstrap_secrets <project dir>
-# Some recipes ship `docker/.config/.env.secrets` with __GENERATE_*__ placeholders
-# and rely on a post_install generator to replace them. laravel installs and runs
-# one; rust-api copies the same laravel-derived template but ships no generator,
-# so its postgres would start with an empty POSTGRES_PASSWORD. Filling the
-# placeholders here (exactly what laravel's generate-secrets.sh does) keeps the
-# smoke honest about what it tests — scaffold → dev → router — instead of dying
-# on a recipe packaging gap. Tracked as a recipe defect, not an E2E behaviour.
-bootstrap_secrets() {
-    local project_dir="$1"
-    local secrets="$project_dir/docker/.config/.env.secrets"
-
-    [[ -f "$secrets" ]] || return 0
-    grep -q '__GENERATE_' "$secrets" || return 0
-
-    warn "recipe left __GENERATE_*__ placeholders in .env.secrets — filling them in (recipe defect)"
-    local pw key
-    pw="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32 || true)"
-    key="base64:$(openssl rand -base64 32)"
-    perl -pi -e "s/__GENERATE_DB_PASSWORD__/${pw}/g; s|__GENERATE_APP_KEY__|${key}|g" "$secrets"
-    # anything still unfilled would silently become an empty env value
-    if grep -q '__GENERATE_' "$secrets"; then
-        warn "unrecognised placeholders remain in $secrets:"
-        grep -n '__GENERATE_' "$secrets" || true
-    fi
-}
-
-# bootstrap_compose_env <project dir>
-# The recipes' env files reference each other (`.env.db` has
-# POSTGRES_PASSWORD=${DB_PASSWORD}, `.env.shared` has DB_PASSWORD=${<SVC>_DB_PASSWORD}),
-# but docker compose interpolates `env_file` values against the shell/`.env`
-# environment only — never against values defined in another env_file. Left
-# alone every one of them resolves to "" and postgres never becomes healthy.
-# Resolving them into `docker/compose/.env` (the project directory compose reads
-# for interpolation) is the same unblock a human would apply.
-bootstrap_compose_env() {
-    local project_dir="$1"
-    local config_dir="$project_dir/docker/.config"
-    local compose_env="$project_dir/docker/compose/.env"
-
-    [[ -d "$config_dir" ]] || return 0
-    # Don't clobber an env a recipe deliberately shipped.
-    [[ -f "$compose_env" ]] && return 0
-
-    local names
-    names="$(grep -ohE '\$\{[A-Za-z_][A-Za-z0-9_]*' "$config_dir"/.env.* "$project_dir"/docker/compose/*.yml 2>/dev/null \
-             | sed 's/^\${//' | sort -u || true)"
-    [[ -z "$names" ]] && return 0
-
-    # Subshell: sourcing the env files lets bash do the ${VAR} resolution that
-    # compose will not do, without leaking any of it into this script.
-    (
-        set +u
-        set -a
-        local f
-        # .env.secrets first: later files reference the secrets it defines.
-        for f in "$config_dir"/.env.secrets "$config_dir"/.env.shared "$config_dir"/.env.*; do
-            case "$f" in *.template|*.bak|*.example) continue ;; esac
-            # shellcheck disable=SC1090  # runtime-generated project env files
-            [[ -f "$f" ]] && . "$f"
-        done
-        set +a
-        local v val
-        for v in $names; do
-            eval "val=\${$v:-}"
-            [[ -n "$val" ]] && printf '%s=%s\n' "$v" "$val"
-        done
-    ) > "$compose_env"
-
-    info "resolved $(wc -l < "$compose_env" | tr -d ' ') interpolation vars into docker/compose/.env"
-}
-
 smoke_recipe_impl() {
     local recipe="$1"
     local service project project_dir compose_file host health_path compose_project
@@ -481,9 +409,12 @@ smoke_recipe_impl() {
     health_path="$(health_path_for "$recipe")"
     ok "URL discovered from compose labels: http://${host}${health_path}"
 
-    bootstrap_secrets "$project_dir"
-    bootstrap_compose_env "$project_dir"
-
+    # Nothing is fixed up between `mx add` and `make dev`: booting unaided is the
+    # property under test (bd:mech-crate-rqc). `make dev` runs scripts/init.sh,
+    # which runs scripts/generate-secrets.sh, which fills the credentials and
+    # materializes the `${…}` references compose cannot resolve from a sibling
+    # env file. A hand-written bootstrap here would hide a regression in exactly
+    # that path.
     run_step "${recipe}-make-dev" env -C "$project_dir" make dev "s=$service" || {
         dump_diagnostics "$service" "$host" "$project_dir"
         return 1
