@@ -27,7 +27,8 @@ import {
   resolvePageDate,
   toIsoTimestamp,
 } from '../lib/dates.ts';
-import { defaultRepoRoot } from '../lib/sources.ts';
+import { isHeldBack, parseFrontmatter } from '../lib/frontmatter.ts';
+import { collectCorpusSources, defaultRepoRoot } from '../lib/sources.ts';
 
 const APP_PATH = 'site/apps/site';
 const CATEGORY_PAGE_REL = CORPUS_CATEGORY_PAGE.slice('src/pages/'.length);
@@ -293,9 +294,18 @@ describe('the real repository', () => {
     expect(index.origins.get(route)).toBe('frontmatter');
   });
 
-  it('takes nine dates from frontmatter and the rest from git', () => {
+  it('dates every `researched:` doc from frontmatter and the rest from git', () => {
+    // Count the declarations off disk rather than pinning a number: every
+    // technique-research PR adds a `researched:` doc, and a literal count
+    // turned the site build red on each one.
+    const declared = collectCorpusSources(repoRoot).filter(({ repoPath, raw }) => {
+      const { data } = parseFrontmatter(repoPath, raw);
+      return !isHeldBack(data) && typeof data.researched === 'string';
+    });
+    expect(declared.length).toBeGreaterThan(0);
+
     const origins = [...index.origins.values()];
-    expect(origins.filter((origin) => origin === 'frontmatter')).toHaveLength(9);
+    expect(origins.filter((origin) => origin === 'frontmatter')).toHaveLength(declared.length);
     expect(origins.every((origin) => origin === 'frontmatter' || origin === 'git')).toBe(true);
   });
 
