@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2-rc.3"
 edition = "2021"
 authors = ["MechCrate Team"]
 license = "MIT OR Apache-2.0"
@@ -25,7 +25,10 @@ serde_json = "1.0"
 async-trait = "0.1"
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+# rustls, not native-tls: no OpenSSL at build or run time, so the Linux
+# release targets can be fully static (musl) and the self-updater never
+# depends on the system TLS stack. Bundled Mozilla roots via webpki.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "charset", "http2"] }
 
 # Logging
 tracing = "0.1"
@@ -88,6 +91,13 @@ serde_yaml = "0.9"
 
 # TOML config
 toml = "0.8"
+
+# Tarball extraction (self-update)
+flate2 = "1"
+tar = "0.4"
+
+# Semver (self-update version compare)
+semver = "1"
 
 # Hashing
 sha2 = "0.10"

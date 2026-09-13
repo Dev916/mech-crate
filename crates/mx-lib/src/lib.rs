@@ -19,6 +19,7 @@ pub mod paths;
 pub mod project;
 pub mod recipe;
 pub mod router;
+pub mod selfupdate;
 pub mod template;
 // Other crates get the fixtures through the `test-support` feature; this
 // crate's own `#[cfg(test)]` modules get them unconditionally, since the

@@ -11,13 +11,16 @@
 //!
 //! These are the adapter fakes the ports in this crate are contract-tested
 //! against: [`StubBin`] fakes the process-execution edge, [`EmbedServer`]
-//! fakes the embeddings HTTP edge, and [`scaffold_project`] fakes the
-//! on-disk project an mx command expects to find.
+//! fakes the embeddings HTTP edge, [`scaffold_project`] fakes the
+//! on-disk project an mx command expects to find, and [`write_fake_bundle`]
+//! / [`pack_bundle`] fake a published release for the self-updater.
 
+mod bundle;
 mod embed_server;
 mod scaffold;
 mod stub_bin;
 
+pub use bundle::{pack_bundle, sha256_sidecar, write_fake_bundle};
 pub use embed_server::EmbedServer;
 pub use scaffold::scaffold_project;
 pub use stub_bin::StubBin;

@@ -771,66 +771,117 @@ tempfile = "3.10"
 
 ---
 
-## Deployment
+## Release and self-update
 
-### Building Release Binaries
+### Release channel
 
-```bash
-# Build optimized release
-cargo build --release
+Releases are GitHub Releases on the public repo `unyform-ai/mech-crate-releases`,
+one per git tag `vX.Y.Z` on `Dev916/mech-crate`. `GET .../releases/latest` is
+the source of truth for "what is the newest version": GitHub returns only
+published, non-draft, non-prerelease releases from it, which is exactly the
+contract `mx self-update` relies on.
 
-# Verify binary sizes
-ls -lh target/release/mx target/release/mx-mcp
+Assets per release, named by `scripts/package.sh`:
 
-# Expected sizes (approximately):
-# mx:     ~5-8 MB
-# mx-mcp: ~8-12 MB
+```
+mx-v<version>-universal-apple-darwin.tar.gz          (+ .sha256)
+mx-v<version>-x86_64-unknown-linux-musl.tar.gz       (+ .sha256)
+mx-v<version>-aarch64-unknown-linux-musl.tar.gz      (+ .sha256)
 ```
 
-### Installation Locations
+Each tarball extracts to `mx-v<version>/` containing `bin/{mx,mx-mcp}`,
+`bin/lib/*.sh`, `templates/`, `scripts/`, the two license files and a
+`VERSION` file. That directory is a complete MechCrate root:
+`paths::mech_crate_root()` walks up from the executable to the first
+directory with `scripts/`, so nothing about path resolution changes between a
+checkout and an installed release.
 
-```bash
-# Install CLI globally
-cargo install --path crates/mx-cli
+### The pipeline (`.github/workflows/release.yml`)
 
-# Install MCP server
-cargo install --path crates/mx-mcp-server
-
-# Or copy binaries manually
-cp target/release/mx ~/.local/bin/
-cp target/release/mx-mcp ~/.local/bin/
+```
+tag v0.1.2 (or workflow_dispatch with version=0.1.2)
+  └─ resolve-version   validates the version shape
+     └─ test           fmt + clippy + nextest + coverage — the release gate
+        └─ create-draft   one draft release per tag (prerelease when the
+           │              version has a suffix); skipped with a warning when
+           │              RELEASES_REPO_TOKEN is absent, so a dry run still builds
+           ├─ macos     aarch64 + x86_64 builds, lipo, codesign (Developer ID
+           │            when the APPLE_* secrets exist, ad-hoc otherwise),
+           │            notarize, package, upload into the draft
+           ├─ linux     cross builds for both musl triples, proven static,
+           │            package, upload into the draft
+           └─ publish   flips the draft live once every platform uploaded
 ```
 
-### CI/CD Build
+The draft-then-publish shape is what keeps `releases/latest` from ever
+pointing at a release with a missing platform. Secrets: `RELEASES_REPO_TOKEN`
+(a fine-grained PAT owned by the unyform-ai org with contents:write on the
+releases repo), and the six `APPLE_*` values for Developer ID signing and
+notarization. Without the Apple secrets binaries are ad-hoc signed: they run
+when installed by `mx self-update` or the curl installer (no quarantine
+attribute), but a browser download would be refused by Gatekeeper.
 
-```yaml
-# Example GitHub Actions
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      
-      - name: Build
-        run: cargo build --release
-        
-      - name: Test
-        run: cargo test
-        
-      - name: Clippy
-        run: cargo clippy -- -D warnings
-        
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries
-          path: |
-            target/release/mx
-            target/release/mx-mcp
+To cut a release: bump `[workspace.package] version` in `Cargo.toml`, commit,
+`git tag vX.Y.Z`, push the tag. To rehearse without a tag: run the workflow by
+hand with a version such as `0.1.3-rc.1`; the suffix marks it prerelease.
+
+### Install layout
+
+```
+~/.mech-crate/
+  releases/mx-v0.1.2/       # an extracted tarball, untouched
+  current -> releases/mx-v0.1.2
+  templates/                # refreshed from current/templates
+  version                   # mirrors current/VERSION
+  tmp/                      # scratch during extraction, always emptied
+  mcp/mx-mcp-wrapper.sh     # regenerated to point at current/ if it exists
+~/.local/bin/{mx,mx-mcp} -> ~/.mech-crate/current/bin/{mx,mx-mcp}
 ```
 
----
+`crates/mx-lib/src/selfupdate/layout.rs` is the only writer of that layout.
+An update extracts under `tmp/<uuid>`, renames the bundle into `releases/`,
+then replaces `current` by renaming a fresh symlink over it — never
+rm-then-ln — so the running process keeps its inode and a crash at any point
+leaves the previous install live. `--rollback` is the same flip in reverse;
+the previous release is kept and older ones pruned.
+
+### The engine (`crates/mx-lib/src/selfupdate/`)
+
+| File | Role | IO |
+|---|---|---|
+| `version.rs` | semver parse/compare, `current()` | none |
+| `target.rs` | host triple, asset / checksum / bundle-dir names | none |
+| `kind.rs` | `InstallKind` {Release, Homebrew, Source, Bare} from the exe path | none (repo probe injected) |
+| `plan.rs` | `UpdatePlan` {UpToDate, Download, DelegateBrew, RebuildSource} | none |
+| `index.rs` | `ReleaseIndex`: GitHub releases client, `MX_RELEASES_API` override | HTTP |
+| `fetch.rs` | streamed download to `.part` + rename, `.sha256` parse, verify | HTTP, fs |
+| `layout.rs` | extract / adopt / flip / previous / prune / shims | fs |
+| `verify.rs` | new binary answers `--version`; `codesign --verify` on Mach-O | process |
+| `refresh.rs` | templates swap, version file, MCP wrapper; shared recursive copy | fs |
+| `notify.rs` | once-a-day cache and the hint decision | fs |
+
+The pure half is unit-tested on literal values; the effectful half is
+contract-tested against wiremock and tempdirs. `crates/mx-cli/src/commands/
+self_update.rs` is a thin shell: detect → plan → print → confirm → execute.
+`crates/mx-cli/tests/self_update.rs` runs the whole command hermetically
+(`MX_SELFUPDATE_EXE` and `HOMEBREW_PREFIX` pin the install kind under test;
+`mx_lib::test_support::write_fake_bundle` / `pack_bundle` fake a release).
+
+### Installer and update hint
+
+`site/apps/site/public/install.sh`, served at `https://mechcrate.dev/install.sh`,
+is POSIX sh: it resolves the release, downloads and verifies the tarball,
+extracts it, and runs `<bundle>/bin/mx self-update --from-dir <bundle> --yes`
+so the Rust code stays the single writer of the layout.
+
+Every non-`self-update`, non-`mcp` command reads
+`~/.mech-crate/cache/update-check.json`; when it is older than a day a
+detached `mx self-update --refresh-cache` is spawned and, if the cache says
+a newer release exists, one line is printed to stderr (TTY only, never under
+`CI` or `MX_NO_UPDATE_CHECK=1`, or with `check = false` in
+`~/.mech-crate/config/update.toml`).
+
+Design record: `docs/superpowers/specs/2026-09-02-mx-self-update-design.md`.
 
 ## Troubleshooting
 

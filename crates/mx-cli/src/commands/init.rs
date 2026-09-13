@@ -1,13 +1,12 @@
 //! `mx init` command - Initialize MechCrate installation
 
-use std::path::Path;
-
 use anyhow::Result;
 use clap::Args;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use walkdir::WalkDir;
 
+use mx_lib::selfupdate::refresh::copy_dir_recursive;
 use mx_lib::{home_dir, is_initialized, save_source_root, source_templates_dir};
 
 /// Initialize MechCrate installation
@@ -115,8 +114,8 @@ impl InitCommand {
         );
         pb.set_message("Copying templates...");
 
-        // Copy templates recursively
-        self.copy_dir(&source, &templates_dest, &pb)?;
+        // Copy templates recursively (shared with self-update's refresh)
+        copy_dir_recursive(&source, &templates_dest, &mut |_| pb.inc(1))?;
 
         pb.finish_with_message("Done!");
 
@@ -152,38 +151,6 @@ impl InitCommand {
             style("mx recipes list").cyan()
         );
         println!("  {} - Check system health", style("mx doctor").cyan());
-
-        Ok(())
-    }
-
-    fn copy_dir(&self, from: &Path, to: &Path, pb: &ProgressBar) -> Result<()> {
-        for entry in WalkDir::new(from) {
-            let entry = entry?;
-            let relative = entry.path().strip_prefix(from)?;
-            let dest = to.join(relative);
-
-            if entry.file_type().is_dir() {
-                std::fs::create_dir_all(&dest)?;
-            } else if entry.file_type().is_file() {
-                if let Some(parent) = dest.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::copy(entry.path(), &dest)?;
-
-                // Preserve executable permission
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    let source_meta = std::fs::metadata(entry.path())?;
-                    let mode = source_meta.permissions().mode();
-                    if mode & 0o111 != 0 {
-                        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(mode))?;
-                    }
-                }
-
-                pb.inc(1);
-            }
-        }
 
         Ok(())
     }

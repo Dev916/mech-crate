@@ -41,6 +41,18 @@ pub enum Error {
     #[error("API error: {0}")]
     Api(String),
 
+    #[error("not found: {0}")]
+    NotFound(String),
+
+    #[error("GitHub API rate limit: {0}")]
+    RateLimited(String),
+
+    #[error("checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
+
+    #[error("self-update failed: {0}")]
+    SelfUpdate(String),
+
     #[error("{0}")]
     Other(String),
 }

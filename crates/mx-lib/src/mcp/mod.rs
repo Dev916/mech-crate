@@ -146,29 +146,8 @@ impl McpManager {
             .ok_or_else(|| Error::Config("Could not find MechCrate root".into()))?;
 
         // Create wrapper script
-        let wrapper_path = self.state_dir().join("mx-mcp-wrapper.sh");
-        let wrapper_content = format!(
-            r#"#!/bin/bash
-# MechCrate MCP Server Wrapper
-
-set -e
-
-export MECH_CRATE_ROOT="{mech_root}"
-
-exec "{mcp_binary}" "$@"
-"#,
-            mech_root = mech_root.display(),
-            mcp_binary = mcp_binary.display()
-        );
-
-        std::fs::create_dir_all(self.state_dir())?;
-        std::fs::write(&wrapper_path, &wrapper_content)?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&wrapper_path, std::fs::Permissions::from_mode(0o755))?;
-        }
+        let wrapper_path = self.state_dir().join(WRAPPER_NAME);
+        write_wrapper(&wrapper_path, &mech_root, &mcp_binary)?;
 
         // Generate JSON config
         let config = format!(
@@ -188,6 +167,44 @@ exec "{mcp_binary}" "$@"
 
         Ok(config)
     }
+}
+
+/// File name of the wrapper script MCP clients are pointed at.
+pub const WRAPPER_NAME: &str = "mx-mcp-wrapper.sh";
+
+/// Render the MCP wrapper script: export the MechCrate root, then exec the
+/// server binary. The single source of the script text — `mx mcp config`
+/// writes it for a checkout, `selfupdate::refresh` rewrites it for the
+/// release layout after an update.
+pub fn wrapper_script(mech_root: &Path, mcp_binary: &Path) -> String {
+    format!(
+        r#"#!/bin/bash
+# MechCrate MCP Server Wrapper
+
+set -e
+
+export MECH_CRATE_ROOT="{mech_root}"
+
+exec "{mcp_binary}" "$@"
+"#,
+        mech_root = mech_root.display(),
+        mcp_binary = mcp_binary.display()
+    )
+}
+
+/// Write [`wrapper_script`] to `path` (creating its directory) as mode 0755.
+pub fn write_wrapper(path: &Path, mech_root: &Path, mcp_binary: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, wrapper_script(mech_root, mcp_binary))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(())
 }
 
 /// Name of the MCP server binary artifact.
