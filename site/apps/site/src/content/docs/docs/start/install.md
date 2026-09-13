@@ -41,6 +41,10 @@ mx doctor
 
 Pin a version with `MX_VERSION=0.1.2` in front of the command.
 
+`mx --version` prints the crate version. `mx doctor` checks Docker, Compose
+and Make. Run inside a project, it also checks the folder contract and the
+service list.
+
 ### Homebrew (macOS, Linux)
 
 Coming with the tap (`brew install unyform-ai/tap/mx`). Once installed that way,
@@ -136,7 +140,7 @@ mx router up         # start it
 mx router status     # installed / running / network / dashboard URL
 ```
 
-`mx router status` prints the dashboard URL — Traefik allocates it from
+`mx router status` prints the dashboard URL. Traefik allocates it from
 `7680-7799` unless you pin it. Full detail is on
 [The router](/docs/framework/router/).
 

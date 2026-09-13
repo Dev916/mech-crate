@@ -75,6 +75,10 @@ COPY --from=deps --chown=astro:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=astro:nodejs /app/dist ./dist
 COPY --from=builder --chown=astro:nodejs /app/package.json ./
 
+# Astro's server writes a lock file under .astro on startup and /app is
+# root-owned — see the note in app.Dockerfile.
+RUN mkdir -p /app/.astro && chown astro:nodejs /app/.astro
+
 USER astro
 
 EXPOSE 4321
@@ -83,4 +87,7 @@ EXPOSE 4321
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:4321/api/health || exit 1
 
-CMD ["node", "./dist/server/entry.mjs"]
+# Same dual-mode entry as the dev-capable Dockerfile: SSR entry when the app
+# configured an adapter, static `dist/` via the scaffold's own `preview` script
+# otherwise. See the long note in app.Dockerfile (bd:mech-crate-47j).
+CMD ["sh", "-c", "if [ -f ./dist/server/entry.mjs ]; then exec node ./dist/server/entry.mjs; else exec npm run preview -- --host 0.0.0.0 --port ${PORT:-4321}; fi"]

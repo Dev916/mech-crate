@@ -66,7 +66,7 @@ Three things matter and are easy to get wrong:
 
 1. **Both networks.** `devmesh-traefik` is how the router reaches the container;
    `default` is how the container reaches its database. Only the service that
-   receives external traffic needs the first one — Postgres, Redis and workers
+   receives external traffic needs the first one. Postgres, Redis and workers
    stay on `default` only.
 2. **`traefik.docker.network`.** A container on two networks has two addresses.
    Without this label Traefik may pick the wrong one and you get a 502.
@@ -80,17 +80,35 @@ The routing rule is a Traefik matcher, so the usual composition works:
 
 This is the point of the whole arrangement. Project A's `api.localhost` and
 project B's `admin.localhost` are two containers on one shared network behind one
-Traefik. Switching between them is `cd` — no teardown, no port bookkeeping, no
+Traefik. Switching between them is `cd`: no teardown, no port bookkeeping, no
 lost container state. Start the subset you need:
 
 ```bash
 make dev s=api        # in project A
 make dev s=admin      # in project B — both reachable, simultaneously
+make dev s="api web"  # or a named subset, quotes required
 ```
 
-Dev overrides *do* publish conventional host ports for backing services (Postgres
-on 5432, Redis on 6379) so local GUI tools can reach them. That is per compose
-file and easy to change if you genuinely need two databases up at once.
+Container names no longer stand in the way of this either. No shipped compose
+file pins `container_name`, so each project's containers are named
+`<COMPOSE_PROJECT_NAME>-<service>-<index>` and two projects that both declare a
+`db` service coexist. See
+[container names](/docs/framework/upgrade/#migrating-container-names) if you have
+a script that addressed one by a fixed name.
+
+:::note[Where the limit actually is]
+Two projects with different service names and domains is the ordinary case, and
+it works. Two copies of the *same* shape, on the other hand, still collide below
+the router: dev overrides publish conventional host ports for backing services
+(Postgres on 5432, Redis on 6379) so local GUI tools can reach them, and the
+second stack finds those ports taken. The Traefik router names in the labels are
+not qualified by project either, so two projects shipping the same service name
+register the same router.
+
+Both are tracked (`mech-crate-1a0`, `mech-crate-298`) and neither is fixed. Until
+they are, drop the host-port publish from one project's dev override, which is per
+compose file and a one-line edit, or give the two stacks distinct service names.
+:::
 
 ## Tuning
 
@@ -105,27 +123,27 @@ file and easy to change if you genuinely need two databases up at once.
 
 Work down this list; it is ordered by how often each one is the cause.
 
-1. `mx router status` — is the router even running?
-2. `docker ps` — is the service running, and is it healthy?
+1. `mx router status`. Is the router even running?
+2. `docker ps`. Is the service running, and is it healthy?
 3. Is the service on `devmesh-traefik`? A container that is not on the network is
    invisible to Traefik no matter how good its labels are.
 4. Open the dashboard (`mx router status` prints the URL) and look at Routers.
    A missing router means the labels did not parse; a router with no service
    behind it usually means `traefik.docker.network` is wrong or absent.
 5. A 502 rather than a 404 means Traefik found the container and could not reach
-   the port — check `loadbalancer.server.port` against what the app binds.
+   the port. Check `loadbalancer.server.port` against what the app binds.
 
 ## Going deeper
 
-The full guide — HTTPS with mkcert and Let's Encrypt, the dynamic file provider,
-middlewares, custom routes, routing to non-Docker host services, load balancing,
-and the complete troubleshooting matrix — is published in the corpus:
+The full guide covers HTTPS with mkcert and Let's Encrypt, the dynamic file
+provider, middlewares, custom routes, routing to non-Docker host services, load
+balancing, and the complete troubleshooting matrix. It is published in the corpus:
 
 **→ [MechCrate Router (full guide)](/docs/corpus/framework-guides/router/)**
 
 :::note[One stale command in that guide]
 The corpus guide documents `mx router reload`. That subcommand does not exist in
-the current build — `mx router reload` exits with `unrecognized subcommand`. Use
+the current build. `mx router reload` exits with `unrecognized subcommand`. Use
 `mx router up`, which re-applies configuration to a running router, or
 `mx router restart`.
 :::

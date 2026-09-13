@@ -1,6 +1,6 @@
 ---
 title: License
-description: MechCrate is dual-licensed under MIT or Apache-2.0, at your option — the standard Rust-ecosystem arrangement, including for contributions.
+description: 'MechCrate is dual-licensed under MIT or Apache-2.0, at your option: the standard Rust-ecosystem arrangement, including for contributions.'
 sidebar:
   order: 4
 ---
@@ -18,7 +18,7 @@ The workspace manifest carries the same thing in SPDX form:
 license = "MIT OR Apache-2.0"
 ```
 
-`OR` is the operative word. You pick one — you do not have to satisfy both.
+`OR` is the operative word. You pick one. You do not have to satisfy both.
 
 ## What you get
 
@@ -57,7 +57,7 @@ the whole ceremony.
 ## The documents on this site
 
 The [techniques corpus](/docs/corpus/) and these guides are files in the same
-repository — `docs/development/` and `site/apps/site/src/content/` — so the same
+repository (`docs/development/` and `site/apps/site/src/content/`), so the same
 terms cover them. Individual corpus documents cite external sources in their
 provenance footers; those citations point at their own authors' work under their
 own terms, and the corpus document is the summary and analysis, not a

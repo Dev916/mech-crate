@@ -1,23 +1,33 @@
 /**
- * Generation of the two LLM-facing surfaces: `/llms.txt` and `/llms-full.txt`.
+ * Generation of the LLM-facing surfaces: `/llms.txt`, `/llms-full.txt`, and the
+ * per-section splits `/llms-guides.txt` + `/llms-corpus-<category>.txt`.
  *
- * `llms.txt` is the index — an H1, a one-line blockquote description, then one
- * `##` section per navigation group, each a bullet list of
+ * `llms.txt` is the index — an H1, a one-line blockquote description, an
+ * `## Instructions for LLM agents` contract, then one `##` section per
+ * navigation group, each a bullet list of
  * `- [Title](https://mechcrate.dev/route): one-line summary`, per the
  * llmstxt.org convention. It stays small: summaries are collapsed to a single
- * line and truncated.
+ * line and truncated. The 68 corpus documents live under a single `## Optional`
+ * heading at the end — llmstxt.org reserves that exact H2 for "secondary URLs a
+ * reader may skip for a shorter context", which is precisely what the corpus is
+ * relative to the authored guides.
  *
  * `llms-full.txt` is the payload — the markdown body of every published guide
  * and corpus document, each prefaced by a separator block carrying the title,
  * the canonical URL and the repo-relative source path. Its size is unbounded by
  * design; agents want everything (see the spec's "Error handling & policies").
+ * At ~500k tokens it also truncates in most context windows, which is why the
+ * same documents are additionally published as sixteen smaller files: one for
+ * the authored guides, one per corpus category. Those splits partition
+ * `llms-full.txt` exactly — every document appears in exactly one of them.
  *
  * Everything here is pure: the Astro endpoints in `src/pages/llms*.txt.ts` do
  * the `getCollection()` call and hand the entries in, so the whole contract —
  * grouping, URL construction, summary fallback, separator format — is unit
  * testable without a build.
  *
- * See docs/superpowers/specs/2026-08-20-mechcrate-site-design.md → "Content pipeline".
+ * See docs/superpowers/specs/2026-08-20-mechcrate-site-design.md → "Content pipeline"
+ * and docs/superpowers/specs/2026-09-05-seo-geo-design.md → "5. Agent surface".
  */
 
 import { categoryLabel } from '../../components/corpus.ts';
@@ -34,6 +44,39 @@ export const SITE_DESCRIPTION =
 
 /** Longest a generated one-line summary may be before it is elided. */
 export const SUMMARY_MAX = 200;
+
+/** The repository mx is installed from. There is no package registry entry. */
+export const REPO_URL = 'https://github.com/Dev916/mech-crate';
+
+/**
+ * The only supported install path today, quoted verbatim from
+ * `/docs/start/install/`. Stated as one line so a model can copy it.
+ */
+export const INSTALL_COMMAND = `git clone ${REPO_URL}.git && cd mech-crate && make install-local`;
+
+/**
+ * H2 that opens the agent contract. Not a link list, so it sits before every
+ * llmstxt.org file-list section rather than among them.
+ */
+export const INSTRUCTIONS_HEADING = 'Instructions for LLM agents';
+
+/**
+ * H2 that carries the corpus. llmstxt.org gives this exact spelling a defined
+ * meaning — "secondary URLs, which can be skipped for a shorter context" — so
+ * the heading is a constant rather than prose, and it is always last.
+ */
+export const OPTIONAL_HEADING = 'Optional';
+
+/** `/llms-full.txt` — every published document, one file. */
+export const LLMS_FULL_PATH = '/llms-full.txt';
+
+/** `/llms-guides.txt` — the authored guides only. */
+export const LLMS_GUIDES_PATH = '/llms-guides.txt';
+
+/** `/llms-corpus-<category>.txt` — one corpus category's documents. */
+export function llmsCorpusPath(category: string): string {
+  return `/llms-corpus-${category}.txt`;
+}
 
 /**
  * Navigation group a page belongs to. Mirrors the Starlight sidebar
@@ -81,6 +124,12 @@ export interface LlmsPage {
 export interface LlmsSection {
   heading: string;
   pages: LlmsPage[];
+  /**
+   * Corpus category slug, set only on the per-category sections. What tells
+   * `buildLlmsTxt` which sections belong under `## Optional` — a string test on
+   * the heading would break the moment a category is renamed.
+   */
+  category?: string;
 }
 
 /** Absolute URL for a site route. */
@@ -233,14 +282,83 @@ export function groupPages(pages: readonly LlmsPage[]): LlmsSection[] {
     // Corpus categories follow the corpus navigation section directly.
     if (kind !== 'corpus') continue;
     const categories = [...byCategory.entries()]
-      .map(([category, docs]) => ({ label: categoryLabel(category), docs }))
+      .map(([category, docs]) => ({ category, label: categoryLabel(category), docs }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    for (const { label, docs } of categories) {
-      sections.push({ heading: `Corpus: ${label}`, pages: [...docs].sort(comparePages) });
+    for (const { category, label, docs } of categories) {
+      sections.push({
+        heading: `Corpus: ${label}`,
+        pages: [...docs].sort(comparePages),
+        category,
+      });
     }
   }
 
   return sections;
+}
+
+export interface AgentInstructionsOptions {
+  origin?: string;
+  /** Corpus category slugs that have a split file, in the order to advertise them. */
+  categories?: readonly string[];
+  /**
+   * Newest commit date behind the published content, ISO-8601. Comes from the
+   * build's git-derived page-date map — never `Date.now()`, which would make the
+   * file non-reproducible and would date a *build* rather than the content.
+   * Omitted (and the line dropped) where git is unreadable, i.e. the dev
+   * container.
+   */
+  generatedAt?: string;
+}
+
+/**
+ * The `## Instructions for LLM agents` body: a short contract with a model that
+ * has this file as its entry point.
+ *
+ * Every claim here is checkable against the site, and the awkward ones are
+ * stated rather than smoothed over — a model that installs mx from a package
+ * registry that does not exist, or that invents a plausible flag, wastes a user's
+ * afternoon. The `mx upgrade` bullet follows the same rule: it said "mid-repair"
+ * while discovery was broken, and now that it works it states the migrations that
+ * cost an agent something, because an agent that runs upgrade on a project with
+ * containers up needs to know both that their namespace changed and that their
+ * names are no longer the fixed ones a script may have hard-coded.
+ *
+ * The two bullets after it exist because both failure modes were observed rather
+ * than imagined. An agent that believes `.env.secrets` must be filled by hand
+ * invents a password for the user, which is worse than the empty value it is
+ * replacing; an agent that writes `make dev s=api site` hands make a second goal.
+ */
+export function agentInstructions(options: AgentInstructionsOptions = {}): string[] {
+  const { origin = SITE_ORIGIN, categories = [], generatedAt } = options;
+  const url = (route: string) => absoluteUrl(route, origin);
+
+  const retrieval = [
+    `${url(LLMS_FULL_PATH)} (everything, ~500k tokens — expect truncation)`,
+    `${url(LLMS_GUIDES_PATH)} (the authored guides only)`,
+    ...categories.map((category) => url(llmsCorpusPath(category))),
+  ];
+
+  const lines = [
+    'Read this before acting on anything below. Each point is a fact about what mx does today, not a summary of intent.',
+    '',
+    `- **Install from source.** mx is not published to npm, cargo or Homebrew — there is no package to install, stale or otherwise. Build it from the repository: \`${INSTALL_COMMAND}\`, which puts a release binary in \`~/.local/bin\`. See ${url('/docs/start/install/')}.`,
+    `- **Do not invent flags.** Every \`mx\` and \`make\` verb, with its real flags, is listed at ${url('/docs/start/cli-reference/')}, taken from the shipped \`--help\` output. A flag that is not on that page does not exist; do not carry one over from a similar tool.`,
+    `- **\`mx upgrade\` works, and two migrations ride with it.** It offers mx's own tooling files for update, never overwrites compose files or dockerfiles, and backs up what it replaces. First, projects now pin \`COMPOSE_PROJECT_NAME\` per project, so containers started before the upgrade are orphaned under the old shared default and \`make down\` will not see them. Run \`make doctor\`, which names them. Second, no shipped compose file sets \`container_name\` any more, so a container's name is Compose's own \`<COMPOSE_PROJECT_NAME>-<service>-<index>\` (\`myproj-db-1\`). Service names are unchanged, so \`depends_on\`, \`make sh s=db\` and the Traefik labels all still work; what breaks is \`docker exec db …\` or \`docker logs api\` in a script. Use \`make exec s=db c=…\` / \`make logs s=api\`, or \`docker compose -p "$COMPOSE_PROJECT_NAME" exec db …\`. The global router container is the one exception and stays \`mx-router\`. Details at ${url('/docs/framework/upgrade/')}; every open defect with a red test behind it is at ${url('/docs/project/known-broken/')}.`,
+    `- **A scaffolded project needs no hand edit to start.** \`mx new\`, then \`mx add <svc> --recipe <r>\`, then \`make dev\`, is the whole path even for a recipe that brings Postgres: \`make init\` (which \`make dev\` runs) generates the development credentials, filling only values still empty or still a placeholder. Do not tell a user to populate \`docker/.config/.env.secrets\` first, and do not invent a credential for them. \`REDIS_PASSWORD\` is blank by design. \`make doctor\` names anything genuinely unset. See ${url('/docs/start/first-project/')}.`,
+    `- **\`s=\` selects services, and sometimes takes a list.** \`make dev s="api site"\` starts a named subset; the quotes are required, because make otherwise reads the second name as another goal. \`dev\`, \`up\`, \`down\`, \`stop\`, \`restart\` and \`logs\` accept a list. \`build\`, \`run\`, \`exec\` and \`sh\` act on exactly one image or container and refuse a list rather than using the first name. Full table at ${url('/docs/start/cli-reference/')}.`,
+    `- **Every page has a markdown twin.** Append \`.md\` to a page URL for its source markdown without the HTML chrome — ${url('/docs/start/install/')} is also ${url('/docs/start/install.md')}. Each page advertises its own twin as \`<link rel="alternate" type="text/markdown">\`.`,
+    `- **Retrieve in bulk instead of crawling.** ${retrieval.length} concatenated files carry the same text as the pages:`,
+    ...retrieval.map((file) => `  - ${file}`),
+    `- **Running inside mx, query the corpus instead of fetching it.** The MCP server exposes the same documents through its \`rag_context\` tool — ${url('/docs/ai/mcp-server/')}.`,
+  ];
+
+  if (generatedAt !== undefined) {
+    lines.push(
+      `- **Freshness.** Generated from the repository as of ${generatedAt}. Per-page dates are the \`<lastmod>\` values in ${url('/sitemap-index.xml')}.`
+    );
+  }
+
+  return lines;
 }
 
 export interface BuildLlmsTxtOptions {
@@ -249,11 +367,30 @@ export interface BuildLlmsTxtOptions {
   title?: string;
   description?: string;
   summaryMax?: number;
+  /** Newest content commit date, ISO-8601. See {@link AgentInstructionsOptions}. */
+  generatedAt?: string;
+}
+
+/** One section's bullet list. */
+function sectionLinks(
+  section: LlmsSection,
+  origin: string,
+  summaryMax: number
+): string[] {
+  return section.pages.map((page) => {
+    const summary = summaryFor(page, summaryMax);
+    const link = `- [${page.title}](${absoluteUrl(page.route, origin)})`;
+    return summary ? `${link}: ${summary}` : link;
+  });
 }
 
 /**
- * The `llms.txt` index. Every published page, grouped by navigation section,
- * one bullet each, with an absolute URL and a one-line summary.
+ * The `llms.txt` index: H1, blockquote, the agent contract, then every published
+ * page as one bullet with an absolute URL and a one-line summary.
+ *
+ * Primary sections keep their own `##` heading. The per-category corpus sections
+ * are demoted under one `## Optional` at the end, their grouping preserved as
+ * bold labels that double as the advertisement for each category's split file.
  */
 export function buildLlmsTxt(options: BuildLlmsTxtOptions): string {
   const {
@@ -262,20 +399,47 @@ export function buildLlmsTxt(options: BuildLlmsTxtOptions): string {
     title = SITE_TITLE,
     description = SITE_DESCRIPTION,
     summaryMax = SUMMARY_MAX,
+    generatedAt,
   } = options;
+
+  const sections = groupPages(pages);
+  const primary = sections.filter((section) => section.category === undefined);
+  const optional = sections.filter((section) => section.category !== undefined);
 
   const lines: string[] = [`# ${title}`, '', `> ${singleLine(description)}`, ''];
   lines.push(
     `Every published page on ${origin.replace(/^https?:\/\//, '')}, grouped the way the site navigation groups it. ` +
-      `The complete text of every guide and corpus document is at ${absoluteUrl('/llms-full.txt', origin)}.`
+      `The complete text of every guide and corpus document is at ${absoluteUrl(LLMS_FULL_PATH, origin)}, ` +
+      `or in the smaller per-section files listed below.`
   );
 
-  for (const section of groupPages(pages)) {
+  lines.push('', `## ${INSTRUCTIONS_HEADING}`, '');
+  lines.push(
+    ...agentInstructions({
+      origin,
+      categories: optional.map((section) => section.category!),
+      ...(generatedAt === undefined ? {} : { generatedAt }),
+    })
+  );
+
+  for (const section of primary) {
     lines.push('', `## ${section.heading}`, '');
-    for (const page of section.pages) {
-      const summary = summaryFor(page, summaryMax);
-      const link = `- [${page.title}](${absoluteUrl(page.route, origin)})`;
-      lines.push(summary ? `${link}: ${summary}` : link);
+    lines.push(...sectionLinks(section, origin, summaryMax));
+  }
+
+  if (optional.length > 0) {
+    const count = optional.reduce((total, section) => total + section.pages.length, 0);
+    lines.push('', `## ${OPTIONAL_HEADING}`, '');
+    lines.push(
+      `The ${count} techniques-corpus document${count === 1 ? '' : 's'}, grouped by category. ` +
+        'Secondary reading: skip this section for a shorter context — the sections above are the primary surface. ' +
+        "Each category's full text is one file."
+    );
+
+    for (const section of optional) {
+      const label = categoryLabel(section.category!);
+      lines.push('', `**${label}** — ${absoluteUrl(llmsCorpusPath(section.category!), origin)}`, '');
+      lines.push(...sectionLinks(section, origin, summaryMax));
     }
   }
 
@@ -300,45 +464,52 @@ export function docSeparator({ title, url, source }: DocSeparatorOptions): strin
   return `\n\n${lines.join('\n')}\n\n`;
 }
 
-export interface BuildLlmsFullTxtOptions {
-  pages: readonly LlmsPage[];
-  origin?: string;
-  title?: string;
-  description?: string;
+/**
+ * Whether a page carries text to concatenate. The landing page and the generated
+ * corpus navigation pages are indexed in `llms.txt` and have no markdown source,
+ * so every concatenated file skips them.
+ */
+export function hasBody(page: LlmsPage): boolean {
+  return (page.body ?? '').trim() !== '';
+}
+
+/** Every page with a body, in site navigation order. */
+export function documentsOf(pages: readonly LlmsPage[]): LlmsPage[] {
+  return groupPages(pages).flatMap((section) => section.pages.filter(hasBody));
 }
 
 /**
- * The `llms-full.txt` payload: the markdown body of every published guide and
- * corpus document, in navigation order, each behind a separator block.
+ * The documents each split file carries: the authored guides, and one bucket per
+ * corpus category.
  *
- * Pages without a markdown body (the landing page and the generated corpus
- * navigation pages) are indexed in `llms.txt` but have no text to concatenate,
- * so they are skipped here.
+ * A partition, not a filter — `guides` is "no category" rather than "not corpus",
+ * so the buckets are provably disjoint and their union is exactly
+ * {@link documentsOf}. That is the invariant `llms-guides.txt` plus the fifteen
+ * `llms-corpus-*.txt` files summing to `llms-full.txt` rests on.
  */
-export function buildLlmsFullTxt(options: BuildLlmsFullTxtOptions): string {
-  const {
-    pages,
-    origin = SITE_ORIGIN,
-    title = SITE_TITLE,
-    description = SITE_DESCRIPTION,
-  } = options;
+export function splitDocuments(pages: readonly LlmsPage[]): {
+  guides: LlmsPage[];
+  corpus: Map<string, LlmsPage[]>;
+} {
+  const guides: LlmsPage[] = [];
+  const corpus = new Map<string, LlmsPage[]>();
 
-  const documents = groupPages(pages).flatMap((section) =>
-    section.pages.filter((page) => (page.body ?? '').trim() !== '')
-  );
+  for (const page of documentsOf(pages)) {
+    if (page.category === undefined) {
+      guides.push(page);
+      continue;
+    }
+    const bucket = corpus.get(page.category);
+    if (bucket) bucket.push(page);
+    else corpus.set(page.category, [page]);
+  }
 
-  const header = [
-    `# ${title} — full text`,
-    '',
-    `> ${singleLine(description)}`,
-    '',
-    `The complete text of ${documents.length} published document${documents.length === 1 ? '' : 's'} ` +
-      `from ${origin.replace(/^https?:\/\//, '')}, in site navigation order. ` +
-      `Each document is prefaced by a separator carrying its title, canonical URL and repository source path. ` +
-      `The index is at ${absoluteUrl('/llms.txt', origin)}.`,
-  ].join('\n');
+  return { guides, corpus };
+}
 
-  const body = documents
+/** Every document's separator block plus its trimmed body, concatenated. */
+function concatenateDocuments(documents: readonly LlmsPage[], origin: string): string {
+  return documents
     .map(
       (page) =>
         docSeparator({
@@ -348,6 +519,143 @@ export function buildLlmsFullTxt(options: BuildLlmsFullTxtOptions): string {
         }) + (page.body ?? '').trim()
     )
     .join('');
+}
 
-  return `${header}${body}\n`;
+export interface BuildDocumentFileOptions {
+  pages: readonly LlmsPage[];
+  origin?: string;
+  title?: string;
+  description?: string;
+}
+
+/**
+ * The shape every concatenated file shares: an H1, the site blockquote, one
+ * paragraph saying what is in the file and how to reach the rest, then the
+ * documents behind their separator blocks.
+ */
+function buildDocumentFile(
+  documents: readonly LlmsPage[],
+  options: {
+    origin: string;
+    title: string;
+    description: string;
+    heading: string;
+    /** Sentence naming this file's contents; the navigation note is appended. */
+    scope: string;
+    /** Where to go for the rest of the corpus. */
+    siblings: string;
+  }
+): string {
+  const { origin, title, description, heading, scope, siblings } = options;
+
+  const header = [
+    `# ${title} — ${heading}`,
+    '',
+    `> ${singleLine(description)}`,
+    '',
+    `${scope} ` +
+      `Each document is prefaced by a separator carrying its title, canonical URL and repository source path. ` +
+      `${siblings} The index is at ${absoluteUrl('/llms.txt', origin)}.`,
+  ].join('\n');
+
+  return `${header}${concatenateDocuments(documents, origin)}\n`;
+}
+
+/** `N published document(s) from mechcrate.dev, in site navigation order.` */
+function scopeSentence(count: number, what: string, origin: string): string {
+  return (
+    `The complete text of ${count} ${what}${count === 1 ? '' : 's'} ` +
+    `from ${origin.replace(/^https?:\/\//, '')}, in site navigation order.`
+  );
+}
+
+export interface BuildLlmsFullTxtOptions extends BuildDocumentFileOptions {}
+
+/**
+ * The `llms-full.txt` payload: the markdown body of every published guide and
+ * corpus document, in navigation order, each behind a separator block.
+ */
+export function buildLlmsFullTxt(options: BuildLlmsFullTxtOptions): string {
+  const {
+    pages,
+    origin = SITE_ORIGIN,
+    title = SITE_TITLE,
+    description = SITE_DESCRIPTION,
+  } = options;
+
+  const documents = documentsOf(pages);
+
+  return buildDocumentFile(documents, {
+    origin,
+    title,
+    description,
+    heading: 'full text',
+    scope: scopeSentence(documents.length, 'published document', origin),
+    siblings:
+      `Smaller per-section files — ${absoluteUrl(LLMS_GUIDES_PATH, origin)} and ` +
+      `${absoluteUrl(llmsCorpusPath('<category>'), origin)} — carry the same text split up.`,
+  });
+}
+
+export interface BuildLlmsGuidesTxtOptions extends BuildDocumentFileOptions {}
+
+/**
+ * `llms-guides.txt` — the authored guides (Start, Framework, AI Layer, Project
+ * and the docs overview), without the corpus. The half of `llms-full.txt` that
+ * describes mx itself, small enough to read whole.
+ */
+export function buildLlmsGuidesTxt(options: BuildLlmsGuidesTxtOptions): string {
+  const {
+    pages,
+    origin = SITE_ORIGIN,
+    title = SITE_TITLE,
+    description = SITE_DESCRIPTION,
+  } = options;
+
+  const documents = splitDocuments(pages).guides;
+
+  return buildDocumentFile(documents, {
+    origin,
+    title,
+    description,
+    heading: 'guides',
+    scope: scopeSentence(documents.length, 'authored guide', origin),
+    siblings:
+      `The techniques corpus is published separately, one file per category ` +
+      `(${absoluteUrl(llmsCorpusPath('<category>'), origin)}); everything together is ` +
+      `${absoluteUrl(LLMS_FULL_PATH, origin)}.`,
+  });
+}
+
+export interface BuildLlmsCorpusTxtOptions extends BuildDocumentFileOptions {
+  /** Corpus category slug, e.g. `concurrency`. */
+  category: string;
+}
+
+/**
+ * `llms-corpus-<category>.txt` — one category's corpus documents. Fifteen of
+ * these plus `llms-guides.txt` reconstruct `llms-full.txt` exactly.
+ */
+export function buildLlmsCorpusTxt(options: BuildLlmsCorpusTxtOptions): string {
+  const {
+    pages,
+    category,
+    origin = SITE_ORIGIN,
+    title = SITE_TITLE,
+    description = SITE_DESCRIPTION,
+  } = options;
+
+  const label = categoryLabel(category);
+  const documents = splitDocuments(pages).corpus.get(category) ?? [];
+
+  return buildDocumentFile(documents, {
+    origin,
+    title,
+    description,
+    heading: `${label} corpus`,
+    scope: scopeSentence(documents.length, `${label.toLowerCase()} corpus document`, origin),
+    siblings:
+      `The category index is ${absoluteUrl(`/docs/corpus/${category}/`, origin)}; ` +
+      `the whole corpus plus the guides is ${absoluteUrl(LLMS_FULL_PATH, origin)}.`,
+  });
 }

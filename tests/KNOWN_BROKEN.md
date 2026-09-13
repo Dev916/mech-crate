@@ -34,7 +34,6 @@ a fix landed without bookkeeping — surfaced, not silently green.
 
 | bd id | Test | Where | Asserts (once fixed) | Tier |
 |---|---|---|---|---|
-| mech-crate-z5i | `upgrade::tests::upgrade_discovery_works_against_real_templates_layout` | `crates/mx-lib/src/upgrade/mod.rs` | `discover_upgrades()` succeeds against the shipped `templates/` layout (no phantom `templates/project/`) | unit |
 | mech-crate-wd9 | `kb_cloudflare_account_id_var_is_one_contract` | `crates/mx-cli/tests/known_broken.rs` | The `*_ACCOUNT_ID` name `mx infra setup cloudflare` writes is one `templates/make/cloudflare.mk` consumes from the credentials file (greps both sides, asserts equality) | integration |
 | mech-crate-066 | `kb_infra_link_writes_marker_and_inspect_resolves_global` | `crates/mx-cli/tests/known_broken.rs` | `mx infra link cloudflare` creates the resolver's `.env.linked` marker, after which `mx infra inspect` resolves to the global credentials | integration |
 | mech-crate-vxq | `kb_mx_cf_subcommand_exists` | `crates/mx-cli/tests/known_broken.rs` | The documented `mx cf` subcommand exists (`mx cf --help` exits 0). *Retire this test if the issue is instead closed by purging the doc references.* | integration |
@@ -48,19 +47,46 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | mech-crate-dqw | `kb_doctor_reports_router_status` | `crates/mx-cli/tests/known_broken.rs` | `mx doctor` reports on the router (network / container / port 80) alongside its structure and docker checks | integration |
 | mech-crate-4jw | `corpus::store::tests::kb_lexical_arm_separates_relevant_from_irrelevant` | `crates/mx-lib/src/corpus/store.rs` | With the vector arm held equal (identical embeddings, orthogonal to the query), the lexical arm separates a relevant from an irrelevant ~1.2KB chunk by ≥5× and ≥0.05 of final score. Measured today: **2.18× / 0.0062** | integration (DB) |
 
-14 lane tests, 13 named `kb_*`; the `z5i` test predates the naming convention
-(written in the upgrade task) and is left as-is rather than churned.
+13 lane tests, all named `kb_*` (the one exception, `z5i`, left the lane when
+its fix landed).
 
-**Scoreboard** (`make test-known-broken`): `14 tests run: 0 passed, 14 failed,
-189 skipped` — 14 rows above, 14 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `189 passed, 14 skipped`. Those two numbers
-partition the workspace; if they stop summing to 203, either a lane test lost
+**Scoreboard** (`make test-known-broken`): `13 tests run: 0 passed, 13 failed,
+252 skipped` — 13 rows above, 13 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `252 passed, 13 skipped`. Those two numbers
+partition the workspace; if they stop summing to 265, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
 bd:mech-crate-0tj, bd:mech-crate-290, bd:mech-crate-ads): none of those defects
 had a lane test, so they were fixed against fresh red tests that joined the gate
 directly, taking it from 162 to 189.
+
+**bd:mech-crate-z5i** (Wave 1, `mx upgrade` discovery against the shipped
+`templates/` layout) is the first lane row retired the intended way: its test
+lost `#[ignore]` and joined the gate, taking the lane 14 → 13 and the gate
+189 → 191 (the fix also added `upgrade_discovery_scope_mirrors_mx_new`, which is
+why the workspace total moved 203 → 204).
+
+The rest of Wave 1 had no lane rows to retire, so each fix landed against fresh
+red tests that joined the gate directly: compose project isolation plus the
+`scripts/.bashrc` delivery gap (bd:mech-crate-71u, bd:mech-crate-12p) took it
+191 → 202, the astro `include` fix and its compose-config conformance net
+(bd:mech-crate-eic, bd:mech-crate-pos) 202 → 205, and the `init_app` ordering fix
+(bd:mech-crate-0uq) 205 → 217. The lane stayed at 13 throughout, so the workspace
+total moved 204 → 230.
+
+Wave 2 repeated the pattern: none of its defects had a lane row either, so all
+five fixes landed against fresh red tests that joined the gate directly, taking it
+217 → 252 and the workspace total 230 → 265. The lane is untouched at 13. Four new
+conformance suites carry most of that growth, each of them a net over a *class*
+rather than over the files that happened to be wrong:
+
+| Suite | Holds |
+|---|---|
+| `templates_env_precedence.rs` | every `env_file` list in `templates/` follows `.env.shared` → `.env.secrets` → `.env.<service>`, and anything reading shared also reads secrets (bd:mech-crate-lwe) |
+| `templates_secret_generation.rs` | `make init` generates real dev credentials for every db-bearing recipe, idempotently, and no recipe ships an unconsumed `__GENERATE_*__` placeholder (bd:mech-crate-rqc) |
+| `templates_multi_service.rs` | `s="a b"` survives the make layer as one argument, list-capable targets pass every name to compose, and single-service targets refuse a list loudly (bd:mech-crate-3kq) |
+| `templates_compose_hygiene.rs` | no shipped compose file pins a `container_name` or joins an `external: true` network mx never creates, and the db healthcheck probes the configured role at container runtime (bd:mech-crate-4n4, bd:mech-crate-xhf, bd:mech-crate-v6z) |
 
 ## Notes on placement deviations
 

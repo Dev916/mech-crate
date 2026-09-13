@@ -27,6 +27,9 @@ mutants.out.old/
 .env.secrets
 .env*.local
 
+# Local MCP artifact dir (Playwright traces/screenshots from an agent session)
+.playwright-mcp/
+
 # site/ — nested mx project (Astro app at site/apps/site)
 site/apps/site/node_modules/
 site/apps/site/dist/

@@ -6,12 +6,12 @@ sidebar:
 ---
 
 Two command surfaces, deliberately mirrored. `mx` works from anywhere and knows
-about global state — templates, recipes, the router. `make` works inside a
+about global state: templates, recipes, the router. `make` works inside a
 project and is the same in every project. Where they overlap (`dev`, `up`,
 `down`, `logs`, `sh`, `ps`, `build`), they do the same thing.
 
 Everything below is transcribed from `mx --help`, `mx <verb> --help` and
-`make help` against the current build. Ask any of them yourself — they are the
+`make help` against the current build. Ask any of them yourself. They are the
 authority, this page is a map.
 
 ## `mx`
@@ -38,7 +38,7 @@ Options:
 | `mx recipes versions <NAME>` | List available versions for a recipe |
 | `mx recipes pull <NAME>` | Pull a recipe from Unyform |
 | `mx recipes cache` | Manage cached recipes |
-| `mx upgrade` | Upgrade project scaffolding — `--diff`, `--dry-run`, `--yes`. See [Upgrade](/docs/framework/upgrade/) |
+| `mx upgrade` | Upgrade project scaffolding. `--diff`, `--dry-run`, `--yes`. See [Upgrade](/docs/framework/upgrade/) |
 | `mx self-update` | Update `mx` itself from the release channel. `--check` (exit 10 when newer exists), `--dry-run`, `--yes`, `--to <VERSION>`, `--rollback`, `--from-dir <DIR>`, `--pull` (source checkouts). See [Install](/docs/start/install/) |
 
 ### Operating a project
@@ -97,7 +97,7 @@ More on [AI Layer](/docs/ai/).
 ### Documents
 
 `mx docs [INPUT]` compiles Markdown to PDF/HTML. It takes a file or a directory
-and has a large flag surface — `--output`, `--title`, `--author`, `--theme`,
+and has a large flag surface: `--output`, `--title`, `--author`, `--theme`,
 `--order`, `--markdown-only`, `--html-only`, `--no-toc`, `--no-recursive`,
 `--logo`, `--company-name`, plus a `docs.json` config mode (`--config`,
 `--list`, `--all`, `--doc`). Run `mx docs --help` for the full list, and see the
@@ -105,7 +105,7 @@ corpus guide: [`mx docs`](/docs/corpus/framework-guides/docs-command/).
 
 ### Unyform
 
-`mx login`, `mx logout`, `mx whoami` — and the same three under
+`mx login`, `mx logout`, `mx whoami`, and the same three under
 `mx unyform login | logout | whoami`. `mx cc-plugin` installs or uninstalls the
 Unyform Claude Code plugin hooks. All optional; see
 [Remote blueprints](/docs/framework/unyform/).
@@ -115,37 +115,60 @@ Unyform Claude Code plugin hooks. All optional; see
 Every scaffolded project ships these. `make help` prints them with descriptions.
 Two conventions run through all of them:
 
-- `s=<service>` (or `service=<service>`) targets one service. Verbs that operate
-  on the whole stack treat it as optional; `restart` requires it.
+- `s=<service>` (or `service=<service>`) selects what to act on. Verbs that
+  operate on the whole stack treat it as optional; `restart` requires it. Where
+  the compose verb underneath takes several service operands, `s=` takes a
+  whitespace-separated list in quotes: `make dev s="api site"`. The quotes are
+  required, because make otherwise reads the second name as another goal.
 - `t=<tag>`, `c=<command>`, `a=<app>` follow the same short/long pattern
   (`tag=`, `cmd=`, …).
+
+Which verbs take a list is decided by the verb underneath rather than by taste:
+
+| `s=` accepts | Verbs |
+|---|---|
+| a list | `dev`, `up`, `down`, `stop`, `restart`, `logs` |
+| one service | `build`, `build-dev`, `build-prod`, `build-multiplatform`, `run`, `exec`, `sh`, `bash` |
+
+A single-service verb handed a list refuses out loud (`make build takes a single
+service only`) rather than silently acting on the first name. An unknown name
+anywhere in a list fails and names it.
 
 | Target | Purpose |
 |---|---|
 | `make help` | Show available commands |
-| `make init` | Initialize project environment (creates `.env.secrets` from the template) |
+| `make init` | Initialize project environment (creates `.env.secrets` from the template, then generates any value still missing) |
 | `make doctor` | Check project health |
 | `make test` | Run the project's tests |
 | `make ps` | List running services |
-| `make dev` | Start services in dev mode — `s=[service]` |
-| `make up` | Start services in production mode — `s=[service]` |
-| `make down` | Stop and remove services — `s=[service]` |
-| `make stop` | Stop services without removing — `s=[service]` |
+| `make dev` | Start services in dev mode (`s="[service ...]"` for a subset) |
+| `make up` | Start services in production mode (`s="[service ...]"` for a subset) |
+| `make down` | Stop and remove services (`s="[service ...]"` for a subset) |
+| `make stop` | Stop services without removing (`s="[service ...]"` for a subset) |
 | `make start` | Resume services from saved state |
-| `make restart` | Restart a service — `s=[service]` **required** |
-| `make logs` | Tail service logs — `s=[service]` |
-| `make sh` / `make bash` | Shell into a running service — `s=[service]` |
-| `make exec` | Exec a command in a running container — `s=[service] c=[cmd]` |
-| `make run` | Run a command in a new container — `s=[service] c=[cmd]` |
-| `make build` | Build an image — `s=[service] t=[tag] prod=[0\|1] push=[0\|1]` |
-| `make build-dev` / `make build-prod` | Build one image variant explicitly |
-| `make build-multiplatform` | Multi-platform production build |
-| `make make-key` | Generate a secret — `BYTES=32 FORMAT=hex\|base64\|uuid` |
+| `make restart` | Restart services (`s="[service ...]"` **required**) |
+| `make logs` | Tail service logs (`s="[service ...]"` for a subset) |
+| `make sh` / `make bash` | Shell into a running service (`s=[service]`, one service) |
+| `make exec` | Exec a command in a running container (`s=[service] c=[cmd]`, one service) |
+| `make run` | Run a command in a new container (`s=[service] c=[cmd]`, one service) |
+| `make build` | Build an image (`s=[service] t=[tag] prod=[0\|1] push=[0\|1]`, one service) |
+| `make build-dev` / `make build-prod` | Build one image variant explicitly (one service) |
+| `make build-multiplatform` | Multi-platform production build (one service) |
+| `make make-key` | Generate a secret (`BYTES=32 FORMAT=hex\|base64\|uuid`) |
 
 :::caution[`c=` takes a single word]
 `make exec s=api c=bash` works. A multi-word command (`c="ls -la"`) is split by
 make and the extra words are read as targets. Shell into the container with
 `make sh s=api` and run it there instead.
+:::
+
+:::caution[`s=` is a service name, not a container name]
+`s=db` is the service. The container behind it is named by Compose as
+`<COMPOSE_PROJECT_NAME>-db-1`, because no shipped compose file pins
+`container_name` any more. A script that reached past these verbs with
+`docker exec db …` no longer resolves; use `make exec s=db c=…`, or
+`docker compose -p "$COMPOSE_PROJECT_NAME" exec db …`. See
+[Compose &amp; env conventions](/docs/framework/compose-env/#container-names).
 :::
 
 Release targets (`make release`, `release-patch`, `release-minor`,
@@ -160,7 +183,7 @@ projects created with `--infra cloudflare`; they are listed on
 
 ## Developing mx itself
 
-The repository's own `Makefile` is a different surface — `make build`,
+The repository's own `Makefile` is a different surface: `make build`,
 `make test`, `make lint`, `make check`, `make coverage`,
 `make test-known-broken`, `make test-e2e`, `make test-mutants`,
 `make install-local`. See [Testing](/docs/framework/testing/), and the corpus
