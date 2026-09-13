@@ -13,4 +13,4 @@ fi
 
 files=$(compose_context_files "$1" "true")
 
-docker compose $files exec "$1" sh
+docker compose -p "$COMPOSE_PROJECT_NAME" $files exec "$1" sh

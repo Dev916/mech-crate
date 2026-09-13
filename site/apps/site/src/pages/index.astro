@@ -6,9 +6,10 @@
 //
 // The copy is adapted from the repo README's "problems it exists to solve"
 // narrative — tightened for the web, never pasted — and it inherits the
-// README's honesty rules: no capability is claimed past what ships, `mx upgrade`
-// is described as mid-repair, and the locality claim about the corpus is about
-// the *store*, not the embedding provider (which is OpenAI by default).
+// README's honesty rules: no capability is claimed past what ships, any defect
+// still open is named with its bd id rather than written around, and the locality
+// claim about the corpus is about the *store*, not the embedding provider (which
+// is OpenAI by default).
 import { Image, getImage } from 'astro:assets';
 
 import logo from '@/assets/mechcrate-logo.png';
@@ -365,11 +366,14 @@ const startCommand = [
                 </div>
               </div>
               <p class="caveat">
-                <strong>Being straight with you:</strong> <code>mx upgrade</code> is currently
-                mid-repair against the shipped template layout, tracked as
-                <code>mech-crate-z5i</code>, with a red test asserting the fixed behaviour. A
-                few recipes also still fail on a known templating defect. Both live in the
-                <a href="/docs/project/">known-broken lane</a>, not in a backlog nobody reads.
+                <strong>Being straight with you:</strong> <code>mx upgrade</code> used to fail
+                before it did anything, tracked as <code>mech-crate-z5i</code> with a red test
+                asserting the behaviour we owed you. That test is green and in the gate now, and
+                the <a href="/docs/framework/upgrade/">upgrade page</a> shows a real run along
+                with the one migration it asks of you. What is still open gets named the same
+                way: thirteen defects sit in the
+                <a href="/docs/project/">known-broken lane</a> with a red test each, not in a
+                backlog nobody reads.
               </p>
             </div>
           </div>
@@ -536,13 +540,15 @@ const startCommand = [
             <h3>The known-broken lane</h3>
             <p>
               We would rather publicly index our own defects than pretend there aren&rsquo;t
-              any. <code>mx upgrade</code> (<code>mech-crate-z5i</code>) and the corpus&rsquo;s
-              lexical retrieval arm (<code>mech-crate-4jw</code>) are both open and both
-              named, each with a red test that asserts the behaviour we owe you.
+              any. Thirteen are open and named, the corpus&rsquo;s measurably weak lexical
+              retrieval arm (<code>mech-crate-4jw</code>) among them, each with a red test
+              that asserts the behaviour we owe you.
             </p>
             <p>
-              Un-ignoring that test is the fix&rsquo;s definition of done. It is a report, not
-              a gate, which is exactly why it can afford to be honest.
+              Un-ignoring that test is the fix&rsquo;s definition of done, and
+              <code>mx upgrade</code> (<code>mech-crate-z5i</code>) is the first row to leave
+              the lane that way. The lane is a report, not a gate, which is exactly why it can
+              afford to be honest.
               <a href="/docs/project/">See the lane and the research log →</a>
             </p>
           </div>

@@ -41,13 +41,20 @@ All seven exited `0` and landed their compose files, dockerfiles and env files.
 This supersedes the ⚠️ markers the README carried for `laravel`, `rust-worker`
 and `zola`, which described a Tera templating defect that has since been fixed.
 
-Two things the column does **not** claim. `laravel`'s post-install
+Two later fixes are now gated rather than measured by hand. Every installed
+recipe's assembled dev config has to pass `docker compose config` straight after
+`mx add`, against the file set `compose_context_files` hands `make dev`, and no
+recipe may reference a compose file it does not ship. That net was built for the
+`astro` recipe, which declared `include:` entries for `db.yml` and `redis.yml`
+while shipping neither, and it immediately caught `rust-worker` depending on the
+same two services without defining them. And `mx add` now runs a recipe's
+framework scaffolder for real, which it previously skipped every single time.
+
+What the column still does **not** claim. `laravel`'s post-install
 `generate-secrets.sh` emitted a non-fatal warning during the run (running the
-same script directly afterwards exits `0`). And "applies" is not "builds": for
-`astro`, `nuxt` and `zola` the recipe's framework scaffolder is skipped when the
-app directory already exists, so those give you the operational layer plus a
-source skeleton and you run the framework's own install step yourself. Every
-recipe prints its exact next steps when it finishes.
+same script directly afterwards exits `0`). And "applies" is not "builds": you
+still run the dependency install yourself, and every recipe prints its exact next
+steps when it finishes.
 :::
 
 ## What `mx add` actually does
@@ -59,9 +66,14 @@ recipe prints its exact next steps when it finishes.
    `rust-api`, for example, takes `rust`, `port` and `domain`.
 2. **Placeholders**: `{{SERVICE_NAME}}`, the port, the domain and the rest are
    substituted through every template.
-3. **Directories**: the app's source tree is created.
-4. **Framework scaffold** (`init_app`, where a recipe declares one): skipped if
-   the app directory already exists.
+3. **Framework scaffold** (`init_app`, where a recipe declares one): `astro`,
+   `nuxt` and `zola` run the framework's own initializer here. `mx add` prints
+   `Scaffolding the app…` and then the command it used, or
+   `Scaffolder skipped: <dir> already holds an app` when the target is not empty.
+   This step comes *first*, so mx's own wiring layers on top of the starter files
+   and wins every collision with them.
+4. **Directories**: any part of the app's source tree the scaffolder did not
+   create is filled in.
 5. **Templates**: the app files, `docker/compose/<service>.yml` and
    `<service>.dev.yml`, `docker/dockerfiles/<service>/app` and `app.prod`, and
    `docker/.config/.env.<service>`.
@@ -70,6 +82,13 @@ recipe prints its exact next steps when it finishes.
 7. **Post-install**: anything the recipe declares, such as generating secrets.
 
 Recipes that need backing services also drop `db.yml` / `redis.yml` in, once.
+
+A scaffolder command has to be non-interactive, because `mx add` runs it without a
+terminal. The shipped defaults carry the flags that make that true, and a command
+that exits `0` while leaving the target empty is treated as a failure rather than
+a success, with the command, its working directory and both streams reported. To
+use a different starter, pass your own:
+`mx add site --recipe astro --opt init_cmd='...'`.
 
 The corpus has the long-form version of this, including how recipes and the build
 system fit together:

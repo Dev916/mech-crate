@@ -71,14 +71,19 @@ Two house rules keep the lane honest:
 - Lane tests live beside the suite that owns their subject, not in one central
   file. The test is the first thing whoever fixes it should read.
 
-The two numbers partition the workspace: the lane reports 14 tests, 14 red; the
-gate suite in the same tree reports 189 passed, 14 skipped. If they stop summing,
+The two numbers partition the workspace: the lane reports 13 tests, 13 red; the
+gate suite in the same tree reports 217 passed, 13 skipped. If they stop summing,
 either a lane test lost its `#[ignore]` or a gate test grew one.
 
-Several pages in these docs point at this lane, because pointing at it is the
-alternative to quietly writing around a defect:
-[`mech-crate-z5i`](/docs/framework/upgrade/) for `mx upgrade`,
-`mech-crate-vxq`, `mech-crate-wd9` and `mech-crate-066` for the
+`mech-crate-z5i`, the `mx upgrade` discovery defect, is the first row retired the
+intended way. Its test lost the `#[ignore]`, joined the gate, and its row left the
+index, taking the lane from 14 to 13. That is what the workflow above looks like
+when it completes, and the [Upgrade](/docs/framework/upgrade/) page now documents
+a command that works instead of one that does not.
+
+Several pages in these docs still point at this lane, because pointing at it is
+the alternative to quietly writing around a defect: `mech-crate-vxq`,
+`mech-crate-wd9` and `mech-crate-066` for the
 [infra credential path](/docs/framework/infra-credentials/).
 
 **→ [The lane index on GitHub](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md)**

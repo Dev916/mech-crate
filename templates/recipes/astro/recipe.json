@@ -35,8 +35,8 @@
     },
     "init_cmd": {
       "flag": "--init-cmd",
-      "default": "CI=true npm create astro@latest {{SERVICE_NAME}} -- --template minimal --no-install",
-      "description": "Command to scaffold the Astro app (runs from ./apps)"
+      "default": "CI=true npm create astro@latest {{SERVICE_NAME}} -- --template minimal --no-install --no-git --no-ai --skip-houston --yes",
+      "description": "Command to scaffold the Astro app (runs from ./apps; must be non-interactive and must create {{SERVICE_NAME}}/)"
     },
     "force_init": {
       "flag": "--force-init",
@@ -95,11 +95,17 @@
   "templates": [
     { "from": "app/src/pages/api/health.ts", "to": "apps/{{SERVICE_NAME}}/src/pages/api/health.ts" },
     { "from": "README.md", "to": "apps/{{SERVICE_NAME}}/README.md" },
+    { "from": "common://docker/compose/db.yml", "to": "docker/compose/db.yml" },
+    { "from": "common://docker/compose/db.dev.yml", "to": "docker/compose/db.dev.yml" },
+    { "from": "common://docker/compose/redis.yml", "to": "docker/compose/redis.yml" },
+    { "from": "common://docker/compose/redis.dev.yml", "to": "docker/compose/redis.dev.yml" },
     { "from": "docker/compose/service.yml", "to": "docker/compose/{{SERVICE_NAME}}.yml" },
     { "from": "docker/compose/service.dev.yml", "to": "docker/compose/{{SERVICE_NAME}}.dev.yml" },
     { "from": "docker/dockerfiles/app.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app" },
     { "from": "docker/dockerfiles/app.prod.Dockerfile", "to": "docker/dockerfiles/{{SERVICE_NAME}}/app.prod" },
-    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" }
+    { "from": "config/env.service", "to": "docker/.config/.env.{{SERVICE_NAME}}" },
+    { "from": "common://docker/config/env.db", "to": "docker/.config/.env.db" },
+    { "from": "common://docker/config/env.redis", "to": "docker/.config/.env.redis" }
   ],
 
   "next_steps": [

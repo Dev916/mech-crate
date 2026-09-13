@@ -317,7 +317,10 @@ export interface AgentInstructionsOptions {
  * Every claim here is checkable against the site, and the awkward ones are
  * stated rather than smoothed over — a model that installs mx from a package
  * registry that does not exist, or that invents a plausible flag, wastes a user's
- * afternoon. Honesty about `mx upgrade` is deliberate for the same reason.
+ * afternoon. The `mx upgrade` bullet follows the same rule: it said "mid-repair"
+ * while discovery was broken, and now that it works it states the one migration
+ * that costs an agent something, because an agent that runs upgrade on a project
+ * with containers up needs to know their namespace changed.
  */
 export function agentInstructions(options: AgentInstructionsOptions = {}): string[] {
   const { origin = SITE_ORIGIN, categories = [], generatedAt } = options;
@@ -334,7 +337,7 @@ export function agentInstructions(options: AgentInstructionsOptions = {}): strin
     '',
     `- **Install from source.** mx is not published to npm, cargo or Homebrew — there is no package to install, stale or otherwise. Build it from the repository: \`${INSTALL_COMMAND}\`, which puts a release binary in \`~/.local/bin\`. See ${url('/docs/start/install/')}.`,
     `- **Do not invent flags.** Every \`mx\` and \`make\` verb, with its real flags, is listed at ${url('/docs/start/cli-reference/')}, taken from the shipped \`--help\` output. A flag that is not on that page does not exist; do not carry one over from a similar tool.`,
-    `- **\`mx upgrade\` is mid-repair.** On the current build it fails before doing anything, so do not plan work around it. What it is meant to do, and where it stops, is at ${url('/docs/framework/upgrade/')}; every open defect with a red test behind it is at ${url('/docs/project/known-broken/')}.`,
+    `- **\`mx upgrade\` works, and changes the compose project name.** It offers mx's own tooling files for update, never overwrites compose files or dockerfiles, and backs up what it replaces. One migration rides with it: projects now pin \`COMPOSE_PROJECT_NAME\` per project, so containers started before the upgrade are orphaned under the old shared default and \`make down\` will not see them. Run \`make doctor\`, which names them. Details at ${url('/docs/framework/upgrade/')}; every open defect with a red test behind it is at ${url('/docs/project/known-broken/')}.`,
     `- **Every page has a markdown twin.** Append \`.md\` to a page URL for its source markdown without the HTML chrome — ${url('/docs/start/install/')} is also ${url('/docs/start/install.md')}. Each page advertises its own twin as \`<link rel="alternate" type="text/markdown">\`.`,
     `- **Retrieve in bulk instead of crawling.** ${retrieval.length} concatenated files carry the same text as the pages:`,
     ...retrieval.map((file) => `  - ${file}`),

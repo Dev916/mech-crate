@@ -59,6 +59,63 @@ else
     print_warn "Docker network '$NETWORK_NAME' not found - run 'make init'"
 fi
 
+# Check compose project name
+#
+# Every script here pins `-p "$COMPOSE_PROJECT_NAME"` (see scripts/.bashrc), so
+# this project's containers live in their own namespace. Migration hazard: a
+# project whose containers were started BEFORE that pin landed ran under the
+# name compose derives from the compose file's parent directory — "compose",
+# shared by every mx project on the machine. Those containers are now orphaned:
+# `make down`/`make ps` under the pinned name cannot see them.
+#
+# One `docker ps` surfaces it. Only the legacy default namespace is inspected —
+# containers under any other project name belong to another stack and are none
+# of this project's business. Ownership is settled by compose's own
+# `project.working_dir` label, so an orphan of THIS project is never confused
+# with another project that is also sitting in the shared default namespace.
+echo ""
+print_info "Checking compose project name..."
+print_success "Compose project name: $COMPOSE_PROJECT_NAME"
+legacy_project="$(mech_compose_project_name "$(pwd)/docker/compose")"
+if [[ "$legacy_project" == "$COMPOSE_PROJECT_NAME" ]]; then
+    : # nothing to migrate from
+elif command -v docker &> /dev/null && docker ps --format '{{.ID}}' &>/dev/null; then
+    declared_services=""
+    for yml in docker/compose/*.yml; do
+        if [[ -f "$yml" && ! "$(basename "$yml")" =~ \.dev\.yml$ ]]; then
+            declared_services+=" $(basename "$yml" .yml)"
+        fi
+    done
+
+    orphans=""
+    neighbours=""
+    while IFS='|' read -r proj svc name wdir; do
+        [[ "$proj" == "$legacy_project" ]] || continue
+        [[ " $declared_services " == *" $svc "* ]] || continue
+        if [[ "$wdir" == "$(pwd)/docker/compose" ]]; then
+            orphans+="    - $name (service '$svc')\n"
+        else
+            neighbours+="    - $name (service '$svc', from $wdir)\n"
+        fi
+    done < <(docker ps --format '{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}|{{.Names}}|{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null)
+
+    if [[ -n "$orphans" ]]; then
+        print_warn "These containers are THIS project's, but still running under the old"
+        print_warn "shared project name '$legacy_project' - 'make down' won't see them:"
+        echo -en "$orphans"
+        print_warn "Remove them once with: docker rm -f <name>   then 'make dev' again."
+    else
+        print_success "No orphans left under the old '$legacy_project' project name"
+    fi
+    if [[ -n "$neighbours" ]]; then
+        print_info "Another stack is using the shared default project name '$legacy_project':"
+        echo -en "$neighbours"
+        print_info "Left alone - pinning '$COMPOSE_PROJECT_NAME' is what keeps this project out of it."
+    fi
+else
+    print_warn "Docker not reachable - skipped the compose project name check"
+fi
+
 # List available services
 echo ""
 print_info "Available services:"

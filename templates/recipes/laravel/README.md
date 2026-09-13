@@ -232,7 +232,7 @@ mx sh {{SERVICE_NAME}} -- php artisan schedule:run
 
 ### Environment Variables
 
-Key environment variables in `docker/config/.env.{{SERVICE_NAME}}`:
+Key environment variables in `docker/.config/.env.{{SERVICE_NAME}}`:
 
 ```bash
 # Application
