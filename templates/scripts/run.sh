@@ -18,4 +18,4 @@ fi
 
 files=$(compose_context_files "$1" "$app_dev")
 
-docker compose $files run --rm "$1" $2
+docker compose -p "$COMPOSE_PROJECT_NAME" $files run --rm "$1" $2

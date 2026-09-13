@@ -4,6 +4,8 @@
 
 set -e
 
+source ./scripts/.bashrc
+
 if [ -z "$1" ] || [ -z "$2" ]; then
     echo "Usage: $0 <service> <command>"
     exit 1
@@ -17,4 +19,4 @@ fi
 
 files=$(cat tmp/up/*.txt)
 
-docker compose $files exec "$1" $2
+docker compose -p "$COMPOSE_PROJECT_NAME" $files exec "$1" $2

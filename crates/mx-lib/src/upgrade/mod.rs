@@ -28,6 +28,10 @@ use crate::paths;
 ///   only the two shared files below.
 /// - `infra/` — written by `mx infra setup`, which expands `{{PROJECT_NAME}}`
 ///   placeholders; copying the raw templates back would undo that expansion.
+/// - `scripts/<subdir>/**` — `mx new` copies only the top-level files of
+///   `templates/scripts/`, so nested helper bundles (e.g. `scripts/md2pdf/`)
+///   are not part of the scaffold. They are walked here but categorized
+///   [`FileCategory::Skip`], so discovery never offers to add them.
 const SCAFFOLD_DIRS: &[&str] = &["make", "scripts"];
 
 /// Individual template files the upgrader owns, relative to `templates/`.
@@ -100,10 +104,22 @@ impl ProjectUpgrader {
                     FileCategory::Tooling
                 }
             }
-            path if path.starts_with("scripts/")
-                && (path.ends_with(".sh") || path.ends_with(".mjs")) =>
-            {
-                if path.starts_with("scripts/cf-") {
+            // `scripts/` — owned file-for-file with what `mx new` lays down.
+            // `copy_templates` copies every TOP-LEVEL file of
+            // `templates/scripts/`, extension or not, so the old `.sh`/`.mjs`
+            // extension test silently skipped `scripts/.bashrc` — the helper
+            // library every other script sources. `mx upgrade` would refresh
+            // `dev.sh`/`up.sh` and never the library they depend on.
+            //
+            // Nested subtrees (e.g. `scripts/md2pdf/`) are NOT copied by
+            // `mx new`, so upgrade must not add them either — that would break
+            // the scope invariant pinned by
+            // `upgrade_discovery_scope_mirrors_mx_new`.
+            path if path.starts_with("scripts/") => {
+                let rel = &path["scripts/".len()..];
+                if rel.is_empty() || rel.contains('/') {
+                    FileCategory::Skip
+                } else if rel.starts_with("cf-") {
                     FileCategory::Conditional("cloudflare".to_string())
                 } else {
                     FileCategory::Tooling
@@ -362,6 +378,7 @@ mod tests {
         // Tooling
         write(p, "make/dev.mk", "dev-mk-v2\n");
         write(p, "scripts/setup.sh", "setup-v2\n");
+        write(p, "scripts/.bashrc", "bashrc-v2\n");
         write(p, "Makefile.template", "makefile-v2\n");
         // Conditional (cloudflare)
         write(p, "make/cloudflare.mk", "cf-mk-v2\n");
@@ -380,6 +397,9 @@ mod tests {
         write(p, "router/docker-compose.yml", "router-v2\n");
         write(p, "project/nested.txt", "nested\n");
         write(p, "README.md", "readme\n");
+        // Nested helper bundle under scripts/ — walked, never adopted.
+        write(p, "scripts/md2pdf/md2pdf.ts", "md2pdf-v2\n");
+        write(p, "scripts/md2pdf/package.json", "{}\n");
     }
 
     fn entry_for<'a>(entries: &'a [UpgradeEntry], template_rel: &str) -> Option<&'a UpgradeEntry> {
@@ -403,6 +423,17 @@ mod tests {
             ("scripts/setup.sh", FileCategory::Tooling),
             ("scripts/gen.mjs", FileCategory::Tooling),
             ("Makefile.template", FileCategory::Tooling),
+            // bd:mech-crate-12p — `mx new` copies every top-level file of
+            // `templates/scripts/`, extension or not. The extension-based arm
+            // used to drop `.bashrc` (and any other extension-less helper) into
+            // Skip, so `mx upgrade` refreshed dev.sh/up.sh but never the helper
+            // library they source — the COMPOSE_PROJECT_NAME pin could never
+            // reach an existing project.
+            ("scripts/.bashrc", FileCategory::Tooling),
+            // `scripts/notes.txt` follows from the same rule: `mx new` ships it,
+            // so upgrade owns it. (It used to be Skip, which is precisely the
+            // bug above.)
+            ("scripts/notes.txt", FileCategory::Tooling),
             // docker config → add-only
             ("docker/compose/app.yml", FileCategory::Config),
             ("docker/config/env.app", FileCategory::Config),
@@ -418,7 +449,11 @@ mod tests {
             ("project/nested.txt", FileCategory::Skip),
             ("README.md", FileCategory::Skip),
             ("make/notes.txt", FileCategory::Skip),
-            ("scripts/notes.txt", FileCategory::Skip),
+            // Nested bundles under scripts/ are not copied by `mx new`, so
+            // upgrade must never add them.
+            ("scripts/md2pdf/md2pdf.ts", FileCategory::Skip),
+            ("scripts/md2pdf/package.json", FileCategory::Skip),
+            ("scripts/md2pdf/README.md", FileCategory::Skip),
         ];
 
         for (rel, expected) in cases {
@@ -499,6 +534,8 @@ mod tests {
             "router/docker-compose.yml",
             "project/nested.txt",
             "README.md",
+            "scripts/md2pdf/md2pdf.ts",
+            "scripts/md2pdf/package.json",
         ] {
             assert!(
                 entry_for(&entries, skipped).is_none(),
@@ -653,11 +690,13 @@ mod tests {
             );
         }
 
-        // The skeleton `mx new` copies is in scope.
+        // The skeleton `mx new` copies is in scope — including the
+        // extension-less helper library (bd:mech-crate-12p).
         for in_scope in [
             "Makefile.template",
             "make/dev.mk",
             "scripts/setup.sh",
+            "scripts/.bashrc",
             "docker/config/env.shared",
             "docker/config/env.secrets.template",
         ] {
@@ -735,13 +774,85 @@ mod tests {
             "the shipped scripts/ must be discovered"
         );
 
-        // And nothing recipe- or infra-owned rides along.
-        for forbidden in ["/recipes/", "/router/", "/docker/compose/", "/infra/"] {
+        // And nothing recipe- or infra-owned rides along. `scripts/md2pdf/` is
+        // a nested helper bundle `mx new` never copies — upgrade must not add
+        // it either (bd:mech-crate-12p).
+        for forbidden in [
+            "/recipes/",
+            "/router/",
+            "/docker/compose/",
+            "/infra/",
+            "/scripts/md2pdf/",
+        ] {
             assert!(
                 !entries
                     .iter()
                     .any(|e| e.template_path.to_string_lossy().contains(forbidden)),
                 "{forbidden} must stay out of the upgrade set"
+            );
+        }
+    }
+
+    /// bd:mech-crate-12p — `mx upgrade` must deliver the SHIPPED
+    /// `templates/scripts/.bashrc`. It is the helper library every other script
+    /// sources (`compose_context_files`, `run_service_in_context`, and the
+    /// `COMPOSE_PROJECT_NAME` pin of bd:mech-crate-71u), but the old
+    /// extension-based categorization arm classified it `Skip`, so upgrade
+    /// refreshed `dev.sh`/`up.sh` and left the library they depend on frozen at
+    /// whatever version the project was scaffolded with.
+    #[test]
+    fn upgrade_discovers_the_shipped_extensionless_script_helpers() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("crates/mx-lib should sit two levels below the repo root")
+            .to_path_buf();
+        let templates = repo_root.join("templates");
+        assert!(
+            templates.join("scripts/.bashrc").is_file(),
+            "setup: templates/scripts/.bashrc must exist"
+        );
+
+        let project = tempfile::tempdir().unwrap();
+        crate::test_support::scaffold_project(project.path());
+        // A project scaffolded with a stale helper library: upgrade must offer
+        // to update it, not skip it.
+        std::fs::write(project.path().join("scripts/.bashrc"), "stale-helpers\n").unwrap();
+
+        let entries = upgrader(&templates, project.path())
+            .discover_upgrades()
+            .unwrap();
+
+        let bashrc = entry_for(&entries, "scripts/.bashrc")
+            .expect("the shipped scripts/.bashrc must be discovered");
+        assert_eq!(bashrc.category, FileCategory::Tooling);
+        assert_eq!(
+            bashrc.project_path,
+            project.path().join("scripts/.bashrc"),
+            "dotfiles map straight through, no path remap"
+        );
+        assert!(
+            matches!(bashrc.action, UpgradeAction::Update),
+            "a stale scripts/.bashrc must be offered as an Update, got {:?}",
+            bashrc.action
+        );
+
+        // Every other extension-less top-level file in templates/scripts/ rides
+        // the same rule — the test must not hard-code only `.bashrc`.
+        for entry in std::fs::read_dir(templates.join("scripts"))
+            .unwrap()
+            .flatten()
+        {
+            let path = entry.path();
+            if !path.is_file() || path.extension().is_some() {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let rel = format!("scripts/{name}");
+            assert_eq!(
+                upgrader(&templates, project.path()).categorize_file(&rel),
+                FileCategory::Tooling,
+                "{rel} is copied by `mx new` and must be upgrade-owned"
             );
         }
     }

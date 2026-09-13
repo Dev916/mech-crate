@@ -1,6 +1,71 @@
 # MechCrate Helper Functions
 # Source this file in scripts: source ./scripts/.bashrc
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Compose project isolation
+#
+# THIS FILE IS THE AUTHORITATIVE SOURCE of the docker compose project name for
+# this project. Every script that shells out to `docker compose` sources this
+# file and passes `-p "$COMPOSE_PROJECT_NAME"`.
+#
+# Why it has to be pinned: every mx project keeps its compose files in
+# docker/compose/, and `docker compose` derives its default project name from
+# the compose file's parent directory — i.e. "compose" for EVERY mx project on
+# the machine. Two projects then share one namespace and adopt/recreate each
+# other's containers, networks and volumes (observed live: an e2e scaffold
+# recreated an unrelated project's `db`).
+#
+# Alternatives considered and rejected:
+#   * a top-level `name:` key in the compose files — compose-native, and it
+#     would also cover hand-rolled `docker compose` calls, but the shared
+#     docker/compose/*.yml are copied verbatim (no placeholder expansion) and
+#     every recipe fragment would need its own copy, so the name would live in
+#     N places and drift.
+#   * COMPOSE_PROJECT_NAME in docker/.config/.env.shared — that file is an
+#     `env_file:` for the *containers*; the compose CLI never reads it.
+#
+# Known limitation: a hand-rolled `docker compose -f docker/compose/x.yml …`
+# that does not source this file still gets the default name. `make doctor`
+# warns when it finds containers for this project's services under a different
+# compose project name.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Absolute path of the project root (the directory holding scripts/).
+# Derived from this file's location, so it is correct regardless of the caller's
+# working directory; falls back to $PWD in shells without BASH_SOURCE.
+mech_project_root() {
+    if [ -n "${BASH_SOURCE[0]:-}" ]; then
+        (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+    else
+        pwd
+    fi
+}
+
+# Derive this project's compose project name from its directory name.
+# Usage: mech_compose_project_name [root_dir]
+#
+# Compose project names must match [a-z0-9][a-z0-9_-]*, so the directory name is
+# lowercased, every other character becomes '-', and leading non-alphanumerics
+# are stripped. Collision note: two directories with the SAME name on one
+# machine still derive the same project name — accepted; name project
+# directories uniquely (or export COMPOSE_PROJECT_NAME yourself).
+mech_compose_project_name() {
+    local root raw name
+    root="${1:-$(mech_project_root)}"
+    raw="$(basename "$root")"
+    name="$(printf '%s' "$raw" |
+        tr '[:upper:]' '[:lower:]' |
+        sed -e 's/[^a-z0-9_-]/-/g' -e 's/^[^a-z0-9]*//')"
+    [ -n "$name" ] || name="mx-project"
+    printf '%s\n' "$name"
+}
+
+# Pin the name for every compose invocation in this project. An explicit value
+# already in the environment always wins, so harnesses (e.g. an e2e runner) can
+# namespace their own runs.
+: "${COMPOSE_PROJECT_NAME:=$(mech_compose_project_name)}"
+export COMPOSE_PROJECT_NAME
+
 # Deduplicate compose file arguments
 # Prevents duplicate -f flags when composing multiple services
 deduplicate_services() {
@@ -169,13 +234,15 @@ run_service_in_context() {
     rm -f tmp/up/up-*.txt
     echo $deduplicated_files > tmp/up/up-$dt.txt
 
-    # Start the service(s)
+    # Start the service(s) — always under this project's own compose project
+    # name, never the directory-derived default ("compose") every mx project
+    # would otherwise share.
     if [[ -n "${service:-}" ]]; then
-        echo "docker compose $deduplicated_files up -d $service"
-        docker compose $deduplicated_files up -d $service
+        echo "docker compose -p $COMPOSE_PROJECT_NAME $deduplicated_files up -d $service"
+        docker compose -p "$COMPOSE_PROJECT_NAME" $deduplicated_files up -d $service
     else
-        echo "docker compose $deduplicated_files up -d"
-        docker compose $deduplicated_files up -d
+        echo "docker compose -p $COMPOSE_PROJECT_NAME $deduplicated_files up -d"
+        docker compose -p "$COMPOSE_PROJECT_NAME" $deduplicated_files up -d
     fi
 }
 
