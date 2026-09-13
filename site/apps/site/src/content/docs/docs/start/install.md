@@ -41,9 +41,9 @@ mx doctor
 
 Pin a version with `MX_VERSION=0.1.2` in front of the command.
 
-`mx --version` prints the crate version. `mx doctor` checks Docker, Compose
-and Make. Run inside a project, it also checks the folder contract and the
-service list.
+`mx --version` prints the crate version. `mx doctor` checks Docker, Compose and
+Make. Run inside a project, it also checks the folder contract and the service
+list.
 
 ### Homebrew (macOS, Linux)
 
