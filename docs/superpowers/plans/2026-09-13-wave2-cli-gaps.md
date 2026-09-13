@@ -13,10 +13,10 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - **Accept:** all recipe env_file lists in documented order incl. zola carrying secrets; conformance test green and covering every compose file; collision key proven to resolve to secrets live; `make test` green.
 
 ### Task 2: db-bearing recipes `make dev` unaided — generated dev credentials (bd mech-crate-rqc)
-- [ ] Fresh `mx new` + `mx add <svc> --recipe rust-api` cannot `make dev` today: scripts/init.sh copies .env.secrets.template verbatim (empty DB_USER/DB_PASSWORD/DB_NAME) and rust-api ships `__GENERATE_DB_PASSWORD__` placeholders nothing replaces. Fix at the shared layer: init.sh (or the installer's post-install path) generates real dev credentials — the laravel recipe's generate-secrets.sh pattern is the in-repo precedent — so EVERY db-bearing recipe initializes unaided. Kill the `__GENERATE_DB_PASSWORD__` placeholder convention or make it the thing the generator replaces; no recipe may ship a placeholder that nothing consumes.
-- [ ] `make doctor` flags empty/placeholder values in .env.secrets cheaply (string check, no docker).
-- [ ] Tests: unit/template assertions on the generation path + conformance check that no recipe ships an unconsumed `__GENERATE_*__` placeholder.
-- [ ] Live E2E: fresh scratch project + rust-api recipe, ZERO hand edits, `make dev` reaches a healthy db and the app answers its health endpoint. Second recipe spot-check (laravel or nuxt) that init.sh produces non-empty secrets.
+- [x] Fresh `mx new` + `mx add <svc> --recipe rust-api` cannot `make dev` today: scripts/init.sh copies .env.secrets.template verbatim (empty DB_USER/DB_PASSWORD/DB_NAME) and rust-api ships `__GENERATE_DB_PASSWORD__` placeholders nothing replaces. Fix at the shared layer: init.sh (or the installer's post-install path) generates real dev credentials — the laravel recipe's generate-secrets.sh pattern is the in-repo precedent — so EVERY db-bearing recipe initializes unaided. Kill the `__GENERATE_DB_PASSWORD__` placeholder convention or make it the thing the generator replaces; no recipe may ship a placeholder that nothing consumes.
+- [x] `make doctor` flags empty/placeholder values in .env.secrets cheaply (string check, no docker).
+- [x] Tests: unit/template assertions on the generation path + conformance check that no recipe ships an unconsumed `__GENERATE_*__` placeholder.
+- [x] Live E2E: fresh scratch project + rust-api recipe, ZERO hand edits, `make dev` reaches a healthy db and the app answers its health endpoint. Second recipe spot-check (laravel or nuxt) that init.sh produces non-empty secrets.
 - **Accept:** rust-api boots unaided in scratch; generator covers all db-bearing recipes; doctor flags empties; `make test` green.
 
 ### Task 3: astro recipe repair — build target, health endpoint, dead payload, force_init (bd mech-crate-47j + 874 + puy)
