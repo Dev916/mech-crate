@@ -52,9 +52,9 @@ a fix landed without bookkeeping — surfaced, not silently green.
 its fix landed).
 
 **Scoreboard** (`make test-known-broken`): `13 tests run: 0 passed, 13 failed,
-191 skipped` — 13 rows above, 13 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `191 passed, 13 skipped`. Those two numbers
-partition the workspace; if they stop summing to 204, either a lane test lost
+217 skipped` — 13 rows above, 13 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `217 passed, 13 skipped`. Those two numbers
+partition the workspace; if they stop summing to 230, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -67,6 +67,14 @@ directly, taking it from 162 to 189.
 lost `#[ignore]` and joined the gate, taking the lane 14 → 13 and the gate
 189 → 191 (the fix also added `upgrade_discovery_scope_mirrors_mx_new`, which is
 why the workspace total moved 203 → 204).
+
+The rest of Wave 1 had no lane rows to retire, so each fix landed against fresh
+red tests that joined the gate directly: compose project isolation plus the
+`scripts/.bashrc` delivery gap (bd:mech-crate-71u, bd:mech-crate-12p) took it
+191 → 202, the astro `include` fix and its compose-config conformance net
+(bd:mech-crate-eic, bd:mech-crate-pos) 202 → 205, and the `init_app` ordering fix
+(bd:mech-crate-0uq) 205 → 217. The lane stayed at 13 throughout, so the workspace
+total moved 204 → 230.
 
 ## Notes on placement deviations
 

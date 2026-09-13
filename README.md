@@ -68,7 +68,7 @@ mx upgrade --diff             # review what newer scaffolding would change
 mx upgrade                    # adopt it
 ```
 
-Projects don't fork away from the framework: `mx upgrade` keeps existing projects current with the templates as they improve. (`mx upgrade` is currently mid-repair against the shipped template layout — it's [mech-crate-z5i](tests/KNOWN_BROKEN.md), with a red test asserting the fixed behavior. More on that lane below.)
+Projects don't fork away from the framework: `mx upgrade` keeps existing projects current with the templates as they improve. It reads the shipped template layout, offers mx's own tooling files for update, never overwrites your compose files or dockerfiles, keeps a `.bak` beside anything it replaces, and reports "Project is up to date!" on a second run. (This was [mech-crate-z5i](tests/KNOWN_BROKEN.md) until its red test went green and joined the gate. One migration comes with it: projects now pin `COMPOSE_PROJECT_NAME` per project, so containers started under the old shared default are orphaned until you clear them once. `make doctor` names them.)
 
 ### The cobbled-together everything else
 
@@ -145,7 +145,7 @@ make dev                             # develop at http://api.localhost
 | `rust-worker` | ✅ | High-performance job worker with Redis pub/sub, PostgreSQL, and local LLM evaluation |
 | `zola` | ✅ | Zola static site generator — single binary, no dependencies |
 
-All seven recipes are apply-verified by the test suite (installer round-trip conformance tests).
+All seven recipes are apply-verified by the test suite (installer round-trip conformance tests), and the assembled dev config of every one of them has to pass `docker compose config` straight after `mx add` — a recipe may not reference a compose file it does not ship. Where a recipe declares a framework initializer (`astro`, `nuxt`, `zola`), `mx add` runs it, so the app arrives as the framework's own starter would make it with mx's wiring layered on top.
 
 `mx recipes list` and `mx recipes info <name>` show what's installed; the [Recipe Authoring Guide](docs/development/RECIPE_AUTHORING_GUIDE.md) covers writing your own.
 

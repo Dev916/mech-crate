@@ -58,12 +58,14 @@ Recipes that also declare backing services (Postgres, Redis) drop their compose
 files in at the same time, so `docker/compose/` grows `db.yml` and `redis.yml`
 on the first `mx add` that needs them.
 
-:::note[The app skeleton is a skeleton]
-`mx add` gives you the operational layer (compose, dockerfile, env, routing)
-plus a source tree with the recipe's structure and a health endpoint. You still
-run the framework's own install step (`npm install`, `cargo build`, `composer
-install`) the first time. Each recipe prints its exact next steps when it
-finishes.
+:::note[What lands, and what you still run]
+`mx add` gives you the operational layer (compose, dockerfile, env, routing) plus
+a source tree with the recipe's structure and a health endpoint. Where a recipe
+declares a framework initializer, `mx add` runs it: `astro`, `nuxt` and `zola`
+call their own starter and print `Scaffolded with: <command>`, so the app arrives
+as the framework would have made it with mx's wiring layered on top. You still run
+the dependency install (`npm install`, `cargo build`, `composer install`) the
+first time. Each recipe prints its exact next steps when it finishes.
 :::
 
 ## `make doctor`
