@@ -10,7 +10,6 @@ services:
   site:
     build:
       target: development
-    container_name: site-dev
     environment:
       - NODE_ENV=development
       - PORT=4321

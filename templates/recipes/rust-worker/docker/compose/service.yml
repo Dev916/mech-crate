@@ -19,6 +19,14 @@ services:
       target: production
     restart: unless-stopped
     command: ["worker", "--workers={{WORKERS}}", "--batch-size={{BATCH_SIZE}}"]
+    # This recipe is db-bearing (see recipe.json `services`), but shipped with no
+    # env layering at all: the db container was initialized from `.env.secrets`
+    # while the worker never read it, so DB_USER/DB_PASSWORD/DB_NAME never reached
+    # the process. Documented layering, last one winning: shared → secrets → service.
+    env_file:
+      - ../.config/.env.shared
+      - ../.config/.env.secrets
+      - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - RUST_LOG=info,{{SERVICE_SLUG}}=info
       - DATABASE_URL=postgres://{{SERVICE_SLUG}}:${DB_PASSWORD:-secret}@db:5432/{{SERVICE_SLUG}}
@@ -48,13 +56,16 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks:
-      - internal
+    # No `networks:` on purpose (bd:mech-crate-4n4). This service used to join
+    # `internal`, declared `external: true` — a promise that something else
+    # created it, which nothing in mx ever did. `docker compose config` renders
+    # an external network without looking for it, so the defect only surfaced at
+    # `make dev`: "network internal declared as external, but could not be
+    # found". The worker has no HTTP ingress, so unlike the web recipes it needs
+    # no `devmesh-traefik`; leaving networks unset puts it on compose's
+    # per-project default network, which is exactly where the `db` and `redis`
+    # siblings it `depends_on` already are.
     labels:
       - "prometheus.scrape=true"
       - "prometheus.port=9090"
       - "prometheus.path=/metrics"
-
-networks:
-  internal:
-    external: true

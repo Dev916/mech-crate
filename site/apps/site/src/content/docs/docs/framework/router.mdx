@@ -86,11 +86,29 @@ lost container state. Start the subset you need:
 ```bash
 make dev s=api        # in project A
 make dev s=admin      # in project B — both reachable, simultaneously
+make dev s="api web"  # or a named subset, quotes required
 ```
 
-Dev overrides *do* publish conventional host ports for backing services (Postgres
-on 5432, Redis on 6379) so local GUI tools can reach them. That is per compose
-file and easy to change if you genuinely need two databases up at once.
+Container names no longer stand in the way of this either. No shipped compose
+file pins `container_name`, so each project's containers are named
+`<COMPOSE_PROJECT_NAME>-<service>-<index>` and two projects that both declare a
+`db` service coexist. See
+[container names](/docs/framework/upgrade/#migrating-container-names) if you have
+a script that addressed one by a fixed name.
+
+:::note[Where the limit actually is]
+Two projects with different service names and domains is the ordinary case, and
+it works. Two copies of the *same* shape, on the other hand, still collide below
+the router: dev overrides publish conventional host ports for backing services
+(Postgres on 5432, Redis on 6379) so local GUI tools can reach them, and the
+second stack finds those ports taken. The Traefik router names in the labels are
+not qualified by project either, so two projects shipping the same service name
+register the same router.
+
+Both are tracked (`mech-crate-1a0`, `mech-crate-298`) and neither is fixed. Until
+they are, drop the host-port publish from one project's dev override, which is per
+compose file and a one-line edit, or give the two stacks distinct service names.
+:::
 
 ## Tuning
 

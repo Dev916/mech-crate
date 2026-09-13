@@ -23,12 +23,15 @@ services:
     build:
       context: ../../apps/{{SERVICE_NAME}}
       dockerfile: ../../docker/dockerfiles/{{SERVICE_NAME}}/app
-      target: runner
-    container_name: {{SERVICE_SLUG}}
+      # Must name a stage in that Dockerfile. This said `runner`, which matches
+      # none of base/deps/builder/development/production, so every non-dev path
+      # (make up / build / release) failed to resolve the target while `make
+      # dev`'s `development` override hid it (bd:mech-crate-47j).
+      target: production
     restart: unless-stopped
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
     environment:
       - NODE_ENV=production

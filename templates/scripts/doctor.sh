@@ -45,10 +45,46 @@ print_info "Checking project structure..."
 [[ -d "docker/.config" ]] && print_success "docker/.config/ exists" || print_warn "docker/.config/ missing"
 
 # Check for secrets file
+#
+# A value check, not just an existence check, and deliberately a cheap one: no
+# docker, no compose, just string comparison. An empty or still-placeholder
+# credential is the failure that used to show up as "db container unhealthy"
+# minutes into `make dev` — postgres refuses to initialize with an empty
+# POSTGRES_PASSWORD. The rules for "unset" live in scripts/.bashrc, shared with
+# scripts/generate-secrets.sh, so the two can never disagree.
 if [[ -f "docker/.config/.env.secrets" ]]; then
     print_success "Secrets file exists"
+
+    unset_secrets="$(mech_unset_secret_keys docker/.config/.env.secrets)"
+    if [[ -n "$unset_secrets" ]]; then
+        print_warn "These keys in docker/.config/.env.secrets have no value yet:"
+        while IFS= read -r key; do
+            [[ -n "$key" ]] && echo "    - $key"
+        done <<< "$unset_secrets"
+        print_warn "Run 'make init' to generate dev values (it never overwrites one you set)."
+    else
+        print_success "Secrets all have values"
+    fi
+
+    # A `${VAR}` left in any env file is a latent empty: compose interpolates
+    # env_file values from the compose project directory's .env, never from a
+    # sibling env file, so the container receives nothing.
+    dangling=""
+    for env_file in docker/.config/.env.*; do
+        [[ -f "$env_file" ]] || continue
+        [[ "$env_file" == *.template ]] && continue
+        while IFS= read -r ref_line; do
+            [[ -n "$ref_line" ]] && dangling+="    - $env_file: $ref_line\n"
+        done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=.*\$\{' "$env_file" 2>/dev/null || true)
+    done
+    if [[ -n "$dangling" ]]; then
+        print_warn "These env values still reference a variable compose cannot resolve"
+        print_warn "from a sibling env file, so they arrive empty in the container:"
+        echo -en "$dangling"
+        print_warn "Run 'make init' to materialize them as literals."
+    fi
 else
-    print_warn "Secrets file missing - copy from .env.secrets.template"
+    print_warn "Secrets file missing - run 'make init' to create and fill it"
 fi
 
 # Check Docker network

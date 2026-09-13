@@ -627,6 +627,273 @@ fn every_recipe_yields_a_dev_compose_context_that_validates() {
     );
 }
 
+// ── Build targets resolve to real Dockerfile stages (bd:mech-crate-47j) ──────
+
+/// Stage names declared by a Dockerfile: the `AS <name>` of every `FROM`.
+fn dockerfile_stages(path: &Path) -> Vec<String> {
+    let body = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("setup: read {}: {e}", path.display()));
+    body.lines()
+        .filter_map(|l| {
+            let mut words = l.split_whitespace();
+            if !words.next()?.eq_ignore_ascii_case("from") {
+                return None;
+            }
+            // `FROM <image> AS <stage>` — find the AS keyword, take what follows.
+            while let Some(w) = words.next() {
+                if w.eq_ignore_ascii_case("as") {
+                    return words.next().map(str::to_string);
+                }
+            }
+            None
+        })
+        .collect()
+}
+
+/// One `build:` declaration seen in a compose file.
+#[derive(Debug, Default, Clone)]
+struct BuildDecl {
+    /// Absolute path to the referenced Dockerfile, once both context and
+    /// dockerfile have been seen (they may arrive from different files).
+    dockerfile: Option<PathBuf>,
+    /// Every `target:` declared for this service across the compose context,
+    /// with the file that declared it.
+    targets: Vec<(String, String)>,
+}
+
+/// Merge the `build:` blocks the whole compose context declares, per service.
+///
+/// Compose merges overrides onto the base file, so a dev override may carry a
+/// bare `target:` while the base file owns `context:`/`dockerfile:` — both have
+/// to be collected before any target can be resolved.
+fn build_decls(files: &[PathBuf]) -> HashMap<String, BuildDecl> {
+    let mut decls: HashMap<String, BuildDecl> = HashMap::new();
+
+    for file in files {
+        let body = std::fs::read_to_string(file)
+            .unwrap_or_else(|e| panic!("setup: read {}: {e}", file.display()));
+        let doc: serde_yaml::Value = serde_yaml::from_str(&body)
+            .unwrap_or_else(|e| panic!("{}: not valid YAML: {e}", file.display()));
+        let dir = file.parent().unwrap();
+        let label = file.file_name().unwrap().to_string_lossy().to_string();
+
+        let Some(services) = doc.get("services").and_then(|v| v.as_mapping()) else {
+            continue;
+        };
+        for (name, spec) in services {
+            let Some(name) = name.as_str() else { continue };
+            let Some(build) = spec.get("build") else {
+                continue;
+            };
+            let entry = decls.entry(name.to_string()).or_default();
+
+            // `dockerfile` resolves relative to `context`, which itself resolves
+            // relative to the compose file's directory.
+            if let Some(dockerfile) = build.get("dockerfile").and_then(|v| v.as_str()) {
+                let context = build.get("context").and_then(|v| v.as_str()).unwrap_or(".");
+                entry.dockerfile = Some(dir.join(context).join(dockerfile));
+            }
+            if let Some(target) = build.get("target").and_then(|v| v.as_str()) {
+                entry.targets.push((target.to_string(), label.clone()));
+            }
+        }
+    }
+
+    decls
+}
+
+/// bd:mech-crate-47j — the astro recipe's base compose asked for `target: runner`
+/// and the Dockerfile it builds defines base/deps/builder/development/production.
+/// Nothing caught it: `docker compose config` resolves the merge without reading
+/// the Dockerfile, and `make dev`'s override swaps in `development`, which exists
+/// — so every non-dev path (`make up`, `make build`, `make release`) failed on a
+/// build target that named no stage, and only astro's dev path was ever exercised.
+///
+/// The net for the class: every `target:` any shipped compose file declares must
+/// name a stage its Dockerfile actually defines.
+#[test]
+fn every_compose_build_target_names_a_real_dockerfile_stage() {
+    let mut failures: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for name in &shipped_recipe_names() {
+        let (project, _) = install_into_tempdir(name, "svc", &HashMap::new());
+        let files = dev_compose_context(project.path());
+
+        for (service, decl) in build_decls(&files) {
+            if decl.targets.is_empty() {
+                continue;
+            }
+            let Some(dockerfile) = &decl.dockerfile else {
+                failures.push(format!(
+                    "{name}: service `{service}` declares build targets {:?} but no \
+                     compose file in the context declares a dockerfile",
+                    decl.targets
+                ));
+                continue;
+            };
+            if !dockerfile.is_file() {
+                failures.push(format!(
+                    "{name}: service `{service}` builds {} which the recipe does not ship",
+                    dockerfile.display()
+                ));
+                continue;
+            }
+            let stages = dockerfile_stages(dockerfile);
+            for (target, from) in &decl.targets {
+                checked += 1;
+                if !stages.contains(target) {
+                    failures.push(format!(
+                        "{name}: docker/compose/{from} builds service `{service}` with \
+                         `target: {target}`, but its Dockerfile defines only {stages:?}"
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        checked >= 7,
+        "setup: expected every recipe to declare a build target, saw {checked}"
+    );
+    assert!(
+        failures.is_empty(),
+        "build targets that name no Dockerfile stage:\n{}",
+        failures.join("\n")
+    );
+}
+
+// ── No dead payload (bd:mech-crate-874) ──────────────────────────────────────
+
+/// Recipe-relative files that `recipe.json` never maps, and that we have
+/// deliberately not deleted yet — each one is dead weight that lands nowhere.
+///
+/// The astro recipe used to account for 40 of these: a whole second app (Vue
+/// components, Pinia stores, drizzle schema, its own `package.json`) that
+/// `recipe.json` mapped not one line of, while the single file it *did* map
+/// imported `@/lib/db` from it. The design call (bd:mech-crate-874) is that the
+/// framework scaffolder owns `package.json` and the app payload, and the recipe
+/// owns infra plus a dependency-free health endpoint — so astro's payload is
+/// gone and astro must never appear in this list again.
+///
+/// This list may only shrink. A new entry means a recipe grew dead payload; a
+/// stale entry (listed but no longer present) fails too, so deleting the files
+/// forces the allowance out with them.
+const UNMAPPED_PAYLOAD_ALLOWED: &[&str] = &[
+    // bd:mech-crate-874 follow-up — nuxt carries the same shape of dead app
+    // payload astro did: a full starter app nothing maps.
+    "nuxt/app/app.vue",
+    "nuxt/app/assets/css/main.css",
+    "nuxt/app/gitignore.template",
+    "nuxt/app/layouts/default.vue",
+    "nuxt/app/nuxt.config.ts",
+    "nuxt/app/package-lock.json",
+    "nuxt/app/package.json",
+    "nuxt/app/pages/about.vue",
+    "nuxt/app/pages/index.vue",
+    "nuxt/app/tailwind.config.ts",
+    "nuxt/app/tsconfig.json",
+    // zola maps app/{config.toml,content,sass,static,templates} but not this,
+    // so its `post_install.rename` of apps/<svc>/gitignore.template is a no-op
+    // and the scaffolded site ships no .gitignore.
+    "zola/app/gitignore.template",
+];
+
+/// Every file a recipe ships must either be mapped by `recipe.json` (directly or
+/// under a mapped directory) or be `recipe.json` itself. Anything else never
+/// reaches a project: it is payload the author believes ships and does not.
+#[test]
+fn no_recipe_ships_payload_files_that_nothing_maps() {
+    let mut unmapped: Vec<String> = Vec::new();
+
+    for name in &shipped_recipe_names() {
+        let dir = recipes_root().join(name);
+        let raw: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("recipe.json")).unwrap())
+                .unwrap();
+
+        // `common://` sources live outside the recipe directory.
+        let mapped: Vec<String> = raw["templates"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|t| t["from"].as_str())
+            .filter(|from| !from.contains("://"))
+            .map(|from| from.trim_end_matches('/').to_string())
+            .collect();
+
+        let mut files: Vec<PathBuf> = walk_files(&dir);
+        files.sort();
+        for file in files {
+            let rel = file
+                .strip_prefix(&dir)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if rel == "recipe.json" {
+                continue;
+            }
+            let accounted = mapped
+                .iter()
+                .any(|m| rel == *m || rel.starts_with(&format!("{m}/")));
+            if !accounted {
+                unmapped.push(format!("{name}/{rel}"));
+            }
+        }
+    }
+
+    let unexpected: Vec<&String> = unmapped
+        .iter()
+        .filter(|u| !UNMAPPED_PAYLOAD_ALLOWED.contains(&u.as_str()))
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "these recipe files are mapped by no `recipe.json` template, so they land \
+         nowhere — map them or delete them:\n{}",
+        unexpected
+            .iter()
+            .map(|u| format!("  {u}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    let stale: Vec<&&str> = UNMAPPED_PAYLOAD_ALLOWED
+        .iter()
+        .filter(|a| !unmapped.iter().any(|u| u == *a))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "UNMAPPED_PAYLOAD_ALLOWED lists files that are no longer unmapped — drop \
+         them from the list:\n{}",
+        stale
+            .iter()
+            .map(|s| format!("  {s}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+/// Every file under `dir`, recursively.
+fn walk_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(&d)
+            .unwrap_or_else(|e| panic!("setup: read {}: {e}", d.display()))
+            .flatten()
+        {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    out
+}
+
 // ── Known-broken lane (bd:mech-crate-ten) ────────────────────────────────────
 
 /// `make release app=<app>` shells into `apps/<app>` and runs `yarn release*`,

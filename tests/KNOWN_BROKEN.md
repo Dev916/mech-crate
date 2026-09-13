@@ -52,9 +52,9 @@ a fix landed without bookkeeping — surfaced, not silently green.
 its fix landed).
 
 **Scoreboard** (`make test-known-broken`): `13 tests run: 0 passed, 13 failed,
-217 skipped` — 13 rows above, 13 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `217 passed, 13 skipped`. Those two numbers
-partition the workspace; if they stop summing to 230, either a lane test lost
+252 skipped` — 13 rows above, 13 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `252 passed, 13 skipped`. Those two numbers
+partition the workspace; if they stop summing to 265, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -75,6 +75,19 @@ red tests that joined the gate directly: compose project isolation plus the
 (bd:mech-crate-eic, bd:mech-crate-pos) 202 → 205, and the `init_app` ordering fix
 (bd:mech-crate-0uq) 205 → 217. The lane stayed at 13 throughout, so the workspace
 total moved 204 → 230.
+
+Wave 2 repeated the pattern: none of its defects had a lane row either, so all
+five fixes landed against fresh red tests that joined the gate directly, taking it
+217 → 252 and the workspace total 230 → 265. The lane is untouched at 13. Four new
+conformance suites carry most of that growth, each of them a net over a *class*
+rather than over the files that happened to be wrong:
+
+| Suite | Holds |
+|---|---|
+| `templates_env_precedence.rs` | every `env_file` list in `templates/` follows `.env.shared` → `.env.secrets` → `.env.<service>`, and anything reading shared also reads secrets (bd:mech-crate-lwe) |
+| `templates_secret_generation.rs` | `make init` generates real dev credentials for every db-bearing recipe, idempotently, and no recipe ships an unconsumed `__GENERATE_*__` placeholder (bd:mech-crate-rqc) |
+| `templates_multi_service.rs` | `s="a b"` survives the make layer as one argument, list-capable targets pass every name to compose, and single-service targets refuse a list loudly (bd:mech-crate-3kq) |
+| `templates_compose_hygiene.rs` | no shipped compose file pins a `container_name` or joins an `external: true` network mx never creates, and the db healthcheck probes the configured role at container runtime (bd:mech-crate-4n4, bd:mech-crate-xhf, bd:mech-crate-v6z) |
 
 ## Notes on placement deviations
 

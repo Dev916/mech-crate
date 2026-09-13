@@ -93,6 +93,17 @@ impl AddCommand {
             Some(InitAppOutcome::Ran { command }) => {
                 println!("Scaffolded with: {}", style(command).dim());
             }
+            Some(InitAppOutcome::Reinitialized {
+                command,
+                target_dir,
+            }) => {
+                println!(
+                    "{} force_init: deleted {} and re-scaffolded",
+                    style("!").yellow().bold(),
+                    style(target_dir).dim()
+                );
+                println!("Scaffolded with: {}", style(command).dim());
+            }
             Some(InitAppOutcome::SkippedExisting { target_dir }) => {
                 println!(
                     "Scaffolder skipped: {} already holds an app",
