@@ -135,6 +135,14 @@ jobs:
             exit 0
           fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
+          # Publishing a release creates its tag, and a tag needs a commit to
+          # point at: on an empty releases repo the draft is created fine and
+          # `publish` then fails with "HTTP 422 ... Repository is empty" after
+          # every platform has built (v0.1.2, 2026-09-17). Fail here instead.
+          if [[ "$(gh api "repos/${RELEASES_REPO}/commits?per_page=1" --jq 'length')" == "0" ]]; then
+            echo "::error::${RELEASES_REPO} has no commits; a release cannot be published on an empty repo. Push a README there first."
+            exit 1
+          fi
           # A pre-release suffix (0.1.2-rc.1) marks the GitHub release as a
           # prerelease so releases/latest never returns it.
           prerelease=()
