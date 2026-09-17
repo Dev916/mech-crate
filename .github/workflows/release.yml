@@ -16,7 +16,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RELEASES_REPO: unyform-ai/mech-crate-releases
-  # TAP_REPO is consumed by a future tap-bump job (see TODO at the bottom).
+  # TAP_REPO is where the tap-bump job opens the Formula/mx.rb PR.
   TAP_REPO: unyform-ai/homebrew-tap
   APPLE_TEAM_ID: T6L7MKBUHZ
   APPLE_SIGNING_IDENTITY: "Developer ID Application: PRICELOVE, LLC (T6L7MKBUHZ)"
@@ -369,10 +369,56 @@ jobs:
             --json tagName,isDraft,isPrerelease,assets \
             --jq '{tagName, isDraft, isPrerelease, assets: [.assets[].name]}'
 
+  # Opens the version-bump PR on the Homebrew tap once the release is live.
+  # Stable releases only: a prerelease never reaches releases/latest, so the
+  # tap must not point at one either. The formula is regenerated in full by
+  # scripts/homebrew/render-formula.sh because it carries three url/sha256
+  # pairs and mislav/bump-homebrew-formula-action rewrites only the first.
+  # `needs: publish` keeps it behind the release gate (publish needs every
+  # platform, which needs test).
+  tap-bump:
+    name: bump Homebrew tap
+    needs: [resolve-version, publish]
+    if: ${{ !contains(needs.resolve-version.outputs.version, '-') }}
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.resolve-version.outputs.version }}
+      TAG: ${{ needs.resolve-version.outputs.tag }}
+      GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render Formula/mx.rb from the release checksums
+        run: scripts/homebrew/render-formula.sh "$VERSION" > "$RUNNER_TEMP/mx.rb"
+
+      - name: Open the bump PR on the tap
+        run: |
+          set -euo pipefail
+          branch="mx-${VERSION}"
+          gh auth setup-git
+          git clone --depth 1 "https://github.com/${TAP_REPO}.git" tap
+          cd tap
+          git config user.name "mech-crate-release"
+          git config user.email "release@mechcrate.dev"
+          git checkout -b "$branch"
+          mkdir -p Formula
+          cp "$RUNNER_TEMP/mx.rb" Formula/mx.rb
+          git add Formula/mx.rb
+          if git diff --cached --quiet; then
+            echo "Formula/mx.rb already at ${VERSION}; nothing to bump"
+            exit 0
+          fi
+          git commit -m "mx ${VERSION}"
+          git push --force origin "$branch"
+          if gh pr view "$branch" --repo "$TAP_REPO" >/dev/null 2>&1; then
+            echo "bump PR for $branch is already open"
+          else
+            gh pr create --repo "$TAP_REPO" --base main --head "$branch" \
+              --title "mx ${VERSION}" \
+              --body "Automated bump to [${TAG}](https://github.com/${RELEASES_REPO}/releases/tag/${TAG}), rendered by scripts/homebrew/render-formula.sh from the release checksum sidecars."
+          fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 # NOTE: every job added above must keep `test` in its `needs:` (directly, or
 # transitively through `create-draft`) — that is the release gate.
 #
-# TODO (Homebrew tap): after `publish`, open a PR to TAP_REPO that updates
-#   Formula/mx.rb with the new version + sha256 (mislav/bump-homebrew-formula-
-#   action@v3). Tracked as mech-crate-4vp.13.

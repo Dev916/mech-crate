@@ -86,12 +86,13 @@ on:
       - "docs/**"
       - "tests/KNOWN_BROKEN.md"
       - ".github/workflows/site.yml"
+  # No `paths:` filter on pull_request, on purpose. `build` is a required
+  # status check on main, and a filtered trigger means a PR that touches none
+  # of the site paths never gets the check and sits BLOCKED with everything
+  # else green (mech-crate-pe1). The job runs on every PR and its `changes`
+  # step decides whether the site work is needed; a job whose steps were all
+  # skipped still reports success, which is what the ruleset wants to see.
   pull_request:
-    paths:
-      - "site/**"
-      - "docs/**"
-      - "tests/KNOWN_BROKEN.md"
-      - ".github/workflows/site.yml"
   workflow_dispatch:
 
 concurrency:
@@ -128,6 +129,8 @@ jobs:
     name: build (test + astro build + link check)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      site: ${{ steps.changes.outputs.site }}
     defaults:
       run:
         working-directory: site/apps/site
@@ -142,13 +145,37 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Same path list as the `push` trigger above; keep them in sync by hand.
+      # Anything but a pull_request (push to main, dispatch) always builds.
+      - id: changes
+        name: Did this change touch the site?
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" != "pull_request" ]]; then
+            echo "site=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${BASE_SHA}...HEAD" \
+              | grep -qE '^(site/|docs/|tests/KNOWN_BROKEN\.md$|\.github/workflows/site\.yml$)'; then
+            echo "site=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "site=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No site or docs changes in this PR; the site build gate is a no-op."
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.site == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: site/apps/site/package-lock.json
 
       - name: Install (locked)
+        if: steps.changes.outputs.site == 'true'
         run: npm ci
 
       # Redundant with `npm test` (diagrams.test.ts hashes the same manifest),
@@ -156,12 +183,15 @@ jobs:
       # re-render" into its own named red step instead of one assertion buried
       # in a 191-test run.
       - name: Diagram drift gate
+        if: steps.changes.outputs.site == 'true'
         run: npm run diagrams:check
 
       - name: Unit tests
+        if: steps.changes.outputs.site == 'true'
         run: npm test
 
       - name: Build
+        if: steps.changes.outputs.site == 'true'
         run: npm run build
 
       # Offline: local files only, zero network. External links in the corpus
@@ -170,6 +200,7 @@ jobs:
       # `--root-dir` is what lets root-absolute hrefs (`/docs/...`, which is all
       # of Starlight's output) resolve against dist/ instead of the filesystem.
       - name: Link check (lychee, offline)
+        if: steps.changes.outputs.site == 'true'
         uses: lycheeverse/lychee-action@v2
         with:
           args: >-
@@ -188,6 +219,7 @@ jobs:
       # ignores `_headers`, or guesses the content type wrong, it fails here
       # rather than in production.
       - name: Edge headers (public/_headers on workerd)
+        if: steps.changes.outputs.site == 'true'
         run: |
           set -euo pipefail
           npx --yes "wrangler@${WRANGLER_VERSION}" dev --port 8799 --ip 127.0.0.1 &
@@ -288,6 +320,7 @@ jobs:
           done
 
       - name: Upload dist
+        if: steps.changes.outputs.site == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: site-dist
@@ -365,7 +398,7 @@ jobs:
   preview:
     name: preview (PR deploy)
     needs: build
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && needs.build.outputs.site == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true

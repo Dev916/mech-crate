@@ -47,8 +47,14 @@ list.
 
 ### Homebrew (macOS, Linux)
 
-Coming with the tap (`brew install unyform-ai/tap/mx`). Once installed that way,
-`mx self-update` hands off to `brew upgrade mx`.
+```bash
+brew install unyform-ai/tap/mx
+```
+
+The formula installs the same release bundle (macOS universal, Linux x86_64
+and aarch64) into the Cellar and links `mx` and `mx-mcp` into `brew --prefix`.
+Installed this way, `mx self-update` hands off to `brew upgrade mx`; the tap
+is bumped automatically for every stable release.
 
 ### From source (contributors)
 
