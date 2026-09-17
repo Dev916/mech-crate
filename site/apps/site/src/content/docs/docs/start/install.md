@@ -47,8 +47,14 @@ list.
 
 ### Homebrew (macOS, Linux)
 
-Coming with the tap (`brew install unyform-ai/tap/mx`). Once installed that way,
-`mx self-update` hands off to `brew upgrade mx`.
+```bash
+brew install unyform-ai/tap/mechcrate
+```
+
+The formula installs the same release bundle (macOS universal, Linux x86_64
+and aarch64) into the Cellar and links `mx` and `mx-mcp` into `brew --prefix`.
+Installed this way, `mx self-update` hands off to `brew upgrade mechcrate`; the tap
+is bumped automatically for every stable release.
 
 ### From source (contributors)
 
@@ -76,7 +82,7 @@ mx self-update --dry-run   # the plan only, nothing changes
 
 `self-update` works out how this copy of `mx` was installed and does the
 matching thing: a release install downloads and verifies the next tarball;
-a Homebrew install runs `brew upgrade mx`; a source checkout is rebuilt
+a Homebrew install runs `brew upgrade mechcrate`; a source checkout is rebuilt
 (`--pull` to `git pull --rebase` first).
 
 Every update is verified before it goes live. The tarball's sha256 must match
