@@ -199,7 +199,7 @@ fn hint_due(cache: &Cache, ctx: &Context) -> Option<Version> {
 /// only redirect them there anyway.
 pub fn hint_line(latest: &Version, current: &Version, homebrew: bool) -> String {
     let command = if homebrew {
-        "brew upgrade mx"
+        "brew upgrade mechcrate"
     } else {
         "mx self-update"
     };
@@ -496,7 +496,7 @@ mod tests {
     fn the_hint_line_substitutes_brew_for_a_homebrew_install() {
         assert_eq!(
             hint_line(&v("0.1.3"), &v("0.1.1"), true),
-            "mx 0.1.3 is available (you have 0.1.1). Run: brew upgrade mx"
+            "mx 0.1.3 is available (you have 0.1.1). Run: brew upgrade mechcrate"
         );
     }
 

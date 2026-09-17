@@ -16,7 +16,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RELEASES_REPO: unyform-ai/mech-crate-releases
-  # TAP_REPO is where the tap-bump job opens the Formula/mx.rb PR.
+  # TAP_REPO is where the tap-bump job opens the Formula/mechcrate.rb PR.
   TAP_REPO: unyform-ai/homebrew-tap
   APPLE_TEAM_ID: T6L7MKBUHZ
   APPLE_SIGNING_IDENTITY: "Developer ID Application: PRICELOVE, LLC (T6L7MKBUHZ)"
@@ -396,13 +396,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Render Formula/mx.rb from the release checksums
-        run: scripts/homebrew/render-formula.sh "$VERSION" > "$RUNNER_TEMP/mx.rb"
+      - name: Render Formula/mechcrate.rb from the release checksums
+        run: scripts/homebrew/render-formula.sh "$VERSION" > "$RUNNER_TEMP/mechcrate.rb"
 
       - name: Open the bump PR on the tap
         run: |
           set -euo pipefail
-          branch="mx-${VERSION}"
+          branch="mechcrate-${VERSION}"
           gh auth setup-git
           git clone --depth 1 "https://github.com/${TAP_REPO}.git" tap
           cd tap
@@ -410,19 +410,19 @@ jobs:
           git config user.email "release@mechcrate.dev"
           git checkout -b "$branch"
           mkdir -p Formula
-          cp "$RUNNER_TEMP/mx.rb" Formula/mx.rb
-          git add Formula/mx.rb
+          cp "$RUNNER_TEMP/mechcrate.rb" Formula/mechcrate.rb
+          git add Formula/mechcrate.rb
           if git diff --cached --quiet; then
-            echo "Formula/mx.rb already at ${VERSION}; nothing to bump"
+            echo "Formula/mechcrate.rb already at ${VERSION}; nothing to bump"
             exit 0
           fi
-          git commit -m "mx ${VERSION}"
+          git commit -m "mechcrate ${VERSION}"
           git push --force origin "$branch"
           if gh pr view "$branch" --repo "$TAP_REPO" >/dev/null 2>&1; then
             echo "bump PR for $branch is already open"
           else
             gh pr create --repo "$TAP_REPO" --base main --head "$branch" \
-              --title "mx ${VERSION}" \
+              --title "mechcrate ${VERSION}" \
               --body "Automated bump to [${TAG}](https://github.com/${RELEASES_REPO}/releases/tag/${TAG}), rendered by scripts/homebrew/render-formula.sh from the release checksum sidecars."
           fi
 

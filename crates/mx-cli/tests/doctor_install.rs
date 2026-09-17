@@ -98,7 +98,7 @@ impl Sandbox {
     /// keeps kind detection off a real `brew`.
     fn doctor_as_homebrew(&self, version: &str) -> Command {
         let prefix = self.home().join("brew");
-        let exe = prefix.join(format!("Cellar/mx/{version}/libexec/bin/mx"));
+        let exe = prefix.join(format!("Cellar/mechcrate/{version}/libexec/bin/mx"));
         fs::create_dir_all(exe.parent().expect("cellar bin dir")).expect("fake cellar bin dir");
         fs::write(&exe, "#!/bin/sh\n").expect("fake cellar binary");
         let mut cmd = self.doctor();
@@ -287,7 +287,7 @@ fn a_homebrew_install_points_at_brew_and_mx_init() {
         contains("Kind:")
             .and(contains("homebrew"))
             .and(contains("run: mx init --update"))
-            .and(contains("update available: brew upgrade mx"))
+            .and(contains("update available: brew upgrade mechcrate"))
             .and(contains("is not on PATH").not()),
     );
 }
