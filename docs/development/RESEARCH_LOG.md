@@ -14,6 +14,7 @@ Append-only. One row per research run, newest first. Written by the `technique-r
 
 | Date | Topic | Verdict | Sources | Outcome |
 |---|---|---|---|---|
+| 2026-09-18 | FRP in Python (family doc: reactivex, asyncio, anyio/trio, Textual) | NEW | 29 | Authored `appendix-frp-python.md` (corrects the family's RxPY-v4 assumption to reactivex 5.1.0 with method chaining; bounded queues plus TaskGroup/timeout/Queue.shutdown as the backpressure and cancellation story; runnable asyncio + reactivex intent loop) |
 | 2026-09-12 | MCP server tool design: workflow tools, progressive discovery, code mode (seed: Neon video via vidwatch) | NEW | 13 | Authored `mcp-server-tool-design.md` (video watched frame-by-frame with vidwatch; every client-side claim checked against MCP 2026-07-28 client best practices + tools spec, Claude/OpenAI tool-search docs, Neon package READMEs; flags the video's Claude Code/Codex code-mode claim as overstated) |
 | 2026-08-14 | Multi-agent LLM systems: comms, lifecycle, delegation, verification (sweep leg A) | NEW | 24 | Authored `multi-agent-systems-in-practice.md` (meeting-notes-steered sweep; incl. Managed Agents hub-and-spoke/interrupt/advisor primitives, measured A2A-vs-MCP adoption gap, cheating-agents verification evidence) |
 | 2026-08-14 | LLM token & cache efficiency engineering (sweep leg B) | NEW | 24 | Authored `llm-token-cache-efficiency.md` (falsified the ~90-min cache TTL claim; corrected stale 15x delegation math to 5x; credit-cliff 1h->5m TTL drop; worktree cache-split finding) |
