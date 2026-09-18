@@ -33,8 +33,8 @@ hardware yet.
 |---|---|---|---|---|
 | macOS 11 (Big Sur) or later | Apple silicon | yes | yes | verified on macOS 26 (install, update, rollback, `brew install` and `brew upgrade`) |
 | macOS 11 (Big Sur) or later | Intel | yes, same universal binary | yes | built in CI, not yet run on Intel hardware |
-| Linux | x86_64 | yes | yes, with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) | static build, runs on Alpine 3.20 and Debian 12 containers |
-| Linux | aarch64 | yes | yes, with Homebrew on Linux | static build, runs on Alpine 3.20 and Debian 12 containers |
+| Linux | x86_64 | yes | yes, with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) | static build, runs on Alpine 3.20 and Debian 12 containers; `brew install` verified in the `homebrew/brew` container |
+| Linux | aarch64 | yes | yes, with Homebrew on Linux | static build, runs on Alpine 3.20 and Debian 12 containers; `brew install` not yet run on aarch64 |
 | Windows | x86_64, arm64 | through WSL 2 | through WSL 2 | not tested: inside WSL 2 the Linux build applies, with Docker Desktop's WSL 2 backend for the router and services |
 | Anything else | | no, the installer stops with "no mx release is published for ..." | no | build from source with stable Rust (below) |
 
