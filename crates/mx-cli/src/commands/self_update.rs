@@ -8,7 +8,7 @@
 //!   its sha256, extract it under `~/.mech-crate/releases`, verify the new
 //!   binary, then flip `~/.mech-crate/current` and refresh templates, the
 //!   version file, the MCP wrapper and the `~/.local/bin` shims;
-//! - homebrew: run `brew upgrade mx`;
+//! - homebrew: run `brew upgrade mechcrate`;
 //! - source: rebuild the checkout (the historical behaviour, kept).
 //!
 //! Hidden test seams: `MX_SELFUPDATE_EXE` replaces `current_exe()` for kind

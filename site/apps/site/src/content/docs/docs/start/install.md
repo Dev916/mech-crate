@@ -5,10 +5,11 @@ sidebar:
   order: 2
 ---
 
-`mx` ships as a signed tarball per platform on the release channel
-(`unyform-ai/mech-crate-releases`). The installer below downloads the one
-for your machine, verifies its checksum, and installs it under your home
-directory with no `sudo`. Contributors build from a checkout instead.
+`mx` ships as a tarball per platform on the release channel
+(`unyform-ai/mech-crate-releases`): one universal macOS build and two static
+Linux builds. The installer below downloads the one for your machine, verifies
+its checksum, and installs it under your home directory with no `sudo`.
+Homebrew installs the same bundle. Contributors build from a checkout instead.
 
 ## Requirements
 
@@ -20,6 +21,38 @@ directory with no `sudo`. Contributors build from a checkout instead.
 
 `mx doctor` and `make doctor` both check these and print what they find, so you
 do not have to guess whether a version is acceptable.
+
+## Supported platforms
+
+Both install paths cover the same builds. "Verified" means the release was
+installed, updated and rolled back on that platform; "built in CI" means the
+release workflow produced and checked the binary but nobody has run it on that
+hardware yet.
+
+| Platform | Architecture | `install.sh` | Homebrew | Status |
+|---|---|---|---|---|
+| macOS 11 (Big Sur) or later | Apple silicon | yes | yes | verified on macOS 26 (install, update, rollback, `brew install` and `brew upgrade`) |
+| macOS 11 (Big Sur) or later | Intel | yes, same universal binary | yes | built in CI, not yet run on Intel hardware |
+| Linux | x86_64 | yes | yes, with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) | static build, runs on Alpine 3.20 and Debian 12 containers; `brew install` verified in the `homebrew/brew` container |
+| Linux | aarch64 | yes | yes, with Homebrew on Linux | static build, runs on Alpine 3.20 and Debian 12 containers; `brew install` not yet run on aarch64 |
+| Windows | x86_64, arm64 | through WSL 2 | through WSL 2 | not tested: inside WSL 2 the Linux build applies, with Docker Desktop's WSL 2 backend for the router and services |
+| Anything else | | no, the installer stops with "no mx release is published for ..." | no | build from source with stable Rust (below) |
+
+A few details behind the table:
+
+- **macOS.** The universal binary's Apple silicon slice targets macOS 11 and
+  the Intel slice 10.12, so 11 is the floor. Binaries are signed ad hoc today:
+  the installer and Homebrew never trip Gatekeeper, but a tarball downloaded
+  through a browser would be quarantined. Developer ID signing and
+  notarization are tracked as `mech-crate-4vp.15`.
+- **Linux.** Both builds are fully static (musl), so there is no glibc or
+  distribution requirement for `mx` itself. The router and the services still
+  need Docker Engine with Compose v2, and the project verbs need GNU Make.
+  Homebrew's own platform policy decides whether `brew` runs on your
+  distribution and architecture; the formula carries both Linux tarballs.
+- **Windows.** There is no native build. The Linux build is expected to work
+  inside WSL 2 exactly as on Linux, but that has not been exercised, so treat
+  it as unverified until it is.
 
 ## Install
 
@@ -39,7 +72,7 @@ mx --version
 mx doctor
 ```
 
-Pin a version with `MX_VERSION=0.1.2` in front of the command.
+Pin a version with `MX_VERSION=0.1.3` in front of the command.
 
 `mx --version` prints the crate version. `mx doctor` checks Docker, Compose and
 Make. Run inside a project, it also checks the folder contract and the service
@@ -47,8 +80,17 @@ list.
 
 ### Homebrew (macOS, Linux)
 
-Coming with the tap (`brew install unyform-ai/tap/mx`). Once installed that way,
-`mx self-update` hands off to `brew upgrade mx`.
+```bash
+brew install unyform-ai/tap/mechcrate
+```
+
+The formula installs the same release bundle (macOS universal, Linux x86_64
+and aarch64) into the Cellar and links `mx` and `mx-mcp` into `brew --prefix`.
+The formula is named `mechcrate` because homebrew-core already ships an
+unrelated `mx`; the commands it installs are still `mx` and `mx-mcp`.
+Installed this way, `mx self-update` hands off to `brew upgrade mechcrate`; the tap
+is bumped automatically for every stable release. On Linux this needs
+[Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) first.
 
 ### From source (contributors)
 
@@ -76,7 +118,7 @@ mx self-update --dry-run   # the plan only, nothing changes
 
 `self-update` works out how this copy of `mx` was installed and does the
 matching thing: a release install downloads and verifies the next tarball;
-a Homebrew install runs `brew upgrade mx`; a source checkout is rebuilt
+a Homebrew install runs `brew upgrade mechcrate`; a source checkout is rebuilt
 (`--pull` to `git pull --rebase` first).
 
 Every update is verified before it goes live. The tarball's sha256 must match

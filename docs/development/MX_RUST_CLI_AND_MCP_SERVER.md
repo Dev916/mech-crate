@@ -811,6 +811,9 @@ tag v0.1.2 (or workflow_dispatch with version=0.1.2)
            ├─ linux     cross builds for both musl triples, proven static,
            │            package, upload into the draft
            └─ publish   flips the draft live once every platform uploaded
+              └─ tap-bump  stable versions only: renders Formula/mechcrate.rb from
+                           the release's .sha256 sidecars and opens the bump
+                           PR on unyform-ai/homebrew-tap
 ```
 
 The draft-then-publish shape is what keeps `releases/latest` from ever
@@ -824,6 +827,18 @@ attribute), but a browser download would be refused by Gatekeeper.
 To cut a release: bump `[workspace.package] version` in `Cargo.toml`, commit,
 `git tag vX.Y.Z`, push the tag. To rehearse without a tag: run the workflow by
 hand with a version such as `0.1.3-rc.1`; the suffix marks it prerelease.
+The tag run refuses a version that differs from `Cargo.toml`, so the bump PR
+must merge before the tag is pushed.
+
+`scripts/homebrew/render-formula.sh <version>` is the whole Homebrew story:
+it downloads the three `.sha256` sidecars from the release and prints
+`Formula/mechcrate.rb` (macOS universal plus both Linux musl targets, the bundle
+installed into `libexec` so `mech_crate_root()` resolves through the Cellar,
+`bin/mx` and `bin/mx-mcp` symlinked). The `tap-bump` job runs it after
+`publish` and opens a PR on the tap; merging that PR is the release step for
+`brew upgrade mechcrate`. It is a renderer rather than
+`mislav/bump-homebrew-formula-action` because that action rewrites only the
+first `url`/`sha256` it finds and the formula carries three.
 
 ### Install layout
 

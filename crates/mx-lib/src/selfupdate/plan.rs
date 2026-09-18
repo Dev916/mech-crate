@@ -13,7 +13,7 @@ use crate::selfupdate::target::{asset_name, checksum_name, Triple};
 use crate::selfupdate::version::is_newer;
 
 /// The command run for Homebrew installs.
-pub const BREW_UPGRADE: &str = "brew upgrade mx";
+pub const BREW_UPGRADE: &str = "brew upgrade mechcrate";
 
 /// What an update would do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,10 +169,10 @@ mod tests {
     #[test]
     fn a_homebrew_install_always_delegates_to_brew() {
         let brew = InstallKind::Homebrew {
-            cellar: PathBuf::from("/opt/homebrew/Cellar/mx/0.1.1"),
+            cellar: PathBuf::from("/opt/homebrew/Cellar/mechcrate/0.1.1"),
         };
         let expected = UpdatePlan::DelegateBrew {
-            command: "brew upgrade mx",
+            command: "brew upgrade mechcrate",
         };
         assert_eq!(plan(&brew, &v("0.1.1"), &v("0.1.2"), None, T), expected);
         assert_eq!(plan(&brew, &v("0.1.1"), &v("0.1.1"), None, T), expected);

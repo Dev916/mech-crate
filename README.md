@@ -123,6 +123,7 @@ That contract is non-negotiable — and it's the point. It's what lets one `make
 
 ```bash
 curl -fsSL https://mechcrate.dev/install.sh | sh    # macOS, Linux; no sudo
+# or: brew install unyform-ai/tap/mechcrate
 
 mx --version
 mx doctor
@@ -132,8 +133,13 @@ mx self-update --check     # later: is a newer release out?
 The installer downloads the signed tarball for your platform from the
 [release channel](https://github.com/unyform-ai/mech-crate-releases), verifies
 its sha256, and installs under `~/.mech-crate` with shims in `~/.local/bin`.
-`mx self-update` keeps it current (and `--rollback` undoes an update).
-Contributors build from a checkout instead: see [Development](#development).
+`mx self-update` keeps it current (and `--rollback` undoes an update). The
+Homebrew formula installs the same bundle; there `mx self-update` hands off to
+`brew upgrade mechcrate`. macOS 11+ (Apple silicon and Intel), Linux x86_64
+and aarch64, and Windows through WSL 2: the
+[platform matrix](https://mechcrate.dev/docs/start/install/#supported-platforms)
+says what has actually been verified where. Contributors build from a checkout
+instead: see [Development](#development).
 
 ### First project
 

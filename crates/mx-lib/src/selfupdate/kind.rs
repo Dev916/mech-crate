@@ -16,7 +16,9 @@ use crate::selfupdate::version::parse;
 pub enum InstallKind {
     /// `<home>/releases/mx-v<version>/bin/mx` — the layout self-update owns.
     Release { home: PathBuf, version: Version },
-    /// `<brew prefix>/Cellar/mx/<version>/...` — Homebrew owns it.
+    /// `<brew prefix>/Cellar/mechcrate/<version>/...` — Homebrew owns it.
+    /// The formula is `mechcrate` (homebrew-core's `mx` is an unrelated
+    /// tool); the binaries it links are still `mx` and `mx-mcp`.
     Homebrew { cellar: PathBuf },
     /// Inside a mech-crate checkout (`target/release/mx` or `bin/mx`).
     Source { repo: PathBuf },
@@ -77,7 +79,7 @@ fn release_kind(exe: &Path, home: &Path) -> Option<InstallKind> {
 }
 
 fn homebrew_kind(exe: &Path, prefix: &Path) -> Option<InstallKind> {
-    let cellar_root = prefix.join("Cellar").join("mx");
+    let cellar_root = prefix.join("Cellar").join("mechcrate");
     let rel = exe.strip_prefix(&cellar_root).ok()?;
     let version_dir = rel.components().next()?;
     Some(InstallKind::Homebrew {
@@ -122,10 +124,10 @@ mod tests {
     #[test]
     fn an_exe_in_the_homebrew_cellar_is_a_homebrew_install() {
         let prefix = PathBuf::from("/opt/homebrew");
-        let exe = prefix.join("Cellar/mx/0.1.2/libexec/bin/mx");
+        let exe = prefix.join("Cellar/mechcrate/0.1.2/libexec/bin/mx");
         match detect(&exe, &home(), Some(&prefix), no_repo) {
             InstallKind::Homebrew { cellar } => {
-                assert_eq!(cellar, prefix.join("Cellar/mx/0.1.2"));
+                assert_eq!(cellar, prefix.join("Cellar/mechcrate/0.1.2"));
             }
             other => panic!("expected Homebrew, got {other:?}"),
         }
@@ -133,7 +135,7 @@ mod tests {
 
     #[test]
     fn a_cellar_path_without_a_brew_prefix_is_not_homebrew() {
-        let exe = PathBuf::from("/opt/homebrew/Cellar/mx/0.1.2/libexec/bin/mx");
+        let exe = PathBuf::from("/opt/homebrew/Cellar/mechcrate/0.1.2/libexec/bin/mx");
         assert!(matches!(
             detect(&exe, &home(), None, no_repo),
             InstallKind::Bare { .. }

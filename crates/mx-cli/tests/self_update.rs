@@ -193,7 +193,7 @@ async fn dry_run_reports_a_release_install_with_the_planned_download() {
 fn dry_run_reports_a_homebrew_install_and_the_brew_command() {
     let sb = Sandbox::new();
     let prefix = sb.home().join("brew");
-    let exe = prefix.join("Cellar/mx/0.1.0/libexec/bin/mx");
+    let exe = prefix.join("Cellar/mechcrate/0.1.0/libexec/bin/mx");
 
     sb.mx()
         .env("HOMEBREW_PREFIX", &prefix)
@@ -201,7 +201,7 @@ fn dry_run_reports_a_homebrew_install_and_the_brew_command() {
         .args(["self-update", "--dry-run"])
         .assert()
         .success()
-        .stdout(contains("homebrew").and(contains("brew upgrade mx")));
+        .stdout(contains("homebrew").and(contains("brew upgrade mechcrate")));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -321,7 +321,7 @@ fn rollback_restores_the_previous_release() {
 fn homebrew_install_without_brew_on_path_fails_naming_the_command() {
     let sb = Sandbox::new();
     let prefix = sb.home().join("brew");
-    let exe = prefix.join("Cellar/mx/0.1.0/libexec/bin/mx");
+    let exe = prefix.join("Cellar/mechcrate/0.1.0/libexec/bin/mx");
 
     sb.mx()
         .env("HOMEBREW_PREFIX", &prefix)
@@ -329,7 +329,7 @@ fn homebrew_install_without_brew_on_path_fails_naming_the_command() {
         .args(["self-update", "--yes"])
         .assert()
         .code(1)
-        .stderr(contains("brew upgrade mx"));
+        .stderr(contains("brew upgrade mechcrate"));
 }
 
 // ── the download path ───────────────────────────────────────────────────────

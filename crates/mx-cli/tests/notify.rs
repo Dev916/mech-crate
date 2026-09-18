@@ -159,7 +159,8 @@ async fn releases_api(version: &str) -> MockServer {
 async fn a_stale_cache_on_a_tty_hints_once_and_refreshes_in_the_background() {
     let sb = Sandbox::new();
     let api = failing_api().await;
-    sb.seed(&stale_cache("9.9.9"));
+    let seeded = stale_cache("9.9.9");
+    sb.seed(&seeded);
 
     sb.mx_tty()
         .env("MX_RELEASES_API", api.uri())
@@ -183,9 +184,15 @@ async fn a_stale_cache_on_a_tty_hints_once_and_refreshes_in_the_background() {
     // by an hour rather than a day. The window is generous on purpose: the
     // refresh is an instrumented, freshly started process on a loaded CI
     // runner; a working refresh lands in well under a second.
+    //
+    // Compare against the SEEDED timestamp, not `after_hint`: under coverage
+    // the parent spends its exit writing a profile, and the child can finish
+    // the refresh before the test reads the cache back. `after_hint` then
+    // already carries the refreshed `checked_at`, and a predicate demanding
+    // something newer than that waits the whole window for nothing
+    // (2026-09-17, coverage job on PR #44).
     let refreshed = wait_for(StdDuration::from_secs(30), || {
-        sb.cache()
-            .is_some_and(|c| c.checked_at > after_hint.checked_at)
+        sb.cache().is_some_and(|c| c.checked_at > seeded.checked_at)
     });
     assert!(refreshed, "the detached refresh never rewrote the cache");
     let c = sb.cache().unwrap();
