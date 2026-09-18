@@ -68,7 +68,7 @@ State of practice as of 2026-09. Foundations (streams over time, effects at the 
 - Effects stay at the edges. Operators are "pipable query operators" over a sequence [1], and "Blocking (CPU-bound) code should not be called directly" on the loop [29], so IO belongs in tasks that feed results back as intents rather than inside a `map`.
 - Time is a scheduler, not a `sleep`. `VirtualTimeScheduler` "should work with either datetime/timespan or ticks as int/int" and `HistoricalScheduler` "uses datetime for absolute time and timedelta for relative time" [5]; on trio, `MockClock` defaults to rate 0.0, so "the clock only advances through manuals calls to `jump()`" [13].
 
-The same boundary in anyio form, with no reactivex in the pipeline [9] (illustrative):
+The same boundary in anyio form, with no reactivex in the pipeline. `MemoryObjectStreamStatistics` reports `current_buffer_used`, `max_buffer_size`, `open_send_streams`, `open_receive_streams`, `tasks_waiting_send` and `tasks_waiting_receive` [10], so the peak below is computed here rather than read from a field. Runnable as written:
 
 ```python
 import anyio
@@ -78,23 +78,30 @@ from anyio.streams.memory import MemoryObjectReceiveStream
 async def fold(recv: MemoryObjectReceiveStream[int]) -> None:
     total = 0
     async for item in recv:
+        await anyio.sleep(0.001)  # a slow consumer, so the bound actually bites
         total += item
     print("total", total)
 
 
 async def main() -> None:
-    # A bounded buffer is the backpressure policy: send() waits when it is full.
+    # The bound is the backpressure policy: send() waits once the buffer is full.
     send, recv = anyio.create_memory_object_stream[int](max_buffer_size=8)
+    high_water = 0
     async with anyio.create_task_group() as tg:
         tg.start_soon(fold, recv)
         with send:
-            for i in range(1000):
+            for i in range(50):
                 await send.send(i)
-    print("peak buffer", recv.statistics().max_buffer_size)
+                stats = send.statistics()
+                high_water = max(high_water, stats.current_buffer_used)
+    print("max_buffer_size 8, observed current_buffer_used peak", high_water)
+
+
+anyio.run(main)
 ```
 
 ## Example: asyncio + reactivex intent loop
-reactivex supplies the operator algebra and asyncio supplies the concurrency: `AsyncIOScheduler` takes the running loop [5], while the bounded queue [7], the task group and the timeout [8] stay stdlib. This runs to completion on Python 3.13 with reactivex 5.1.0 [2].
+reactivex supplies the operator algebra and asyncio supplies the concurrency: `AsyncIOScheduler` takes the running loop [5], while the bounded queue [7], the task group and the timeout [8] stay stdlib. Verified in this repo on CPython 3.13.5 with reactivex 5.1.0 [2]: it runs to completion and exits 0.
 
 ```python
 """Intent -> reducer -> effect loop on asyncio + reactivex. Python 3.13."""
