@@ -50,14 +50,12 @@ const jsonLd = jsonLdScript(
 );
 
 // Rendered one line per entry and copied newline-joined, so what the Copy
-// button puts on the clipboard is exactly what is on screen. Kept to two lines
-// because the single `&&` chain is ~90 monospace characters and clips out of
-// the hero column on anything narrower than a desktop.
-const installLines = [
-  'git clone https://github.com/Dev916/mech-crate.git',
-  'cd mech-crate && make install-local',
-];
+// button puts on the clipboard is exactly what is on screen. The installer is
+// the primary path (release tarball, checksum verified, no sudo); Homebrew is
+// shown beside it as a comment so a copy never runs both.
+const installLines = ['curl -fsSL https://mechcrate.dev/install.sh | sh'];
 const installCommand = installLines.join('\n');
+const brewCommand = 'brew install unyform-ai/tap/mechcrate';
 
 // The closing CTA shows the install plus the two commands that follow it. The
 // `$` prompts and the trailing `#` comments are decoration, so neither the
@@ -199,11 +197,18 @@ const startCommand = [
                     </code>
                   ))
                 }
+                <code><span class="comment"># or with Homebrew: {brewCommand}</span></code>
               </div>
             </div>
             <p class="hero__note">
-              Installs the <code>mx</code> binary to <code>~/.local/bin</code>. No sudo. Then
+              Downloads the release for your platform, verifies its checksum, and installs the
+              <code>mx</code> binary to <code>~/.local/bin</code>. No sudo. Then
               <code>mx doctor</code> tells you what else your machine needs.
+            </p>
+            <p class="hero__note">
+              Runs on macOS 11 or later (Apple silicon and Intel), Linux x86_64 and aarch64, and
+              Windows through WSL 2.
+              <a href="/docs/start/install/#supported-platforms">Platform matrix</a>
             </p>
 
             <p class="hero__ctas">
@@ -578,6 +583,7 @@ const startCommand = [
                   </code>
                 ))
               }
+              <code><span class="comment"># or: {brewCommand}</span></code>
               <code><span class="prompt" aria-hidden="true">$ </span>mx router install &amp;&amp; mx router up</code>
               <code><span class="prompt" aria-hidden="true">$ </span>mx new my-app <span class="comment"># and you're building</span></code>
             </div>
