@@ -113,8 +113,10 @@ pub fn scan_dir(dir: &Path) -> anyhow::Result<(Vec<ParsedDoc>, Vec<String>)> {
 }
 
 /// Write parsed docs to the store. Unchanged docs (same sha) are skipped
-/// unless `force`. Changed docs get their chunks deleted and re-inserted.
-/// Chunks are batch-embedded when the store has an embedder.
+/// unless `force`. A changed doc is batch-embedded first (when the store has
+/// an embedder) and then its row and chunks are replaced in one transaction,
+/// so neither a provider failure nor a database failure can leave a doc with
+/// a new sha and missing chunks.
 pub async fn ingest(
     store: &CorpusStore,
     docs: &[ParsedDoc],
@@ -134,9 +136,7 @@ pub async fn ingest(
                 }
             }
         }
-        let doc_id = store.upsert_doc(&doc.meta, &doc.sha256).await?;
-        store.delete_doc_chunks(doc_id).await?;
-
+        // Embed first: a provider failure must not touch the database.
         let texts: Vec<String> = doc.chunks.iter().map(|c| c.content.clone()).collect();
         let embeddings: Vec<Option<Vec<f32>>> = match store.embedder() {
             Some(e) => e.embed_batch(&texts).await?.into_iter().map(Some).collect(),
@@ -150,15 +150,13 @@ pub async fn ingest(
                 vec![None; texts.len()]
             }
         };
-        for (chunk, embedding) in doc.chunks.iter().zip(embeddings) {
-            summary.chunks_seen += 1;
-            if store
-                .insert_chunk(doc_id, chunk, &doc.meta, embedding)
-                .await?
-            {
-                summary.chunks_new += 1;
-            }
-        }
+        // Then swap the doc row and its chunks in one transaction, so a
+        // database failure leaves the previous sha and chunks in place.
+        let (_doc_id, chunks_new) = store
+            .replace_doc(&doc.meta, &doc.sha256, &doc.chunks, embeddings)
+            .await?;
+        summary.chunks_seen += doc.chunks.len();
+        summary.chunks_new += chunks_new;
         summary.docs_ingested += 1;
         tracing::info!("ingested {} ({} chunks)", doc.meta.path, doc.chunks.len());
     }
@@ -267,5 +265,186 @@ mod tests {
         .unwrap();
         assert_eq!(s3.docs_ingested, 1);
         assert_eq!(s3.docs_skipped, 1);
+    }
+
+    fn opts() -> IngestOptions {
+        IngestOptions {
+            clear: false,
+            force: false,
+        }
+    }
+
+    async fn chunk_count(store: &crate::corpus::CorpusStore) -> i64 {
+        store.status().await.unwrap()["chunks"].as_i64().unwrap()
+    }
+
+    /// A store with no embedder, holding the two fixture docs, plus the sha
+    /// and chunk count the changed doc must keep when a later ingest fails.
+    async fn seeded(
+        url: &str,
+    ) -> (
+        crate::corpus::RagConfig,
+        crate::corpus::CorpusStore,
+        tempfile::TempDir,
+        String,
+        i64,
+    ) {
+        let cfg = crate::corpus::RagConfig {
+            database_url: None,
+            fallback_database_url: url.to_string(),
+            embedding_api_key: None,
+            ..crate::corpus::RagConfig::default()
+        };
+        let store = crate::corpus::CorpusStore::connect(&cfg).await.unwrap();
+        store.clear().await.unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        write_fixture(dir.path());
+        let (docs, _) = scan_dir(dir.path()).unwrap();
+        ingest(&store, &docs, &opts()).await.unwrap();
+        let sha = store.doc_sha("no-fm.md").await.unwrap().unwrap();
+        let chunks = chunk_count(&store).await;
+        assert!(chunks > 0);
+        fs::write(
+            dir.path().join("no-fm.md"),
+            "# Plain Doc\n\n## Beta\n\nCHANGED body",
+        )
+        .unwrap();
+        (cfg, store, dir, sha, chunks)
+    }
+
+    /// Answers every embeddings request with one vector per input, but the
+    /// vectors are 3-dimensional while the column is vector(1536), so the
+    /// chunk INSERT fails inside the database after the doc row was touched.
+    struct WrongDims;
+
+    impl wiremock::Respond for WrongDims {
+        fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+            let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+            let n = body["input"].as_array().map(|a| a.len()).unwrap_or(1);
+            let data: Vec<_> = (0..n)
+                .map(|i| serde_json::json!({ "index": i, "embedding": [0.1, 0.2, 0.3] }))
+                .collect();
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({ "data": data }))
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_embedding_leaves_doc_sha_and_chunks_untouched() {
+        let Some(url) = std::env::var("MX_RAG_TEST_DATABASE_URL").ok() else {
+            return;
+        };
+        let _guard = db_lock().lock().await;
+        let (cfg, store, dir, sha_before, chunks_before) = seeded(&url).await;
+
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(429))
+            .mount(&server)
+            .await;
+        let failing = crate::corpus::CorpusStore::connect(&crate::corpus::RagConfig {
+            embedding_base_url: server.uri(),
+            embedding_api_key: Some("k".into()),
+            ..cfg.clone()
+        })
+        .await
+        .unwrap();
+        let (docs, _) = scan_dir(dir.path()).unwrap();
+        assert!(ingest(&failing, &docs, &opts()).await.is_err());
+
+        // Nothing about the doc changed: old sha, every old chunk still there.
+        assert_eq!(
+            store.doc_sha("no-fm.md").await.unwrap().unwrap(),
+            sha_before
+        );
+        assert_eq!(chunk_count(&store).await, chunks_before);
+
+        // So the next healthy run re-ingests it instead of skipping it as unchanged.
+        let (docs, _) = scan_dir(dir.path()).unwrap();
+        let s = ingest(&store, &docs, &opts()).await.unwrap();
+        assert_eq!(s.docs_ingested, 1);
+        assert_eq!(s.docs_skipped, 1);
+    }
+
+    #[tokio::test]
+    async fn failed_chunk_write_rolls_back_the_whole_doc() {
+        let Some(url) = std::env::var("MX_RAG_TEST_DATABASE_URL").ok() else {
+            return;
+        };
+        let _guard = db_lock().lock().await;
+        let (cfg, store, dir, sha_before, chunks_before) = seeded(&url).await;
+
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(WrongDims)
+            .mount(&server)
+            .await;
+        let failing = crate::corpus::CorpusStore::connect(&crate::corpus::RagConfig {
+            embedding_base_url: server.uri(),
+            embedding_api_key: Some("k".into()),
+            ..cfg.clone()
+        })
+        .await
+        .unwrap();
+        let (docs, _) = scan_dir(dir.path()).unwrap();
+        assert!(ingest(&failing, &docs, &opts()).await.is_err());
+
+        assert_eq!(
+            store.doc_sha("no-fm.md").await.unwrap().unwrap(),
+            sha_before
+        );
+        assert_eq!(chunk_count(&store).await, chunks_before);
+
+        let (docs, _) = scan_dir(dir.path()).unwrap();
+        let s = ingest(&store, &docs, &opts()).await.unwrap();
+        assert_eq!(s.docs_ingested, 1);
+        assert_eq!(s.docs_skipped, 1);
+    }
+
+    /// Answers with one vector fewer than the number of inputs.
+    struct OneShort;
+
+    impl wiremock::Respond for OneShort {
+        fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+            let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+            let n = body["input"].as_array().map(|a| a.len()).unwrap_or(1);
+            let data: Vec<_> = (0..n.saturating_sub(1))
+                .map(|i| serde_json::json!({ "index": i, "embedding": vec![0.0f32; 1536] }))
+                .collect();
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({ "data": data }))
+        }
+    }
+
+    #[tokio::test]
+    async fn short_embedding_batch_is_an_error_not_a_silent_drop() {
+        let Some(url) = std::env::var("MX_RAG_TEST_DATABASE_URL").ok() else {
+            return;
+        };
+        let _guard = db_lock().lock().await;
+        let (cfg, store, dir, sha_before, chunks_before) = seeded(&url).await;
+
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(OneShort)
+            .mount(&server)
+            .await;
+        let failing = crate::corpus::CorpusStore::connect(&crate::corpus::RagConfig {
+            embedding_base_url: server.uri(),
+            embedding_api_key: Some("k".into()),
+            ..cfg.clone()
+        })
+        .await
+        .unwrap();
+        let (docs, _) = scan_dir(dir.path()).unwrap();
+        let err = ingest(&failing, &docs, &opts()).await.unwrap_err();
+        assert!(
+            err.to_string().contains("embedding"),
+            "unexpected error: {err}"
+        );
+
+        assert_eq!(
+            store.doc_sha("no-fm.md").await.unwrap().unwrap(),
+            sha_before
+        );
+        assert_eq!(chunk_count(&store).await, chunks_before);
     }
 }

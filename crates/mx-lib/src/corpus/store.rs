@@ -135,6 +135,14 @@ impl CorpusStore {
 
     /// Upsert a doc by unique path; returns the doc id.
     pub async fn upsert_doc(&self, meta: &DocMeta, sha256: &str) -> anyhow::Result<Uuid> {
+        Self::upsert_doc_with(&self.pool, meta, sha256).await
+    }
+
+    async fn upsert_doc_with<'e>(
+        exec: impl sqlx::PgExecutor<'e>,
+        meta: &DocMeta,
+        sha256: &str,
+    ) -> anyhow::Result<Uuid> {
         let row = sqlx::query(
             "INSERT INTO technique_docs (path, title, category, languages, complexity, use_cases, summary, sha256)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -153,16 +161,23 @@ impl CorpusStore {
         .bind(&meta.use_cases)
         .bind(&meta.summary)
         .bind(sha256)
-        .fetch_one(&self.pool)
+        .fetch_one(exec)
         .await?;
         Ok(row.get::<Uuid, _>("id"))
     }
 
     /// Remove all chunks for a doc (called before re-inserting changed content).
     pub async fn delete_doc_chunks(&self, doc_id: Uuid) -> anyhow::Result<()> {
+        Self::delete_doc_chunks_with(&self.pool, doc_id).await
+    }
+
+    async fn delete_doc_chunks_with<'e>(
+        exec: impl sqlx::PgExecutor<'e>,
+        doc_id: Uuid,
+    ) -> anyhow::Result<()> {
         sqlx::query("DELETE FROM technique_chunks WHERE doc_id = $1")
             .bind(doc_id)
-            .execute(&self.pool)
+            .execute(exec)
             .await?;
         Ok(())
     }
@@ -170,6 +185,17 @@ impl CorpusStore {
     /// Insert a chunk; returns false when deduped by content_sha256.
     pub async fn insert_chunk(
         &self,
+        doc_id: Uuid,
+        chunk: &Chunk,
+        meta: &DocMeta,
+        embedding: Option<Vec<f32>>,
+    ) -> anyhow::Result<bool> {
+        Self::insert_chunk_with(&self.pool, &self.model, doc_id, chunk, meta, embedding).await
+    }
+
+    async fn insert_chunk_with<'e>(
+        exec: impl sqlx::PgExecutor<'e>,
+        model: &str,
         doc_id: Uuid,
         chunk: &Chunk,
         meta: &DocMeta,
@@ -187,13 +213,47 @@ impl CorpusStore {
         .bind(&chunk.heading_path)
         .bind(&chunk.content)
         .bind(vector)
-        .bind(&self.model)
+        .bind(model)
         .bind(&csha)
         .bind(&meta.category)
         .bind(&meta.languages)
-        .execute(&self.pool)
+        .execute(exec)
         .await?;
         Ok(res.rows_affected() == 1)
+    }
+
+    /// Replace a doc and every one of its chunks in one transaction: the doc
+    /// row (including its sha256) and the new chunks land together, or the
+    /// previous state stays exactly as it was. Callers embed before calling
+    /// this, so a provider failure never touches the database at all.
+    /// Returns the doc id and the number of newly inserted chunks.
+    pub async fn replace_doc(
+        &self,
+        meta: &DocMeta,
+        sha256: &str,
+        chunks: &[Chunk],
+        embeddings: Vec<Option<Vec<f32>>>,
+    ) -> anyhow::Result<(Uuid, usize)> {
+        anyhow::ensure!(
+            embeddings.len() == chunks.len(),
+            "embedding count {} does not match chunk count {} for {}",
+            embeddings.len(),
+            chunks.len(),
+            meta.path
+        );
+        let mut tx = self.pool.begin().await?;
+        let doc_id = Self::upsert_doc_with(&mut *tx, meta, sha256).await?;
+        Self::delete_doc_chunks_with(&mut *tx, doc_id).await?;
+        let mut chunks_new = 0;
+        for (chunk, embedding) in chunks.iter().zip(embeddings) {
+            if Self::insert_chunk_with(&mut *tx, &self.model, doc_id, chunk, meta, embedding)
+                .await?
+            {
+                chunks_new += 1;
+            }
+        }
+        tx.commit().await?;
+        Ok((doc_id, chunks_new))
     }
 
     /// Delete all docs and chunks (chunks cascade).
