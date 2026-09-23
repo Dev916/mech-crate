@@ -33,3 +33,6 @@ Format: `- [ ] <topic> — <one-line why> (added YYYY-MM-DD by <who>)`
 - [ ] Local-inference hardware re-check: rumored high-memory M5 Ultra Mac Studio (~Oct 2026) vs the current 96GB ceiling; revisit local-vs-API math only if it ships (added 2026-08-14 by technique-research)
 - [ ] MCP Tasks V2 wire protocol — V1 was too involved for client adoption; re-check when the redesign lands in released SDKs (added 2026-08-14 by technique-research)
 - [ ] real-time streaming voice-agent pipelines (STT/LLM/TTS staging, turn-taking, barge-in) — no corpus coverage; needed for meeting-agent work (added 2026-08-26 by techniques-skill)
+- [ ] feature flags for progressive rollout of write paths, per-rule kill switches, dark launch — corpus has no coverage; needed for Django task-engine rollout (added 2026-09-18 by techniques-skill)
+- [ ] lookup tables vs enums vs config modules for select-list vocabularies (operator editability, referential integrity, reporting stability, A/B variants) — corpus has no coverage (added 2026-09-18 by techniques-skill)
+- [ ] work-queue / task-engine domain modeling: lifecycle statechart, outcome vocabularies, rule-generated idempotent records, ranking-as-data — corpus has only generic DB/statechart material (added 2026-09-18 by techniques-skill)
