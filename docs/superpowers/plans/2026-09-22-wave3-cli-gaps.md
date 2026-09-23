@@ -17,9 +17,9 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - Conformance net: recipes suite asserts NO shipped recipe file contains a `{{PLACEHOLDER}}` token that neither recipe.json options nor the installer substitutes (mirror of the wave-2 `__GENERATE_*__` net).
 - `make test` green.
 
-- [ ] Decide the mechanism: substitution at install time (recipe.json option with a pinned default, like other options the installer already expands) vs a hard pin in the Dockerfile. Align with how rust-api/rust-leptos pin their toolchain; record the call in the commit message and issue notes.
-- [ ] Red-first conformance test for the unexpanded-placeholder class across all 7 recipes, then the fix.
-- [ ] Live E2E in scratch per the criteria above.
+- [x] Decide the mechanism: substitution at install time (recipe.json option with a pinned default, like other options the installer already expands) vs a hard pin in the Dockerfile. Align with how rust-api/rust-leptos pin their toolchain; record the call in the commit message and issue notes.
+- [x] Red-first conformance test for the unexpanded-placeholder class across all 7 recipes, then the fix.
+- [x] Live E2E in scratch per the criteria above.
 
 ### Task 2: non-dev compose renders DATABASE_URL empty — class fix across db-bearing recipes (bd mech-crate-q1w)
 
