@@ -8,8 +8,12 @@ services:
       target: development
     environment:
       - NODE_ENV=development
-    ports:
-      - "24678:24678"  # HMR websocket
+    # No ports here on purpose (bd:mech-crate-1a0). This used to publish
+    # 24678:24678 for the HMR websocket, but Nuxt 4 serves HMR through Nitro on
+    # the app's own port: a live dev container listens on 3000 and nothing else,
+    # and the router upgrades `/_nuxt/` to a `vite-hmr` websocket same-origin
+    # (verified: HTTP 101 through mx-router). The publish reserved a number for
+    # no listener, and cost the next stack on the machine its own.
     volumes:
       # Mount source for hot-reload
       - ../../apps/{{SERVICE_NAME}}:/app:cached

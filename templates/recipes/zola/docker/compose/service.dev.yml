@@ -23,8 +23,11 @@ services:
       # Exclude public directory (generated output)
       - /site/public
     ports:
-      # Live reload WebSocket
-      - "1024:1024"
+      # Live reload WebSocket. `zola serve` has no flag for this port, so the
+      # container side stays 1024 and only the host side moves: a second stack
+      # that sets ZOLA_LIVERELOAD_PORT boots with live reload degraded rather
+      # than not booting at all.
+      - "${ZOLA_LIVERELOAD_PORT:-1024}:1024"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:{{PORT}}"]
       interval: 30s

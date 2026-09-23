@@ -102,8 +102,11 @@ ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# 4321 only. `astro dev` serves the HMR websocket on this same port, so the 24678
+# this used to also declare was never bound by anything inside the container
+# (bd:mech-crate-1a0), and the publish it justified held the number hostage for
+# every other stack on the machine.
 EXPOSE 4321
-EXPOSE 24678
 
 # `--host 0.0.0.0` is not optional: create-astro's `dev` script is a bare
 # `astro dev`, which binds localhost *inside the container*. The healthcheck

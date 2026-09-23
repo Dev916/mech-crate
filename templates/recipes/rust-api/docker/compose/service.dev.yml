@@ -22,7 +22,8 @@ services:
 
   db:
     ports:
-      - "5432:5432"
+      # Ephemeral: see docker/compose/db.dev.yml for the discovery command.
+      - "${DB_HOST_PORT:-0}:5432"
 
 volumes:
   {{SERVICE_NAME}}_cargo_registry:

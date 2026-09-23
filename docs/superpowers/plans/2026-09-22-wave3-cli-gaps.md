@@ -44,9 +44,9 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - Conformance net: every host-side port publish in templates/ and recipes dev overrides is either env-parameterized (`${VAR:-default}` or `${VAR:-0}`) or absent; no bare pinned host port remains.
 - `make test` green.
 
-- [ ] Design call, recorded per port class: infra ports (db, redis, metrics, debugger) default EPHEMERAL via `${<SVC>_HOST_PORT:-0}` with discovery via `docker compose -p <proj> port`; browser-facing dev ports (HMR, dev servers) default PINNED but env-overridable (`${VAR:-24678}`) so a second stack overrides instead of dying. Record rationale in the conformance test header.
-- [ ] Read bd mech-crate-qpy (legacy port-publishing overlap) before sweeping; if the same class, cover its sites too and note it for the orchestrator (folding is the orchestrator's call).
-- [ ] Red-first conformance net, then the sweep, then live two-stack E2E.
+- [x] Design call, recorded per port class: infra ports (db, redis, metrics, debugger) default EPHEMERAL via `${<SVC>_HOST_PORT:-0}` with discovery via `docker compose -p <proj> port`; browser-facing dev ports (HMR, dev servers) default PINNED but env-overridable (`${VAR:-24678}`) so a second stack overrides instead of dying. Record rationale in the conformance test header.
+- [x] Read bd mech-crate-qpy (legacy port-publishing overlap) before sweeping; if the same class, cover its sites too and note it for the orchestrator (folding is the orchestrator's call).
+- [x] Red-first conformance net, then the sweep, then live two-stack E2E.
 
 ### Task 4: Traefik router/service names collide across projects (bd mech-crate-298)
 

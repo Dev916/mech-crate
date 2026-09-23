@@ -25,8 +25,10 @@ services:
       # Techniques corpus source, read-only. Without this the container renders
       # the authored pages only and `corpus: published 0 docs`.
       - ../../../docs:/repo/docs:ro
-    ports:
-      - "24678:24678"  # Vite HMR
+    # No ports here on purpose (bd:mech-crate-1a0), matching the astro recipe this
+    # was scaffolded from: `astro dev` serves the HMR websocket on the app's own
+    # port, so nothing inside the container ever listened on the 24678 this used to
+    # publish. Squatting on it only broke other stacks.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4321/api/health"]
       interval: 30s

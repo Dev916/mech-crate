@@ -3,5 +3,7 @@
 services:
   redis:
     ports:
-      - "6379:6379"  # Expose for local tools
+      # Ephemeral by default so a second stack never collides here. Find it with
+      #   docker compose -p "$COMPOSE_PROJECT_NAME" port redis 6379
+      - "${REDIS_HOST_PORT:-0}:6379"
     restart: "no"

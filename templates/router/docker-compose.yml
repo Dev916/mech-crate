@@ -11,8 +11,10 @@ services:
     command:
       - --configfile=/etc/traefik/traefik.yml
     ports:
-      - "80:80"
-      - "443:443"
+      # The router is a workstation singleton, so these stay pinned by default.
+      # Overridable for a machine where something else already holds 80/443.
+      - "${MX_ROUTER_HTTP_PORT:-80}:80"
+      - "${MX_ROUTER_HTTPS_PORT:-443}:443"
       - "${MX_ROUTER_DASHBOARD_PORT:-7680}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw

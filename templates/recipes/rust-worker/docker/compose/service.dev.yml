@@ -21,7 +21,10 @@ services:
       - METRICS_ENABLED=true
       - METRICS_PORT=9090
     ports:
-      - "9090:9090"  # Metrics
+      # Metrics, ephemeral: the container healthcheck uses localhost:9090 inside
+      # the container, so only scrapers need the host side. Find it with
+      #   docker compose -p "$COMPOSE_PROJECT_NAME" port {{SERVICE_NAME}} 9090
+      - "${METRICS_HOST_PORT:-0}:9090"
     deploy:
       replicas: 1
     healthcheck:

@@ -18,19 +18,27 @@ services:
       - RUST_LOG=debug,{{SERVICE_SLUG}}=debug
       - REDIS_URL=redis://redis:6379
       - LEPTOS_SITE_ADDR=0.0.0.0:3000
-      - LEPTOS_RELOAD_PORT=3001
+      # cargo-leptos injects this port into the page it serves, so the host and
+      # container sides have to agree. LEPTOS_RELOAD_HOST_PORT drives both, which
+      # is what lets a second stack move the whole reload channel and keep it
+      # working. (A distinct name on purpose: interpolating LEPTOS_RELOAD_PORT
+      # itself here would collide with the env_file layer that also carries it,
+      # which bd:mech-crate-q1w forbids.)
+      - LEPTOS_RELOAD_PORT=${LEPTOS_RELOAD_HOST_PORT:-3001}
     ports:
-      - "3001:3001"  # Hot reload port
+      - "${LEPTOS_RELOAD_HOST_PORT:-3001}:${LEPTOS_RELOAD_HOST_PORT:-3001}"
     healthcheck:
       disable: true
 
   db:
     ports:
-      - "5432:5432"
+      # Ephemeral: see docker/compose/db.dev.yml for the discovery command.
+      - "${DB_HOST_PORT:-0}:5432"
 
   redis:
     ports:
-      - "6379:6379"
+      # Ephemeral: see docker/compose/redis.dev.yml for the discovery command.
+      - "${REDIS_HOST_PORT:-0}:6379"
 
 volumes:
   {{SERVICE_NAME}}_cargo_cache:

@@ -16,6 +16,11 @@ services:
       - APP_DEBUG=true
       - OCTANE_SERVER=swoole
     ports:
-      - "5173:5173"   # Vite HMR
-      - "13714:13714" # Laravel Herd
+      # Both ephemeral: the browser never dials either. The recipe's own nginx
+      # proxies /build/ and /__vite_hmr to 127.0.0.1:5173 same-origin, and PHP
+      # reaches Inertia SSR at 127.0.0.1:13714 inside the container. These
+      # publishes are for inspecting the two processes directly:
+      #   docker compose -p "$COMPOSE_PROJECT_NAME" port {{SERVICE_NAME}} 5173
+      - "${VITE_HOST_PORT:-0}:5173"
+      - "${INERTIA_SSR_HOST_PORT:-0}:13714"
 
