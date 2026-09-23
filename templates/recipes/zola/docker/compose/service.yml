@@ -32,14 +32,22 @@ services:
       retries: 3
       start_period: 10s
     labels:
+      # Traefik keeps ONE router/service/middleware table per provider for the
+      # whole machine, so these names carry the compose project
+      # (bd:mech-crate-298); the compose CLI supplies COMPOSE_PROJECT_NAME from
+      # the project name it resolved. The hostname keeps its default; a second
+      # stack that scaffolded the same service name moves with
+      # `{{SERVICE_UPPER}}_ROUTER_HOST=other.localhost make dev`.
       - traefik.enable=true
-      - traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)
-      - traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web
-      - traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=80
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.loadbalancer.server.port=80
       - traefik.docker.network=devmesh-traefik
-      # Compression middleware
-      - traefik.http.middlewares.{{SERVICE_SLUG}}-compress.compress=true
-      - traefik.http.routers.{{SERVICE_SLUG}}.middlewares={{SERVICE_SLUG}}-compress
+      # Compression middleware. The reference has to carry the same project
+      # prefix as the definition: a router pointing at a middleware Traefik
+      # cannot find is a router Traefik refuses.
+      - traefik.http.middlewares.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}-compress.compress=true
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.middlewares=${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}-compress
 
 networks:
   devmesh-traefik:

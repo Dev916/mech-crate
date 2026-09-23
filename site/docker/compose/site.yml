@@ -45,10 +45,16 @@ services:
       retries: 3
       start_period: 10s
     labels:
+      # `site` is the most collidable router name on the machine, and Traefik's
+      # tables are machine-wide, so it carries the compose project
+      # (bd:mech-crate-298); the compose CLI supplies COMPOSE_PROJECT_NAME from
+      # the project name it resolved. The hostname keeps its default; a second
+      # copy of this stack moves with
+      # `SITE_ROUTER_HOST=other.localhost make dev`.
       - traefik.enable=true
-      - traefik.http.routers.site.rule=Host(`mechcrate.localhost`)
-      - traefik.http.routers.site.entrypoints=web
-      - traefik.http.services.site.loadbalancer.server.port=4321
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-site.rule=Host(`${SITE_ROUTER_HOST:-mechcrate.localhost}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-site.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-site.loadbalancer.server.port=4321
       - traefik.docker.network=devmesh-traefik
 
 networks:

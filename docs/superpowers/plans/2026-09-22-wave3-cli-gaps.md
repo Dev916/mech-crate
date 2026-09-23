@@ -57,8 +57,8 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - Conformance net: every `traefik.http.routers.*` / `traefik.http.services.*` name in templates/ and recipes is project-qualified (`${COMPOSE_PROJECT_NAME}-...`); no bare `{{SERVICE_NAME}}`-only router name remains. mx-router's own container/labels are the deliberate singleton exception (wave-2 design call).
 - `make test` green.
 
-- [ ] Fix shape per the issue: `traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.*` — .bashrc already exports COMPOSE_PROJECT_NAME for every compose call, so CLI-time interpolation resolves. Sweep all 7 recipes' service.yml plus laravel worker/scheduler fragments and any templates/docker/compose files carrying traefik labels; sweep site/docker/compose for the same shape.
-- [ ] Red-first conformance net, then the sweep, then the two-stack finale E2E (this is the proof wave 2 could not honestly claim).
+- [x] Fix shape per the issue: `traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.*` — .bashrc already exports COMPOSE_PROJECT_NAME for every compose call, so CLI-time interpolation resolves. Sweep all 7 recipes' service.yml plus laravel worker/scheduler fragments and any templates/docker/compose files carrying traefik labels; sweep site/docker/compose for the same shape.
+- [x] Red-first conformance net, then the sweep, then the two-stack finale E2E (this is the proof wave 2 could not honestly claim).
 
 ### Task 5: docs rider + ship
 

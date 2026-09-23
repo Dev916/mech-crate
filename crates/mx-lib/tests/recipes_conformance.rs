@@ -354,6 +354,13 @@ fn install_leaves_app_source_template_syntax_untouched() {
 /// `{{SERVICE_NAME}}.localhost`. That default is itself a placeholder, so unless
 /// option values are expanded against the placeholder map the generated Traefik
 /// rule ships the literal token and the service is unroutable.
+///
+/// Since bd:mech-crate-298 the rule reads the hostname through the environment
+/// so a second stack can move off a shared hostname, which puts the expanded
+/// domain in the DEFAULT position: ``Host(`${API_ROUTER_HOST:-api.localhost}`)``.
+/// The invariant is unchanged (the option's value reaches the Host rule fully
+/// expanded); the assertion pins the whole shape, including the override, so
+/// neither half can regress.
 #[test]
 fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
     for (recipe, service) in [
@@ -369,9 +376,13 @@ fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
         let text = std::fs::read_to_string(&compose)
             .unwrap_or_else(|e| panic!("setup: {recipe} ships {}: {e}", compose.display()));
 
+        let rule = format!(
+            "Host(`${{{}_ROUTER_HOST:-{service}.localhost}}`)",
+            service.to_uppercase()
+        );
         assert!(
-            text.contains(&format!("Host(`{service}.localhost`)")),
-            "{recipe}: expected Host(`{service}.localhost`) in {}:\n{text}",
+            text.contains(&rule),
+            "{recipe}: expected {rule} in {}:\n{text}",
             compose.display()
         );
         assert!(
@@ -383,7 +394,8 @@ fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
 }
 
 /// An explicitly supplied option value gets the same treatment — a caller may
-/// pass `--domain '{{SERVICE_NAME}}.example.com'` and expect it resolved.
+/// pass `--domain '{{SERVICE_NAME}}.example.com'` and expect it resolved, still
+/// in the default position of the `_ROUTER_HOST` override (bd:mech-crate-298).
 #[test]
 fn explicit_domain_option_is_expanded_too() {
     let options = HashMap::from([(
@@ -394,7 +406,7 @@ fn explicit_domain_option_is_expanded_too() {
     let text = std::fs::read_to_string(project.path().join("docker/compose/api.yml"))
         .expect("setup: rust-api ships docker/compose/<svc>.yml");
     assert!(
-        text.contains("Host(`api.example.com`)"),
+        text.contains("Host(`${API_ROUTER_HOST:-api.example.com}`)"),
         "explicit --domain not expanded:\n{text}"
     );
 }

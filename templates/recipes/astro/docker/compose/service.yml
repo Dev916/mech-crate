@@ -61,10 +61,16 @@ services:
       retries: 3
       start_period: 10s
     labels:
+      # Traefik keeps ONE router/service table per provider for the whole
+      # machine, so these names carry the compose project (bd:mech-crate-298);
+      # the compose CLI supplies COMPOSE_PROJECT_NAME from the project name it
+      # resolved. The hostname keeps its default; a second stack that scaffolded
+      # the same service name moves with
+      # `{{SERVICE_UPPER}}_ROUTER_HOST=other.localhost make dev`.
       - traefik.enable=true
-      - traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)
-      - traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web
-      - traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port=4321
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.loadbalancer.server.port=4321
       - traefik.docker.network=devmesh-traefik
 
 networks:
