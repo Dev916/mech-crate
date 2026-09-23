@@ -52,9 +52,9 @@ services:
       - devmesh-traefik      # external: how Traefik reaches you
     labels:
       - traefik.enable=true
-      - traefik.http.routers.myapp.rule=Host(`myapp.localhost`)
-      - traefik.http.routers.myapp.entrypoints=web
-      - traefik.http.services.myapp.loadbalancer.server.port=3000
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=Host(`${MYAPP_ROUTER_HOST:-myapp.localhost}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-myapp.loadbalancer.server.port=3000
       - traefik.docker.network=devmesh-traefik
 
 networks:
@@ -62,7 +62,7 @@ networks:
     external: true
 ```
 
-Three things matter and are easy to get wrong:
+Four things matter and are easy to get wrong:
 
 1. **Both networks.** `devmesh-traefik` is how the router reaches the container;
    `default` is how the container reaches its database. Only the service that
@@ -72,6 +72,11 @@ Three things matter and are easy to get wrong:
    Without this label Traefik may pick the wrong one and you get a 502.
 3. **`loadbalancer.server.port` is the *container's* port**, not a host port.
    There is no host port.
+4. **The router, service and middleware *names* carry the compose project.**
+   Traefik keeps one table of each per machine, so a bare `myapp` is a name every
+   mx project on the workstation shares. `${COMPOSE_PROJECT_NAME}-myapp` is
+   resolved by Compose from the project name it already knows, so it needs nothing
+   exported and works under a hand-rolled `docker compose -f …` too.
 
 The routing rule is a Traefik matcher, so the usual composition works:
 `Host(...) || Host(...)`, `Host(...) && PathPrefix(...)`, `HostRegexp(...)`.
@@ -96,18 +101,71 @@ file pins `container_name`, so each project's containers are named
 [container names](/docs/framework/upgrade/#migrating-container-names) if you have
 a script that addressed one by a fixed name.
 
-:::note[Where the limit actually is]
-Two projects with different service names and domains is the ordinary case, and
-it works. Two copies of the *same* shape, on the other hand, still collide below
-the router: dev overrides publish conventional host ports for backing services
-(Postgres on 5432, Redis on 6379) so local GUI tools can reach them, and the
-second stack finds those ports taken. The Traefik router names in the labels are
-not qualified by project either, so two projects shipping the same service name
-register the same router.
+Two copies of the *same* shape coexist as well, and that took two separate
+repairs. Dev overrides no longer pin host ports, so the second stack's Postgres
+does not find 5432 taken. Traefik router, service and middleware names now carry
+the compose project, so two stacks that each scaffold a service called `api`
+write two entries into Traefik's one router table instead of colliding in it. See
+[host ports](/docs/framework/upgrade/#migrating-host-ports) for the port classes
+and their override names.
 
-Both are tracked (`mech-crate-1a0`, `mech-crate-298`) and neither is fixed. Until
-they are, drop the host-port publish from one project's dev override, which is per
-compose file and a one-line edit, or give the two stacks distinct service names.
+:::note[What is still on you: the hostname]
+Both stacks run. A *hostname*, though, belongs to one of them: two routers whose
+rules name the same host are both accepted, each keeps its own backend, and
+Traefik serves exactly one. Changing the default domain to embed the project name
+would fix that and break every URL, bookmark and OAuth callback in every existing
+project, so the default is untouched and the rule reads through the environment:
+
+```yaml
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-api.rule=Host(`${API_ROUTER_HOST:-api.localhost}`)
+```
+
+A lone stack behaves exactly as before. The second stack moves itself with an
+exported variable rather than an edit to a shipped file:
+
+```bash
+API_ROUTER_HOST=api-two.localhost make dev
+```
+
+The variable is `<SERVICE_UPPER>_ROUTER_HOST` and not `<SERVICE>_HOST` because
+`DB_HOST`, `REDIS_HOST` and `API_HOST` are conventional service-address variables
+you may already export, and quietly repointing a router at a database host is not
+a failure anyone would enjoy debugging.
+:::
+
+:::caution[Breaking change: label names carry the compose project]
+Traefik keeps **one** router table, **one** service table and **one** middleware
+table per provider for the whole machine, and the recipes used to name their
+entries after the compose service alone. Two mx projects that each scaffolded an
+`api` service therefore wrote the same key into that one table. When the labels
+differed in any way Traefik dropped the router outright (`ERR Router defined
+multiple times with different configurations`) and both hostnames 404'd; when
+they agreed it was quieter and worse, merging both containers into one
+load-balancer pool so consecutive requests alternated between two projects' apps
+with nothing logged at all.
+
+The name now carries the project:
+
+```yaml
+# before
+- traefik.http.routers.api.rule=Host(`api.localhost`)
+- traefik.http.services.api.loadbalancer.server.port=3000
+
+# now
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-api.rule=Host(`${API_ROUTER_HOST:-api.localhost}`)
+- traefik.http.services.${COMPOSE_PROJECT_NAME}-api.loadbalancer.server.port=3000
+```
+
+Compose resolves `COMPOSE_PROJECT_NAME` from the project name it already
+resolved, so this works even for a hand-rolled `docker compose -f …` that never
+sources the project's `.bashrc`. Hostnames are unchanged. What breaks is a script
+or dashboard bookmark that addressed a router or service entry by its bare
+service name: `api@docker` is now `myproj-api@docker`.
+
+The global router is the deliberate exception. `templates/router/` configures
+Traefik by **file**, not by label, and the middlewares in
+`config/dynamic/` are `@file` singletons on purpose, because one machine has one
+router.
 :::
 
 ## Tuning

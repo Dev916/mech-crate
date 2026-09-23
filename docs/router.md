@@ -273,9 +273,9 @@ services:
       - devmesh-traefik      # For Traefik routing
     labels:
       - traefik.enable=true
-      - traefik.http.routers.myapp.rule=Host(`myapp.localhost`)
-      - traefik.http.routers.myapp.entrypoints=web
-      - traefik.http.services.myapp.loadbalancer.server.port=80
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=Host(`${MYAPP_ROUTER_HOST:-myapp.localhost}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-myapp.loadbalancer.server.port=80
       - traefik.docker.network=devmesh-traefik
 
 networks:
@@ -283,30 +283,88 @@ networks:
     external: true
 ```
 
+### Why the names carry the project
+
+Traefik keeps **one** router table, **one** service table and **one** middleware
+table per provider for the whole machine. A bare `traefik.http.routers.myapp.*` is
+therefore a key that every mx project on the workstation shares, and two projects
+writing it fail in one of two ways:
+
+- **Labels that differ in any way** and Traefik drops the router outright:
+  `ERR Router defined multiple times with different configurations`. Both
+  hostnames then 404, and nothing in either project says why.
+- **Labels that agree** and it is quieter and worse: Traefik merges the two
+  containers into one load-balancer pool, so consecutive requests to the hostname
+  alternate between two projects' apps. Nothing is logged at all.
+
+`${COMPOSE_PROJECT_NAME}-myapp` is resolved by the compose CLI from the project
+name it already resolved, so nothing has to be exported and the qualification
+holds even for a hand-rolled `docker compose -f …`. A router in the dashboard
+reads `myproj-myapp@docker`.
+
+Middlewares go with them, definition **and** reference: a router pointing at a
+middleware Traefik cannot find is a router Traefik refuses.
+
+### Why the hostname reads through a variable
+
+Unique names stop the drop and stop the merge. They do not stop two projects
+claiming one hostname: two uniquely-named routers with identical rules are both
+accepted, each keeps its own backend, and Traefik serves exactly one of them. The
+other stack runs and is not reachable by hostname.
+
+Embedding the project name in the default domain would fix that and break every
+URL, bookmark, OAuth callback and README in every existing project, for the sake
+of the second stack. So the default is untouched and the rule reads through the
+environment instead:
+
+```yaml
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=Host(`${MYAPP_ROUTER_HOST:-myapp.localhost}`)
+```
+
+A lone stack is identical to before. The second stack moves itself:
+
+```bash
+MYAPP_ROUTER_HOST=myapp-two.localhost make dev
+```
+
+The variable is `<SERVICE_UPPER>_ROUTER_HOST` rather than `<SERVICE>_HOST`
+because `DB_HOST`, `REDIS_HOST` and `API_HOST` are conventional service-address
+variables you may already export, and quietly repointing a router at a database
+host is not a failure anyone would enjoy debugging.
+
+The router's own config is the deliberate exception to all of this:
+`templates/router/` configures Traefik by **file**, and the middlewares in
+`config/dynamic/` are `@file` singletons on purpose, because one machine has one
+router.
+
 ### Label Reference
 
 | Label | Required | Description |
 |-------|----------|-------------|
 | `traefik.enable=true` | Yes | Enable routing for this container |
-| `traefik.http.routers.<name>.rule` | Yes | Routing rule (usually `Host(...)`) |
-| `traefik.http.routers.<name>.entrypoints` | Yes | Which ports to listen on |
-| `traefik.http.services.<name>.loadbalancer.server.port` | Yes | Container's internal port |
+| `traefik.http.routers.${COMPOSE_PROJECT_NAME}-<name>.rule` | Yes | Routing rule (usually `Host(...)`) |
+| `traefik.http.routers.${COMPOSE_PROJECT_NAME}-<name>.entrypoints` | Yes | Which ports to listen on |
+| `traefik.http.services.${COMPOSE_PROJECT_NAME}-<name>.loadbalancer.server.port` | Yes | Container's internal port |
 | `traefik.docker.network` | Yes | Which network Traefik should use |
 
 ### Routing Rules
 
+The rule is a Traefik matcher, so the usual composition works. Keep the domain in
+the default position of the `_ROUTER_HOST` override where there is one host, and
+leave the variable out where a rule is deliberately fixed.
+
 ```yaml
-# Simple hostname
-- traefik.http.routers.myapp.rule=Host(`myapp.localhost`)
+# Simple hostname, overridable
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=Host(`${MYAPP_ROUTER_HOST:-myapp.localhost}`)
 
 # Multiple hostnames
-- traefik.http.routers.myapp.rule=Host(`myapp.localhost`) || Host(`app.localhost`)
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=Host(`${MYAPP_ROUTER_HOST:-myapp.localhost}`) || Host(`app.localhost`)
 
 # Hostname with path prefix
-- traefik.http.routers.myapp.rule=Host(`api.localhost`) && PathPrefix(`/v1`)
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=Host(`api.localhost`) && PathPrefix(`/v1`)
 
 # Regex hostname (all subdomains)
-- traefik.http.routers.myapp.rule=HostRegexp(`{subdomain:.+}.myapp.localhost`)
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.rule=HostRegexp(`{subdomain:.+}.myapp.localhost`)
 ```
 
 ### Network Architecture
@@ -406,8 +464,8 @@ Update your service labels:
 
 ```yaml
 labels:
-  - traefik.http.routers.myapp.entrypoints=websecure
-  - traefik.http.routers.myapp.tls=true
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.entrypoints=websecure
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.tls=true
 ```
 
 ### Production (Let's Encrypt)
@@ -428,7 +486,7 @@ Then use in your labels:
 
 ```yaml
 labels:
-  - traefik.http.routers.myapp.tls.certresolver=letsencrypt
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.tls.certresolver=letsencrypt
 ```
 
 ---
@@ -468,7 +526,7 @@ Reference middlewares in your service labels:
 
 ```yaml
 labels:
-  - traefik.http.routers.myapp.middlewares=default-headers@file,compress-responses@file
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-myapp.middlewares=default-headers@file,compress-responses@file
 ```
 
 ### Custom Routes (File Provider)
@@ -574,6 +632,13 @@ Customize router behavior with these environment variables:
 | `MX_ROUTER_NETWORK` | `devmesh-traefik` | Docker network name |
 | `MX_ROUTER_DASHBOARD_PORT` | (auto) | Force specific dashboard port |
 | `MX_ROUTER_DASHBOARD_RANGE` | `7680-7799` | Port range for auto-allocation |
+| `MX_ROUTER_HTTP_PORT` | `80` | Host port the `web` entrypoint publishes on |
+| `MX_ROUTER_HTTPS_PORT` | `443` | Host port the `websecure` entrypoint publishes on |
+
+The two entrypoint ports became overridable so the router can share a machine
+with something that already owns 80, such as a legacy reverse-proxy sample. Move
+them and every project's URLs move with them, so treat it as a last resort rather
+than a routine knob.
 
 ### Examples
 
@@ -633,19 +698,28 @@ http:
 
 ### Load Balancing
 
-Multiple instances of the same service:
+Two containers that name the **same** Traefik service join one load-balancer
+pool. That is a feature when both are instances of one app, and a bug when they
+are two different apps:
 
 ```yaml
+# Deliberate: two replicas of one app, in ONE compose project
 services:
   api-1:
     labels:
-      - traefik.http.services.api.loadbalancer.server.port=80
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-api.loadbalancer.server.port=80
   api-2:
     labels:
-      - traefik.http.services.api.loadbalancer.server.port=80
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-api.loadbalancer.server.port=80
 ```
 
-Both containers register to the same service—Traefik load balances between them.
+Both register to `<project>-api` and Traefik balances between them. Note that the
+project prefix is what keeps this deliberate: with a bare `api`, two *separate*
+projects that each scaffold an `api` service form the same pool by accident, and
+consecutive requests to one hostname alternate between two unrelated apps with
+nothing logged. Scale within a project; never share a service name across
+projects. Prefer compose's own `deploy.replicas` where you can, since it gives
+every replica the same labels without a second service block.
 
 ---
 

@@ -52,9 +52,19 @@ make restart s={{SERVICE_NAME}}      # Restart services
 
 ### Development Ports
 
-| Port | Purpose |
-|------|---------|
-| 3000 | HTTP API |
+| Port | Purpose | Reached how |
+|------|---------|-------------|
+| 3000 | HTTP API (container port) | `http://{{DOMAIN}}` through the mx router; never published to the host |
+
+The recipe's Postgres and Redis dev overrides do publish to the host, on a port
+Docker allocates rather than a pinned 5432 or 6379, so a second stack starts
+without a collision. Ask compose for the number, or pin one for a session with
+`DB_HOST_PORT` / `REDIS_HOST_PORT`:
+
+```bash
+docker compose -p "$COMPOSE_PROJECT_NAME" port db 5432
+DB_HOST_PORT=5432 make dev
+```
 
 ### Viewing Logs
 
@@ -284,8 +294,22 @@ CORS_ORIGINS=http://localhost:3000,https://{{DOMAIN}}
 ```yaml
 labels:
   - "traefik.enable=true"
-  - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
-  - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=3000"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web"
+  - "traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=3000"
+  - "traefik.docker.network=devmesh-traefik"
+```
+
+Traefik keeps one router table per machine, so the names carry the compose
+project: two projects that both scaffold a `{{SERVICE_NAME}}` service get two
+entries instead of overwriting one. Compose resolves `COMPOSE_PROJECT_NAME`
+itself, so nothing needs exporting.
+
+The hostname default is unchanged. A second stack that wants its own claims it
+without editing a shipped file:
+
+```bash
+{{SERVICE_UPPER}}_ROUTER_HOST={{SERVICE_NAME}}-two.localhost make dev
 ```
 
 ## Database

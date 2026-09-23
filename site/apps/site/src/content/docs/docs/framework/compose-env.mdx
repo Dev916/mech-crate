@@ -52,13 +52,66 @@ services:
       disable: true              # or a relaxed one with room to boot
   db:
     ports:
-      - "5432:5432"              # backing services get real host ports for GUI tools
+      - "${DB_HOST_PORT:-0}:5432"  # host 0 = Docker picks a free port
 ```
 
 Note what is *not* there: the application service publishes no HTTP host port in
-either file. That is the [router's](/docs/framework/router/) job. Backing
-services are the exception: a dev override exposes Postgres and Redis on their
-conventional ports so `psql` and Redis GUIs work.
+either file. That is the [router's](/docs/framework/router/) job. Backing services
+are the exception, because `psql` and Redis GUIs want a host port.
+
+### Host ports
+
+Every host-side publish in a shipped compose file is `${VAR:-default}`, in one of
+two classes, and a conformance test refuses a bare number in either.
+
+**Ports tooling dials on demand** default to `0`, which tells Docker to allocate
+a free one. A pinned `5432` is a claim on the whole workstation, and a second mx
+stack booting into it dies on `Bind for 0.0.0.0:5432 failed: port is already
+allocated`. Host port `0` cannot collide. Discover the number when you need it:
+
+```bash
+docker compose -p "$COMPOSE_PROJECT_NAME" port db 5432
+# 0.0.0.0:32789
+```
+
+Or pin one for a session while its siblings stay ephemeral:
+
+```bash
+DB_HOST_PORT=5432 make dev
+```
+
+The names: `DB_HOST_PORT`, `REDIS_HOST_PORT`, `NODE_DEBUG_HOST_PORT`,
+`METRICS_HOST_PORT`, `VITE_HOST_PORT`, `INERTIA_SSR_HOST_PORT`.
+
+**Ports a browser dials** from a URL the page already holds cannot move
+silently, so they keep today's number as the default and gain an override:
+`LEPTOS_RELOAD_HOST_PORT` (3001), `ZOLA_LIVERELOAD_PORT` (1024),
+`NGINX_HTTP_PORT` / `NGINX_HTTPS_PORT`, `TRAEFIK_HTTP_PORT` /
+`TRAEFIK_HTTPS_PORT` / `TRAEFIK_DASHBOARD_PORT`, `MX_ROUTER_HTTP_PORT` /
+`MX_ROUTER_HTTPS_PORT`. A lone stack is unchanged; a second stack overrides
+rather than failing to start.
+
+The shape alone is not the fix. `${DB_HOST_PORT:-5432}` is parameterized and
+still collides out of the box, which is why the test asserts the *default* per
+class as well as the syntax, and fails deliberately on a container port it has
+never been told how to classify. Publishing a host port is a design call.
+
+:::caution[Breaking change: dev host ports are no longer pinned]
+A script or GUI connection profile pointed at `localhost:5432`, `localhost:6379`,
+`localhost:9229`, `localhost:9090`, `localhost:5173` or `localhost:13714` of an mx
+dev stack no longer finds anything there. Discover the port with
+`docker compose -p <project> port <service> <container-port>`, or pin it with the
+variable above.
+
+Port 24678 is gone entirely rather than parameterized. The astro and nuxt dev
+overrides published it for "Vite HMR" with nothing listening behind it: a live
+astro dev container has 4321 open and nothing else, nuxt has 3000 and nothing
+else. Both frameworks carry HMR over the app's own port and the router upgrades
+that websocket same-origin. Docker binds a published port whether or not anything
+answers, so this held a real port for nothing, and an astro stack holding 24678
+killed a nuxt stack's boot. HMR still works, through the router, at the app's own
+hostname.
+:::
 
 ### Composition, not duplication
 

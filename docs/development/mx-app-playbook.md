@@ -105,7 +105,7 @@ The following migration strategy is inferred from the folder contract, the recip
 
 ## 5. The Router Rule: every app URL goes through mx router
 
-**The rule (non-negotiable): apps are reached at `http://<service>.localhost` via the global mx router. Never publish an app port, never hand out `http://localhost:<port>`.** Dev-tool ports (HMR websockets, a dev-only 5432/6379) are the only sanctioned `ports:` entries [templates/recipes/*/docker/compose/service.dev.yml].
+**The rule (non-negotiable): apps are reached at `http://<service>.localhost` via the global mx router. Never publish an app port, never hand out `http://localhost:<port>`.** A dev-only publish of a backing service (Postgres, Redis) or a dev tool is the only sanctioned `ports:` entry, and it must be `${VAR:-<default>}` rather than a literal number [templates/recipes/*/docker/compose/service.dev.yml; enforced by crates/mx-lib/tests/templates_compose_ports.rs].
 
 Architecture [templates/router/docker-compose.yml; crates/mx-lib/src/router/mod.rs; docs/router.md]: one global Traefik v3 container (`mx-router`) owning host ports 80/443 plus a dashboard on an auto-allocated port (7680–7799, cached in `~/.mech-crate/router/.dashboard-port`). It watches the Docker socket (`exposedByDefault: false`) and routes to any container that opts in via labels on the external `devmesh-traefik` network. State lives in `~/.mech-crate/router/` (static config, hot-reloaded `config/dynamic/`, `letsencrypt/`). Routing updates are live — starting/stopping labeled containers re-routes with no router restart.
 
@@ -117,9 +117,9 @@ networks:
   - devmesh-traefik    # be reachable by the router
 labels:
   - traefik.enable=true
-  - traefik.http.routers.<name>.rule=Host(`<name>.localhost`)
-  - traefik.http.routers.<name>.entrypoints=web
-  - traefik.http.services.<name>.loadbalancer.server.port=<internal-port>
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-<name>.rule=Host(`${<NAME>_ROUTER_HOST:-<name>.localhost}`)
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-<name>.entrypoints=web
+  - traefik.http.services.${COMPOSE_PROJECT_NAME}-<name>.loadbalancer.server.port=<internal-port>
   - traefik.docker.network=devmesh-traefik
 # ...and at file bottom:
 networks:
@@ -129,11 +129,18 @@ networks:
 
 `loadbalancer.server.port` is the app's **internal** port (3000 for nuxt/rust-api, 80 for laravel, 4321 for astro) — it is never published to the host. Dev and prod carry identical routing labels; the URL does not change between `make dev` and `make up`.
 
+The router, service and middleware **names** carry `${COMPOSE_PROJECT_NAME}` (bd:mech-crate-298). Traefik keeps one table of each per provider for the whole machine, so a bare `routers.api` is a key every mx project on the workstation shares: mismatched labels make Traefik drop the router (`Router defined multiple times with different configurations`) and 404 both hostnames, matching labels merge both containers into one load-balancer pool that silently serves each other's traffic. Compose resolves the variable from the project name it already resolved, so it holds even under a hand-rolled `docker compose -f …`. `templates/router/` itself is the exception: it configures Traefik by file, and one machine has one router.
+
+The Host rule's value is `${<SERVICE_UPPER>_ROUTER_HOST:-<domain>}` in shipped compose files, with the scaffolded domain in the default position. Hostnames did not change; the knob exists because two uniquely-named routers with identical rules are both accepted and Traefik serves exactly one, so a second same-shape stack claims its own hostname with `API_ROUTER_HOST=api-two.localhost make dev` instead of editing a shipped file.
+
 **URL discovery (how an agent finds the URL — instead of guessing localhost):**
-1. Parse the service's compose file with a YAML parser (never regex) for `traefik.http.routers.<n>.rule=Host(\`h\`)`; scheme is `https` iff a sibling `tls=true` label exists; result is `<scheme>://<host>` with no port [~/.claude/skills/devloop/references/url-discovery.md].
-2. Or `mx router inspect` — lists dashboard URL and connected services (the shell implementation enumerates `docker network inspect devmesh-traefik`) [bin/lib/router.sh:184-204].
-3. Reachability gate: `curl -k -I -m 5 <url>` retried up to 30s; 2xx/3xx/401/403 all count as up.
-4. Zero or multiple Host matches → stop and disambiguate with `mx router inspect` + `mx ps`; never fall back to a localhost port.
+1. Parse the service's compose file with a YAML parser (never regex) for `traefik.http.routers.<n>.rule=Host(\`h\`)`, where `<n>` is now `${COMPOSE_PROJECT_NAME}-<service>`. **`h` may be `${<SERVICE_UPPER>_ROUTER_HOST:-<domain>}`, so resolve the interpolation: take the exported variable if set, otherwise the text after `:-`.** Printing the raw `${…}` as a hostname is a bug. Scheme is `https` iff a sibling `tls=true` label exists; result is `<scheme>://<host>` with no port [~/.claude/skills/devloop/references/url-discovery.md].
+2. Or read a **running** container's labels (`docker inspect`, the Traefik dashboard, `docker compose -p <proj> config`): those are already resolved, so no `${…}` survives and no defaulting logic is needed. Prefer this whenever the stack is up.
+3. Or `mx router inspect` — lists dashboard URL and connected services (the shell implementation enumerates `docker network inspect devmesh-traefik`) [bin/lib/router.sh:184-204].
+4. Reachability gate: `curl -k -I -m 5 <url>` retried up to 30s; 2xx/3xx/401/403 all count as up.
+5. Zero or multiple Host matches → stop and disambiguate with `mx router inspect` + `mx ps`; never fall back to a localhost port.
+
+**Host ports are not pinned** (bd:mech-crate-1a0), so guessing `localhost:5432` was already wrong and now resolves to nothing. Every host-side publish in a shipped compose file is `${VAR:-<default>}`: infra ports tooling dials on demand default to `0` and Docker allocates them (`DB_HOST_PORT`, `REDIS_HOST_PORT`, `NODE_DEBUG_HOST_PORT`, `METRICS_HOST_PORT`, `VITE_HOST_PORT`, `INERTIA_SSR_HOST_PORT`), browser-facing dev ports keep their number as the default and take an override (`LEPTOS_RELOAD_HOST_PORT`, `ZOLA_LIVERELOAD_PORT`, `NGINX_HTTP_PORT`/`NGINX_HTTPS_PORT`, `TRAEFIK_HTTP_PORT`/`TRAEFIK_HTTPS_PORT`/`TRAEFIK_DASHBOARD_PORT`, `MX_ROUTER_HTTP_PORT`/`MX_ROUTER_HTTPS_PORT`). Discover one with `docker compose -p <proj> port <svc> <container-port>`; pin one for a session by exporting the variable. Port 24678 no longer exists anywhere: astro and nuxt carry HMR over the app's own port and the router upgrades it same-origin.
 
 Lifecycle: `mx router install` (once; copies `templates/router/` → `~/.mech-crate/router/`, creates the network) · `up` / `down` · `status` · `logs` · `inspect` · `network` [crates/mx-cli/src/commands/router.rs]. Known implementation gaps: the Rust CLI's `inspect` is an alias of `status` and `reload` (SIGHUP hot-reload) exists only in the shell lib [router.rs:175-177; bin/lib/router.sh:178-182]. HTTPS locally = mkcert cert + `config/dynamic/certs.yml` + switch labels to `entrypoints=websecure`/`tls=true`; production = ACME resolver + `tls.certresolver=letsencrypt` label [docs/router.md:364-421].
 

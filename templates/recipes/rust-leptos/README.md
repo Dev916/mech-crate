@@ -57,10 +57,19 @@ make restart s={{SERVICE_NAME}}      # Restart services
 
 ### Development Ports
 
-| Port | Purpose |
-|------|---------|
-| 3000 | Leptos application |
-| 3001 | cargo-leptos reload (dev) |
+| Port | Purpose | Reached how |
+|------|---------|-------------|
+| 3000 | Leptos application (container port) | `http://{{DOMAIN}}` through the mx router; never published to the host |
+| 3001 | cargo-leptos reload (dev) | Published on host 3001 by default, because the browser dials it from a URL the served page already carries |
+
+The reload port is the one number this recipe still pins, and it is overridable.
+`LEPTOS_RELOAD_HOST_PORT` drives the host side, the container side and
+`LEPTOS_RELOAD_PORT` together, because the port the server binds is the port it
+injects into the page:
+
+```bash
+LEPTOS_RELOAD_HOST_PORT=3011 make dev    # a second Leptos stack, live reload intact
+```
 
 ### Viewing Logs
 
@@ -291,8 +300,22 @@ tailwind-input-file = "style/tailwind.css"
 ```yaml
 labels:
   - "traefik.enable=true"
-  - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
-  - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=3000"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web"
+  - "traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=3000"
+  - "traefik.docker.network=devmesh-traefik"
+```
+
+Traefik keeps one router table per machine, so the names carry the compose
+project: two projects that both scaffold a `{{SERVICE_NAME}}` service get two
+entries instead of overwriting one. Compose resolves `COMPOSE_PROJECT_NAME`
+itself, so nothing needs exporting.
+
+The hostname default is unchanged. A second stack that wants its own claims it
+without editing a shipped file:
+
+```bash
+{{SERVICE_UPPER}}_ROUTER_HOST={{SERVICE_NAME}}-two.localhost make dev
 ```
 
 ## Components (leptos-shadcn-ui)

@@ -49,10 +49,15 @@ make restart s={{SERVICE_NAME}}      # Restart services
 
 ### Development Ports
 
-| Port | Purpose |
-|------|---------|
-| 3000 | Nuxt application |
-| 24678 | Vite HMR WebSocket |
+| Port | Purpose | Reached how |
+|------|---------|-------------|
+| 3000 | Nuxt application (container port) | `http://{{DOMAIN}}` through the mx router; never published to the host |
+
+Nothing else is published. Nuxt serves HMR over Nitro on the app's own port, and
+the router upgrades that websocket same-origin, so HMR arrives at `{{DOMAIN}}`
+with the page. The dev override used to publish `24678:24678` for it; nothing was
+ever listening there, and holding the port stopped a sibling stack from booting,
+so the publish and the matching `EXPOSE` are gone.
 
 ### Viewing Logs
 
@@ -254,8 +259,22 @@ console.log(config.public.apiBase)
 ```yaml
 labels:
   - "traefik.enable=true"
-  - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
-  - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=3000"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web"
+  - "traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=3000"
+  - "traefik.docker.network=devmesh-traefik"
+```
+
+Traefik keeps one router table per machine, so the names carry the compose
+project: two projects that both scaffold a `{{SERVICE_NAME}}` service get two
+entries instead of overwriting one. Compose resolves `COMPOSE_PROJECT_NAME`
+itself, so nothing needs exporting.
+
+The hostname default is unchanged. A second stack that wants its own claims it
+without editing a shipped file:
+
+```bash
+{{SERVICE_UPPER}}_ROUTER_HOST={{SERVICE_NAME}}-two.localhost make dev
 ```
 
 ## API Routes
@@ -384,13 +403,19 @@ rm -rf node_modules && npm install
 
 ### HMR Not Working
 
-```bash
-# Check if port 24678 is accessible
-# In Docker, ensure port is exposed
+HMR rides the app's own origin through the router, so there is no separate port
+to check. Work the same ladder you would for the page itself.
 
-# Restart dev server
-mx restart {{SERVICE_NAME}}
+```bash
+mx router status                     # is the router up?
+make logs s={{SERVICE_NAME}}         # did Nitro start, and on 3000?
+mx restart {{SERVICE_NAME}}          # restart the dev server
 ```
+
+If the page loads but updates do not arrive, open the browser console: a failed
+websocket upgrade to `{{DOMAIN}}` points at the router, and a clean upgrade with
+no messages points at the file watcher, which usually means the source mount is
+missing from the dev override.
 
 ### TypeScript Errors
 

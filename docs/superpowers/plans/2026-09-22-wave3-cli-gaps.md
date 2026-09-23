@@ -69,5 +69,5 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - Full gates green: `make test`, `make check`; site `npm test` + `npx astro build`; `mx rag ingest --dry-run` 0 warnings.
 - PR open from `fix/wave3-cli-gaps` to main, ci.yml + site.yml green. Do NOT merge.
 
-- [ ] Ride-along: the pending 3-line RESEARCH_BACKLOG.md append (uncommitted in the worktree) — include and flag it in the PR body.
-- [ ] PR title `fix: Wave 3 CLI gaps — ephemeral host ports, project-qualified Traefik labels, rust-worker build, non-dev env rendering`; body: per-fix summary + breaking-change note + design calls recorded; trailer per repo convention.
+- [x] Ride-along: the pending 3-line RESEARCH_BACKLOG.md append (uncommitted in the worktree) — include and flag it in the PR body.
+- [x] PR title `fix: Wave 3 CLI gaps: ephemeral host ports, project-qualified Traefik labels, rust-worker build, non-dev env rendering`; body: per-fix summary + breaking-change note + design calls recorded; trailer per repo convention.
