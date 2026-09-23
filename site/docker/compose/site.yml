@@ -20,9 +20,16 @@ services:
       dockerfile: ../../docker/dockerfiles/site/app
       target: runner
     restart: unless-stopped
+    # Documented layering, last one winning: shared → secrets → service
+    # (bd:mech-crate-lwe). This listed secrets first, which inverts it — a
+    # project-wide default in `.env.shared` then beat the secret written to
+    # override it. The site has no datastore so nothing broke yet, but it is the
+    # dogfood copy of the astro recipe's compose file and drifted from it; the
+    # env-precedence sweep now walks `site/docker/compose/` too, so it cannot
+    # drift again (bd:mech-crate-q1w).
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.site
     environment:
       - NODE_ENV=production

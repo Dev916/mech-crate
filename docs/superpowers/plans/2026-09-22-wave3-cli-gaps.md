@@ -31,9 +31,9 @@ Conventions: all work on this branch; one commit per task in repo style; `make t
 - The repo's own `site/docker/compose/site.yml` is swept into the same class fix (it shares the shape AND still lists .env.secrets before .env.shared), and the conformance net now covers site/docker/compose in addition to templates/.
 - `make test` green.
 
-- [ ] Red-first: conformance test asserting no compose `environment:` value in templates/, recipes, or site/docker/compose interpolates `${DB_USER}`/`${DB_PASSWORD}`/`${DB_NAME}` (compose only reads project-dir .env for `${}`; env_file layers are invisible to interpolation — proven live in wave-2 T1).
-- [ ] Class fix: follow the rust-api model (runtime derivation / literals written by the wave-2 generator), not per-file patches. Fix the env_file ORDER in site.yml while in there (shared before secrets).
-- [ ] Live E2E per the criteria.
+- [x] Red-first: conformance test asserting no compose `environment:` value in templates/, recipes, or site/docker/compose interpolates `${DB_USER}`/`${DB_PASSWORD}`/`${DB_NAME}` (compose only reads project-dir .env for `${}`; env_file layers are invisible to interpolation — proven live in wave-2 T1).
+- [x] Class fix: follow the rust-api model (runtime derivation / literals written by the wave-2 generator), not per-file patches. Fix the env_file ORDER in site.yml while in there (shared before secrets).
+- [x] Live E2E per the criteria.
 
 ### Task 3: pinned host ports block two concurrent stacks (bd mech-crate-1a0)
 

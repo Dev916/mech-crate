@@ -17,9 +17,16 @@ services:
       - ../.config/.env.shared
       - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
+    # No DATABASE_URL here on purpose (bd:mech-crate-q1w). It said
+    # `postgres://{{SERVICE_SLUG}}:${DB_PASSWORD}@db:5432/{{SERVICE_SLUG}}`, and
+    # the compose CLI interpolates `${…}` from the compose project directory's
+    # `.env` only — never from an `env_file` layer — so on every non-dev path the
+    # password rendered empty with a `variable is not set` warning. An
+    # `environment:` block outranks every `env_file` layer, so that empty result
+    # replaced the literal generate-secrets.sh had resolved into
+    # `.env.{{SERVICE_NAME}}`, which is where it belongs.
     environment:
       - RUST_LOG=info,{{SERVICE_SLUG}}=info
-      - DATABASE_URL=postgres://{{SERVICE_SLUG}}:${DB_PASSWORD}@db:5432/{{SERVICE_SLUG}}
       - REDIS_URL=redis://redis:6379
       - LEPTOS_SITE_ADDR=0.0.0.0:3000
       - LEPTOS_SITE_ROOT=site

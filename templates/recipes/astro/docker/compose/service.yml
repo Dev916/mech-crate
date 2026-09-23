@@ -33,10 +33,17 @@ services:
       - ../.config/.env.shared
       - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
+    # No DATABASE_URL here on purpose (bd:mech-crate-q1w). It said
+    # `postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}`, and the compose
+    # CLI interpolates `${…}` from the compose project directory's `.env` — never
+    # from an `env_file` layer. No mx scaffold has that `.env`, so every
+    # reference rendered empty with a `variable is not set` warning. And because
+    # an `environment:` block outranks every `env_file` layer, the empty result
+    # then overwrote the working literal generate-secrets.sh had already resolved
+    # into `.env.{{SERVICE_NAME}}`. The env file is the only place this belongs.
     environment:
       - NODE_ENV=production
       - PORT=4321
-      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=redis://redis:6379
       - APP_URL=https://{{DOMAIN}}
     networks:

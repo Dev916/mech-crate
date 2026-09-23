@@ -10,9 +10,12 @@ services:
       - ../../apps/{{SERVICE_NAME}}:/app
       - {{SERVICE_NAME}}_cargo_cache:/usr/local/cargo/registry
       - {{SERVICE_NAME}}_target_cache:/app/target
+    # No DATABASE_URL here on purpose (bd:mech-crate-q1w): a hardcoded
+    # `{{SERVICE_SLUG}}:secret` that outranked every `env_file` layer, so it beat
+    # the credentials generate-secrets.sh generates per project. The resolved
+    # literal lives in `.env.{{SERVICE_NAME}}` and serves dev and non-dev alike.
     environment:
       - RUST_LOG=debug,{{SERVICE_SLUG}}=debug
-      - DATABASE_URL=postgres://{{SERVICE_SLUG}}:secret@db:5432/{{SERVICE_SLUG}}
       - REDIS_URL=redis://redis:6379
       - LEPTOS_SITE_ADDR=0.0.0.0:3000
       - LEPTOS_RELOAD_PORT=3001

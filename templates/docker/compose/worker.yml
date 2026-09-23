@@ -11,10 +11,14 @@ services:
       - ../.config/.env.shared
       - ../.config/.env.secrets
       - ../.config/.env.app
+    # DATABASE_URL / REDIS_URL are deliberately absent (bd:mech-crate-q1w), the
+    # same call as app.yml: an `environment:` block outranks every `env_file`
+    # layer, and the compose CLI cannot read `${DB_*}` / `${REDIS_*}` out of one,
+    # so building the URLs here rendered them empty and overwrote the working
+    # literals. Both now come from `.env.app`, resolved by
+    # scripts/generate-secrets.sh.
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}
     depends_on:
       db:
         condition: service_healthy
