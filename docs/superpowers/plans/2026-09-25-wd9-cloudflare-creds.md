@@ -16,9 +16,9 @@ Conventions: one commit per task in repo style; `make test` green after every ta
 - With NEITHER file populated, the toolchain fails with a clear actionable message naming `mx infra setup cloudflare` (no silent empty var).
 - Unit/integration tests cover the writer (infra.rs) and the resolution order; `make test` green.
 
-- [ ] Decide the canonical name (align with what the wider toolchain and cf-init-app.sh already read; record the call and any back-compat shim in the commit message).
-- [ ] Red-first tests: writer writes canonical names; mk include chain has global fallback with project override.
-- [ ] Live E2E per criteria in scratch (dummy credentials only).
+- [x] Decide the canonical name (align with what the wider toolchain and cf-init-app.sh already read; record the call and any back-compat shim in the commit message).
+- [x] Red-first tests: writer writes canonical names; mk include chain has global fallback with project override.
+- [x] Live E2E per criteria in scratch (dummy credentials only).
 
 ### Task 2: docs rider + ship
 

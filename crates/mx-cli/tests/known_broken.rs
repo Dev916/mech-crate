@@ -14,7 +14,6 @@
 //! See `tests/KNOWN_BROKEN.md` at the repo root for the id ↔ test ↔ behavior
 //! mapping.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -79,92 +78,6 @@ fn template_project(root: &Path) -> PathBuf {
     recording
 }
 
-// ── 2. bd:mech-crate-wd9 — cloudflare account-id variable contract ───────────
-
-/// Every `NAME_ACCOUNT_ID={}` literal the Rust side writes into a config file.
-fn account_id_vars_written(src: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for line in src.lines() {
-        if let Some(pos) = line.find("ACCOUNT_ID={}") {
-            let end = pos + "ACCOUNT_ID".len();
-            let start = line[..end]
-                .rfind(|c: char| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'))
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            out.push(line[start..end].to_string());
-        }
-    }
-    out.sort();
-    out.dedup();
-    out
-}
-
-/// `*_ACCOUNT_ID` names a makefile dereferences but never assigns — i.e. the
-/// ones it expects the `-include`d credentials file to provide.
-fn account_id_vars_consumed(mk: &str) -> Vec<String> {
-    let mut assigned: HashSet<String> = HashSet::new();
-    for line in mk.lines() {
-        let t = line.trim().trim_start_matches("export ").trim();
-        if let Some(eq) = t.find('=') {
-            let name = t[..eq].trim().trim_end_matches([':', '?', '+']).trim();
-            let ident = !name.is_empty()
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
-            if ident {
-                assigned.insert(name.to_string());
-            }
-        }
-    }
-
-    let mut out = Vec::new();
-    let mut rest = mk;
-    while let Some(i) = rest.find("$(") {
-        let after = &rest[i + 2..];
-        let end = after.find(')').unwrap_or(after.len());
-        let name = &after[..end];
-        if name.ends_with("ACCOUNT_ID") && !assigned.contains(name) {
-            out.push(name.to_string());
-        }
-        rest = &after[end..];
-    }
-    out.sort();
-    out.dedup();
-    out
-}
-
-/// `mx infra setup cloudflare` writes one account-id variable; the deploy
-/// toolchain reads another. Assert the CONTRACT: the name written is a name
-/// `cloudflare.mk` actually consumes from the credentials file.
-#[test]
-#[ignore = "bd:mech-crate-wd9 mx writes CLOUDFLARE_ACCOUNT_ID, cloudflare.mk reads CF_ACCOUNT_ID"]
-fn kb_cloudflare_account_id_var_is_one_contract() {
-    let infra_rs = std::fs::read_to_string(repo_root().join("crates/mx-cli/src/commands/infra.rs"))
-        .expect("setup: read infra.rs");
-    let written = account_id_vars_written(&infra_rs);
-    assert_eq!(
-        written.len(),
-        1,
-        "setup: expected exactly one *_ACCOUNT_ID written by mx infra setup, found {written:?}"
-    );
-
-    let mk = std::fs::read_to_string(repo_root().join("templates/make/cloudflare.mk"))
-        .expect("setup: read cloudflare.mk");
-    let consumed = account_id_vars_consumed(&mk);
-    assert!(
-        !consumed.is_empty(),
-        "setup: cloudflare.mk dereferences no *_ACCOUNT_ID at all"
-    );
-
-    assert!(
-        consumed.contains(&written[0]),
-        "mx infra setup writes {} but cloudflare.mk consumes {:?} — \
-         infra-managed credentials are never read by the deploy toolchain",
-        written[0],
-        consumed
-    );
-}
-
 // ── 3. bd:mech-crate-066 — infra link/unlink are stubs ───────────────────────
 
 /// `mx infra link <provider>` must actually link: write the marker the Rust
@@ -180,7 +93,7 @@ fn kb_infra_link_writes_marker_and_inspect_resolves_global() {
     std::fs::create_dir_all(&global_dir).expect("setup: global infra dir");
     std::fs::write(
         global_dir.join("cloudflare.env"),
-        "CF_ACCOUNT_ID=global-account\n",
+        "CLOUDFLARE_ACCOUNT_ID=global-account\n",
     )
     .expect("setup: write global cloudflare.env");
 
@@ -188,7 +101,7 @@ fn kb_infra_link_writes_marker_and_inspect_resolves_global() {
     std::fs::create_dir_all(&project_cfg).expect("setup: project infra dir");
     std::fs::write(
         project_cfg.join(".env.cloudflare"),
-        "CF_ACCOUNT_ID=project-account\n",
+        "CLOUDFLARE_ACCOUNT_ID=project-account\n",
     )
     .expect("setup: write project .env.cloudflare");
 

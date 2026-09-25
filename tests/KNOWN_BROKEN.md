@@ -34,7 +34,6 @@ a fix landed without bookkeeping — surfaced, not silently green.
 
 | bd id | Test | Where | Asserts (once fixed) | Tier |
 |---|---|---|---|---|
-| mech-crate-wd9 | `kb_cloudflare_account_id_var_is_one_contract` | `crates/mx-cli/tests/known_broken.rs` | The `*_ACCOUNT_ID` name `mx infra setup cloudflare` writes is one `templates/make/cloudflare.mk` consumes from the credentials file (greps both sides, asserts equality) | integration |
 | mech-crate-066 | `kb_infra_link_writes_marker_and_inspect_resolves_global` | `crates/mx-cli/tests/known_broken.rs` | `mx infra link cloudflare` creates the resolver's `.env.linked` marker, after which `mx infra inspect` resolves to the global credentials | integration |
 | mech-crate-vxq | `kb_mx_cf_subcommand_exists` | `crates/mx-cli/tests/known_broken.rs` | The documented `mx cf` subcommand exists (`mx cf --help` exits 0). *Retire this test if the issue is instead closed by purging the doc references.* | integration |
 | mech-crate-9be | `kb_recipes_apply_fix_changes_behavior` | `crates/mx-cli/tests/known_broken.rs` | `mx recipes apply <r> --fix` output differs from a plain apply — i.e. `--fix` performs the advertised dependency-drift comparison (wiremock Unyform stub) | integration |
@@ -47,13 +46,13 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | mech-crate-dqw | `kb_doctor_reports_router_status` | `crates/mx-cli/tests/known_broken.rs` | `mx doctor` reports on the router (network / container / port 80) alongside its structure and docker checks | integration |
 | mech-crate-4jw | `corpus::store::tests::kb_lexical_arm_separates_relevant_from_irrelevant` | `crates/mx-lib/src/corpus/store.rs` | With the vector arm held equal (identical embeddings, orthogonal to the query), the lexical arm separates a relevant from an irrelevant ~1.2KB chunk by ≥5× and ≥0.05 of final score. Measured today: **2.18× / 0.0062** | integration (DB) |
 
-12 lane tests, all named `kb_*` (the one exception, `z5i`, left the lane when
-its fix landed).
+11 lane tests, all named `kb_*` (the exceptions, `z5i` and `wd9`, left the lane
+when their fixes landed).
 
-**Scoreboard** (`make test-known-broken`): `12 tests run: 0 passed, 12 failed,
-427 skipped` — 12 rows above, 12 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `427 passed, 12 skipped`. Those two numbers
-partition the workspace; if they stop summing to 439, either a lane test lost
+**Scoreboard** (`make test-known-broken`): `11 tests run: 0 passed, 11 failed,
+438 skipped`: 11 rows above, 11 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `438 passed, 11 skipped`. Those two numbers
+partition the workspace; if they stop summing to 449, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -106,6 +105,24 @@ the dogfood copy cannot drift away from what the recipes ship:
 |---|---|
 | `templates_compose_ports.rs` | every host-side port publish is `${VAR:-<default>}`, with the default fixed per class: `0` for a port tooling dials on demand, a real number for one a browser dials from a URL it already holds. A container port the classification table has never seen fails deliberately, because publishing a host port is a design call (bd:mech-crate-1a0, with the legacy-template overlap of bd:mech-crate-qpy) |
 | `templates_traefik_labels.rs` | every `traefik.http.{routers,services,middlewares}` name is `${COMPOSE_PROJECT_NAME}`-qualified, definition and reference alike, and every router rule's hostname sits in the default position of a `<SERVICE_UPPER>_ROUTER_HOST` override. `templates/router/` is pinned as the deliberate file-configured singleton exception (bd:mech-crate-298) |
+
+**bd:mech-crate-wd9** (Cloudflare credential resolution) is the second lane row
+retired the intended way, and the first retired by *replacing* its test rather
+than un-ignoring it. The lane test asserted the contract through a heuristic that
+only holds for a makefile which reads a credential name verbatim out of a single
+`-include`d file: "a `*_ACCOUNT_ID` the mk dereferences but never assigns". The
+fix makes `cloudflare.mk` resolve two scopes per credential, so it now *does*
+assign the canonical name after reading each file, and the heuristic would have
+failed against a correct fix. Its subject moved to a suite of its own,
+`crates/mx-lib/tests/templates_cloudflare_credentials.rs`, which holds the same
+contract behaviorally (real `make` against scratch `HOME` and project scopes)
+plus the static name contract across the Rust writer and the shipped templates.
+Lane 12 → 11, gate 427 → 438 (8 in the new suite, 3 unit tests on the
+`mx infra setup cloudflare` writer), workspace total 439 → 449.
+
+| Suite | Holds |
+|---|---|
+| `templates_cloudflare_credentials.rs` | one canonical credential pair (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, the names wrangler reads from the environment) that nothing writes under a second spelling; `cloudflare.mk` reading the global credentials file before the project one so the project wins per scope, deprecated `CF_ACCOUNT_ID` alias included; and an unconfigured machine failing loudly with a message naming `mx infra setup cloudflare` (bd:mech-crate-wd9) |
 
 The two fixes that carry no suite of their own extended existing ones:
 bd:mech-crate-fq3 (rust-worker's unexpanded `{{RUST_VERSION}}`) added an
