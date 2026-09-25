@@ -11,7 +11,9 @@ services:
       ENABLE_DEBUG: "true"
     ports:
       - "${APP_PORT:-3000}:3000"
-      - "9229:9229"  # Node.js debugger
+      # Node.js inspector, ephemeral so two stacks can both be debugged. Find it
+      # with: docker compose -p "$COMPOSE_PROJECT_NAME" port app 9229
+      - "${NODE_DEBUG_HOST_PORT:-0}:9229"
     volumes:
       # Mount app source for hot-reload (from apps/app)
       - ../../apps/app/src:/app/src:cached

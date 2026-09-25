@@ -354,6 +354,13 @@ fn install_leaves_app_source_template_syntax_untouched() {
 /// `{{SERVICE_NAME}}.localhost`. That default is itself a placeholder, so unless
 /// option values are expanded against the placeholder map the generated Traefik
 /// rule ships the literal token and the service is unroutable.
+///
+/// Since bd:mech-crate-298 the rule reads the hostname through the environment
+/// so a second stack can move off a shared hostname, which puts the expanded
+/// domain in the DEFAULT position: ``Host(`${API_ROUTER_HOST:-api.localhost}`)``.
+/// The invariant is unchanged (the option's value reaches the Host rule fully
+/// expanded); the assertion pins the whole shape, including the override, so
+/// neither half can regress.
 #[test]
 fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
     for (recipe, service) in [
@@ -369,9 +376,13 @@ fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
         let text = std::fs::read_to_string(&compose)
             .unwrap_or_else(|e| panic!("setup: {recipe} ships {}: {e}", compose.display()));
 
+        let rule = format!(
+            "Host(`${{{}_ROUTER_HOST:-{service}.localhost}}`)",
+            service.to_uppercase()
+        );
         assert!(
-            text.contains(&format!("Host(`{service}.localhost`)")),
-            "{recipe}: expected Host(`{service}.localhost`) in {}:\n{text}",
+            text.contains(&rule),
+            "{recipe}: expected {rule} in {}:\n{text}",
             compose.display()
         );
         assert!(
@@ -383,7 +394,8 @@ fn omitting_domain_yields_a_real_host_rule_not_a_placeholder() {
 }
 
 /// An explicitly supplied option value gets the same treatment — a caller may
-/// pass `--domain '{{SERVICE_NAME}}.example.com'` and expect it resolved.
+/// pass `--domain '{{SERVICE_NAME}}.example.com'` and expect it resolved, still
+/// in the default position of the `_ROUTER_HOST` override (bd:mech-crate-298).
 #[test]
 fn explicit_domain_option_is_expanded_too() {
     let options = HashMap::from([(
@@ -394,7 +406,7 @@ fn explicit_domain_option_is_expanded_too() {
     let text = std::fs::read_to_string(project.path().join("docker/compose/api.yml"))
         .expect("setup: rust-api ships docker/compose/<svc>.yml");
     assert!(
-        text.contains("Host(`api.example.com`)"),
+        text.contains("Host(`${API_ROUTER_HOST:-api.example.com}`)"),
         "explicit --domain not expanded:\n{text}"
     );
 }
@@ -892,6 +904,200 @@ fn walk_files(dir: &Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+// ── No recipe ships a {{PLACEHOLDER}} nothing substitutes ────────────────────
+
+/// The `{{NAME}}` tokens the installer owns are written in SCREAMING_SNAKE_CASE,
+/// which is exactly what separates them from the foreign `{{ }}` syntax recipe
+/// app sources carry (`{{ page.title }}`, `{{ config.base_url | safe }}`,
+/// `{{SERVICE_NAME.charAt(0)}}`). A brace-wrapped bare identifier in that case is
+/// a promise that `recipe.json` declares the name; anything else is another
+/// renderer's business and must reach the project verbatim.
+///
+/// Mirrors [`expand_placeholders`]'s tag grammar: `{{`, optional `-`, optional
+/// whitespace, identifier, optional whitespace, optional `-`, `}}`.
+fn placeholder_tokens(body: &str) -> Vec<String> {
+    let bytes = body.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 1 < bytes.len() {
+        if bytes[i] != b'{' || bytes[i + 1] != b'{' {
+            i += 1;
+            continue;
+        }
+        let mut j = i + 2;
+        if bytes.get(j) == Some(&b'-') {
+            j += 1;
+        }
+        while bytes.get(j).is_some_and(u8::is_ascii_whitespace) {
+            j += 1;
+        }
+        let name_start = j;
+        while bytes
+            .get(j)
+            .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+        {
+            j += 1;
+        }
+        let name = &body[name_start..j];
+        while bytes.get(j).is_some_and(u8::is_ascii_whitespace) {
+            j += 1;
+        }
+        if bytes.get(j) == Some(&b'-') {
+            j += 1;
+        }
+        let closed = bytes.get(j) == Some(&b'}') && bytes.get(j + 1) == Some(&b'}');
+        let screaming = !name.is_empty()
+            && name.starts_with(|c: char| c.is_ascii_uppercase())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+        if closed && screaming {
+            out.push(name.to_string());
+        }
+        i += 2;
+    }
+    out
+}
+
+/// The placeholder names a recipe's `recipe.json` declares.
+fn declared_placeholders(recipe_name: &str) -> Vec<String> {
+    let rj = recipes_root().join(recipe_name).join("recipe.json");
+    let raw: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&rj)
+            .unwrap_or_else(|e| panic!("setup: read {}: {e}", rj.display())),
+    )
+    .unwrap_or_else(|e| panic!("{}: invalid JSON: {e}", rj.display()));
+    let mut names: Vec<String> = raw["placeholders"]
+        .as_object()
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default();
+    // The installer seeds SERVICE_NAME whether or not the recipe names it.
+    names.push("SERVICE_NAME".to_string());
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// bd:mech-crate-fq3 — rust-worker's Dockerfiles said `FROM rust:{{RUST_VERSION}}`
+/// while its `recipe.json` declared no such placeholder, so the token shipped
+/// through to the project and `docker build` died on
+/// `failed to parse stage name "rust:{{RUST_VERSION}}-alpine": invalid reference
+/// format`. The recipe's build path had never been exercised.
+///
+/// The net for the whole class, in two halves: statically, every SCREAMING_SNAKE
+/// token a recipe ships must be declared by that recipe (and one under `common/`
+/// by every recipe, since any of them may map it); behaviorally, a default
+/// install must leave none of them behind in the generated project.
+#[test]
+fn no_shipped_recipe_leaves_a_placeholder_token_unsubstituted() {
+    let names = shipped_recipe_names();
+    assert!(
+        names.len() >= 7,
+        "expected >=7 recipes, found {}",
+        names.len()
+    );
+
+    // Static half: the token is declared where it is written.
+    let mut offenders: Vec<String> = Vec::new();
+    let mut seen = 0usize;
+    for name in &names {
+        let declared = declared_placeholders(name);
+        let dir = recipes_root().join(name);
+        let mut files = walk_files(&dir);
+        files.sort();
+        for file in files {
+            let Ok(body) = std::fs::read_to_string(&file) else {
+                continue; // binary payload: the installer copies it verbatim
+            };
+            let rel = file.strip_prefix(&dir).unwrap().display().to_string();
+            let mut missing: Vec<String> = placeholder_tokens(&body)
+                .into_iter()
+                .inspect(|_| seen += 1)
+                .filter(|t| !declared.contains(t))
+                .collect();
+            missing.sort();
+            missing.dedup();
+            for token in missing {
+                offenders.push(format!(
+                    "  {name}/{rel}: {{{{{token}}}}} is not declared in \
+                     {name}/recipe.json placeholders"
+                ));
+            }
+        }
+    }
+
+    // `common/` has no recipe.json of its own; whichever recipe maps one of its
+    // files supplies the values, so every recipe has to declare the name.
+    let common = recipes_root().join("common");
+    let mut common_files = walk_files(&common);
+    common_files.sort();
+    for file in common_files {
+        let Ok(body) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let rel = file.strip_prefix(&common).unwrap().display().to_string();
+        let mut tokens = placeholder_tokens(&body);
+        tokens.sort();
+        tokens.dedup();
+        for token in tokens {
+            seen += 1;
+            let undeclared: Vec<&String> = names
+                .iter()
+                .filter(|n| !declared_placeholders(n).contains(&token))
+                .collect();
+            if !undeclared.is_empty() {
+                offenders.push(format!(
+                    "  common/{rel}: {{{{{token}}}}} is undeclared by {}",
+                    undeclared
+                        .iter()
+                        .map(|n| n.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        }
+    }
+
+    assert!(
+        seen > 0,
+        "setup: expected the recipes to still use {{{{PLACEHOLDER}}}} tokens"
+    );
+    assert!(
+        offenders.is_empty(),
+        "these shipped recipe files carry a {{{{PLACEHOLDER}}}} token that nothing \
+         substitutes, so it reaches the generated project literally:\n{}",
+        offenders.join("\n")
+    );
+
+    // Behavioral half: a default install leaves no token behind.
+    let mut leftovers: Vec<String> = Vec::new();
+    for name in &names {
+        let (project, _) = install_into_tempdir(name, "api", &HashMap::new());
+        let root = project.path();
+        let mut files = walk_files(root);
+        files.sort();
+        for file in files {
+            let Ok(body) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            let mut tokens = placeholder_tokens(&body);
+            tokens.sort();
+            tokens.dedup();
+            for token in tokens {
+                leftovers.push(format!(
+                    "  {name}: {} still has {{{{{token}}}}} after install",
+                    file.strip_prefix(root).unwrap().display()
+                ));
+            }
+        }
+    }
+    assert!(
+        leftovers.is_empty(),
+        "a default `mx add` left placeholder tokens in the generated project:\n{}",
+        leftovers.join("\n")
+    );
 }
 
 // ── Known-broken lane (bd:mech-crate-ten) ────────────────────────────────────

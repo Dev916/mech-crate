@@ -23,7 +23,10 @@ RUN npm install
 # Copy app source (will be overridden by volume in dev)
 COPY apps/{{SERVICE_NAME}}/ .
 
-EXPOSE 3000 24678
+# 3000 only. Nuxt 4 serves the Vite HMR websocket through Nitro on this same
+# port, so the 24678 this used to also declare was never bound by anything inside
+# the container (bd:mech-crate-1a0).
+EXPOSE 3000
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 

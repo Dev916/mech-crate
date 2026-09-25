@@ -10,10 +10,17 @@ services:
   {{SERVICE_NAME}}:
     build:
       target: development
+    # No DATABASE_URL here on purpose (bd:mech-crate-q1w). The dev override used
+    # to carry one with `:-{{SERVICE_SLUG}}` / `:-secret` fallbacks, which is
+    # what kept the defect hidden: the fallbacks always won (compose cannot read
+    # `${DB_*}` out of an `env_file` layer), so `make dev` looked fine while
+    # every non-dev path rendered the URL empty. The fallbacks also stopped
+    # matching anything real once generate-secrets.sh made credentials
+    # per-project. `.env.{{SERVICE_NAME}}` carries the resolved literal for both
+    # paths.
     environment:
       - NODE_ENV=development
       - PORT=4321
-      - DATABASE_URL=postgres://${DB_USER:-{{SERVICE_SLUG}}}:${DB_PASSWORD:-secret}@db:5432/${DB_NAME:-{{SERVICE_SLUG}}}
       - REDIS_URL=redis://redis:6379
       - APP_URL=http://{{DOMAIN}}
     # Mount source code for hot reload
@@ -21,8 +28,13 @@ services:
       - ../../apps/{{SERVICE_NAME}}:/app
       - /app/node_modules
       - /app/.astro
-    ports:
-      - "24678:24678"  # Vite HMR
+    # No ports here on purpose (bd:mech-crate-1a0). This used to publish
+    # 24678:24678 for "Vite HMR", but `astro dev` serves the HMR websocket on the
+    # app's own port, same-origin, which the browser already reaches through the
+    # router: nothing inside the container ever listened on 24678 (verified with
+    # /proc/net/tcp on a live dev container). The publish was pure squatting, and
+    # it cost a real one: a nuxt stack on the same machine died on
+    # `Bind for 0.0.0.0:24678 failed: port is already allocated`.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4321/api/health"]
       interval: 30s
@@ -35,11 +47,13 @@ services:
   # ------------------------------------------
   db:
     ports:
-      - "5432:5432"
+      # Ephemeral: see docker/compose/db.dev.yml for the discovery command.
+      - "${DB_HOST_PORT:-0}:5432"
 
   # ------------------------------------------
   # Redis Cache (Development)
   # ------------------------------------------
   redis:
     ports:
-      - "6379:6379"
+      # Ephemeral: see docker/compose/redis.dev.yml for the discovery command.
+      - "${REDIS_HOST_PORT:-0}:6379"

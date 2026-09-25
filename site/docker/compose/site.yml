@@ -20,9 +20,16 @@ services:
       dockerfile: ../../docker/dockerfiles/site/app
       target: runner
     restart: unless-stopped
+    # Documented layering, last one winning: shared → secrets → service
+    # (bd:mech-crate-lwe). This listed secrets first, which inverts it — a
+    # project-wide default in `.env.shared` then beat the secret written to
+    # override it. The site has no datastore so nothing broke yet, but it is the
+    # dogfood copy of the astro recipe's compose file and drifted from it; the
+    # env-precedence sweep now walks `site/docker/compose/` too, so it cannot
+    # drift again (bd:mech-crate-q1w).
     env_file:
-      - ../.config/.env.secrets
       - ../.config/.env.shared
+      - ../.config/.env.secrets
       - ../.config/.env.site
     environment:
       - NODE_ENV=production
@@ -38,10 +45,16 @@ services:
       retries: 3
       start_period: 10s
     labels:
+      # `site` is the most collidable router name on the machine, and Traefik's
+      # tables are machine-wide, so it carries the compose project
+      # (bd:mech-crate-298); the compose CLI supplies COMPOSE_PROJECT_NAME from
+      # the project name it resolved. The hostname keeps its default; a second
+      # copy of this stack moves with
+      # `SITE_ROUTER_HOST=other.localhost make dev`.
       - traefik.enable=true
-      - traefik.http.routers.site.rule=Host(`mechcrate.localhost`)
-      - traefik.http.routers.site.entrypoints=web
-      - traefik.http.services.site.loadbalancer.server.port=4321
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-site.rule=Host(`${SITE_ROUTER_HOST:-mechcrate.localhost}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-site.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-site.loadbalancer.server.port=4321
       - traefik.docker.network=devmesh-traefik
 
 networks:

@@ -198,11 +198,23 @@ mx build {{SERVICE_NAME}} --prod -t v1.0.0 --push
 
 The primary Laravel Octane application.
 
-| Port | Purpose |
-|------|---------|
-| 8000 | HTTP (Swoole) |
-| 5173 | Vite dev server (dev only) |
-| 13714 | Inertia SSR |
+All three are **container** ports. Nothing is published to the host at a fixed
+number.
+
+| Container port | Purpose | Reached how |
+|------|---------|-------------|
+| 8000 | HTTP (Swoole) | `http://{{DOMAIN}}` through the mx router |
+| 5173 | Vite dev server (dev only) | Same origin: the recipe's nginx proxies `/build/` and `/__vite_hmr` to `127.0.0.1:5173`. Set `VITE_HOST_PORT` to publish it |
+| 13714 | Inertia SSR | In-container only; PHP reaches it at `127.0.0.1`. Set `INERTIA_SSR_HOST_PORT` to publish it |
+
+`VITE_HOST_PORT` and `INERTIA_SSR_HOST_PORT` default to `0`, so the dev override
+publishes each on a host port Docker allocates rather than a pinned one, and a
+second Laravel stack starts without a collision. Read the allocated number when
+you want it:
+
+```bash
+docker compose -p "$COMPOSE_PROJECT_NAME" port {{SERVICE_NAME}} 5173
+```
 
 ### Queue Worker ({{SERVICE_NAME}}-worker)
 
@@ -270,8 +282,22 @@ The service is automatically configured for Traefik reverse proxy:
 ```yaml
 labels:
   - "traefik.enable=true"
-  - "traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)"
-  - "traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=8000"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)"
+  - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web"
+  - "traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=8000"
+  - "traefik.docker.network=devmesh-traefik"
+```
+
+Traefik keeps one router table per machine, so the names carry the compose
+project: two projects that both scaffold a `{{SERVICE_NAME}}` service get two
+entries instead of overwriting one. Compose resolves `COMPOSE_PROJECT_NAME`
+itself, so nothing needs exporting.
+
+The hostname default is unchanged. A second stack that wants its own claims it
+without editing a shipped file:
+
+```bash
+{{SERVICE_UPPER}}_ROUTER_HOST={{SERVICE_NAME}}-two.localhost make dev
 ```
 
 ## Common Operations

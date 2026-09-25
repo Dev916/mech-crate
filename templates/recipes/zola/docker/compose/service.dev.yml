@@ -23,18 +23,24 @@ services:
       # Exclude public directory (generated output)
       - /site/public
     ports:
-      # Live reload WebSocket
-      - "1024:1024"
+      # Live reload WebSocket. `zola serve` has no flag for this port, so the
+      # container side stays 1024 and only the host side moves: a second stack
+      # that sets ZOLA_LIVERELOAD_PORT boots with live reload degraded rather
+      # than not booting at all.
+      - "${ZOLA_LIVERELOAD_PORT:-1024}:1024"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:{{PORT}}"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    # Override labels for development (Zola serves on different port)
+    # Override labels for development (Zola serves on a different port). Compose
+    # merges `labels:` by KEY, so these names must match service.yml's exactly,
+    # project prefix included: a name that drifted would ADD a second router
+    # rather than override the first.
     labels:
       - traefik.enable=true
-      - traefik.http.routers.{{SERVICE_SLUG}}.rule=Host(`{{DOMAIN}}`)
-      - traefik.http.routers.{{SERVICE_SLUG}}.entrypoints=web
-      - traefik.http.services.{{SERVICE_SLUG}}.loadbalancer.server.port={{PORT}}
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_SLUG}}.loadbalancer.server.port={{PORT}}
       - traefik.docker.network=devmesh-traefik

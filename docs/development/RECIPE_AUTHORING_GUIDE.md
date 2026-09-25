@@ -949,10 +949,11 @@ MechCrate uses a two-network pattern for services:
 
 ### Production (`service.yml`)
 
-Three rules the conformance suite enforces on every compose file a recipe ships,
-because `docker compose config` is blind to all three. The first two live in
+Five rules the conformance suite enforces on every compose file a recipe ships,
+because `docker compose config` is blind to all five. The first two live in
 `crates/mx-lib/tests/templates_compose_hygiene.rs`, the third in
-`crates/mx-lib/tests/templates_env_precedence.rs`:
+`crates/mx-lib/tests/templates_env_precedence.rs`, the fourth in
+`templates_compose_ports.rs` and the fifth in `templates_traefik_labels.rs`:
 
 - **Never set `container_name`.** Container names are a Docker-daemon-wide
   namespace, so two projects whose recipes both pin `db` cannot run at the same
@@ -970,6 +971,33 @@ because `docker compose config` is blind to all three. The first two live in
   whichever key is defined twice. A service that reads `.env.shared` must also
   read `.env.secrets`; a db-bearing recipe that omits it ships a service whose
   credentials never arrive.
+- **Never publish a bare host port.** A literal `"5432:5432"` is a claim on the
+  whole workstation, and the second mx stack to boot dies on `Bind for
+  0.0.0.0:5432 failed: port is already allocated`. Every host-side publish is
+  `${VAR:-<default>}`, and the default depends on who dials the port. Tooling
+  dials on demand, so those default to `0` and Docker allocates a free one:
+  `"${DB_HOST_PORT:-0}:5432"`. A browser dials from a URL the page already holds,
+  so those keep today's number and gain an override:
+  `"${LEPTOS_RELOAD_HOST_PORT:-3001}:3001"`. The test knows the classification per
+  container port and fails deliberately on one it has never seen, because
+  publishing a host port is a design call rather than a formality. If nothing is
+  listening behind a publish, delete it: three recipes published 24678 for "Vite
+  HMR" that no process ever bound, and holding it stopped sibling stacks booting.
+- **Qualify every Traefik name with the compose project.** Traefik keeps one
+  router table, one service table and one middleware table per provider for the
+  whole machine, so `traefik.http.routers.api.*` is a key every mx project on the
+  workstation shares. Two projects writing it either lose both routers to `Router
+  defined multiple times with different configurations` or, when the labels agree,
+  merge silently into one load-balancer pool that serves each other's traffic.
+  Write `traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.*`, and the
+  same for `.services.` and `.middlewares.`, definition and reference alike.
+  Compose resolves `COMPOSE_PROJECT_NAME` from the project name it already
+  resolved, so it needs nothing exported. The routing rule's hostname reads
+  through the environment in the default position,
+  ``Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)``, so a second stack
+  moves itself with an exported variable instead of an edit to a shipped file.
+  `templates/router/` is the deliberate exception: it configures Traefik by file,
+  and one machine has one router.
 
 ```yaml
 # {{SERVICE_NAME}} - Production Stack
@@ -1007,9 +1035,9 @@ services:
         condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)
-      - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web
-      - traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=80
       - traefik.docker.network=devmesh-traefik
     restart: unless-stopped
     healthcheck:
@@ -1062,8 +1090,11 @@ services:
       - APP_ENV=local
       - APP_DEBUG=true
     ports:
-      - "5173:5173"   # Vite HMR
-      - "13714:13714" # Laravel Herd
+      # Both ephemeral by default: nginx proxies /build/ and /__vite_hmr to
+      # 127.0.0.1:5173 inside the container, and PHP reaches SSR at 127.0.0.1,
+      # so neither needs a host number until you ask for one.
+      - "${VITE_HOST_PORT:-0}:5173"
+      - "${INERTIA_SSR_HOST_PORT:-0}:13714"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/up"]
       interval: 30s
@@ -1157,19 +1188,38 @@ Every edge-facing service needs these Traefik labels:
 ```yaml
 labels:
   - traefik.enable=true
-  - traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)
-  - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web
-  - traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=80
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web
+  - traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=80
   - traefik.docker.network=devmesh-traefik
 ```
 
 | Label | Purpose |
 |-------|---------|
 | `traefik.enable=true` | Enable Traefik routing for this container |
-| `traefik.http.routers.<name>.rule` | Hostname routing rule |
-| `traefik.http.routers.<name>.entrypoints` | Which ports to listen on (`web`=80, `websecure`=443) |
-| `traefik.http.services.<name>.loadbalancer.server.port` | Container's internal port |
+| `traefik.http.routers.${COMPOSE_PROJECT_NAME}-<name>.rule` | Hostname routing rule |
+| `traefik.http.routers.${COMPOSE_PROJECT_NAME}-<name>.entrypoints` | Which ports to listen on (`web`=80, `websecure`=443) |
+| `traefik.http.services.${COMPOSE_PROJECT_NAME}-<name>.loadbalancer.server.port` | Container's internal port |
 | `traefik.docker.network` | **Required** - tells Traefik which network to use |
+
+Two things in that block are not cosmetic:
+
+- **`${COMPOSE_PROJECT_NAME}-` prefixes the router, service and middleware
+  names.** One Traefik instance serves the whole workstation from one table of
+  each, so a bare name is shared with every other mx project. Compose resolves
+  the variable from the project name it already resolved, so nothing has to be
+  exported and it holds under a hand-rolled `docker compose -f …` too. A router
+  in the dashboard reads `myproj-{{SERVICE_NAME}}@docker`.
+- **The Host rule reads through `{{SERVICE_UPPER}}_ROUTER_HOST` with the domain in
+  the default position.** Unique names stop two projects clobbering each other's
+  router entries, but they do not stop two projects claiming one hostname:
+  Traefik accepts both and serves one. The default keeps every existing URL
+  working, and a second stack moves itself with
+  `{{SERVICE_UPPER}}_ROUTER_HOST=other.localhost make dev`. The variable is
+  `_ROUTER_HOST` rather than `_HOST` because `DB_HOST`, `REDIS_HOST` and
+  `API_HOST` are conventional service-address variables a developer may already
+  export, and quietly repointing a router at a database host is not a failure
+  anyone would debug.
 
 ### Network Configuration
 
@@ -1208,8 +1258,8 @@ For HTTPS, add certificates to `~/.devmesh-traefik/letsencrypt/` and update the 
 
 ```yaml
 labels:
-  - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=websecure
-  - traefik.http.routers.{{SERVICE_NAME}}.tls=true
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=websecure
+  - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.tls=true
 ```
 
 ### Router Commands

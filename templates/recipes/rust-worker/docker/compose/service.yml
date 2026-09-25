@@ -27,9 +27,17 @@ services:
       - ../.config/.env.shared
       - ../.config/.env.secrets
       - ../.config/.env.{{SERVICE_NAME}}
+    # No DATABASE_URL here on purpose (bd:mech-crate-q1w). It said
+    # `postgres://{{SERVICE_SLUG}}:${DB_PASSWORD:-secret}@db:5432/{{SERVICE_SLUG}}`,
+    # which was wrong three ways: the compose CLI cannot read `${DB_PASSWORD}`
+    # out of an `env_file` layer (it interpolates only from the compose project
+    # directory's `.env`, which no mx scaffold has), so `:-secret` always won and
+    # authenticated against nothing; the role and database are the generated
+    # `DB_USER`/`DB_NAME`, not the service slug; and an `environment:` block
+    # outranks every `env_file` layer, so this line overwrote the literal
+    # generate-secrets.sh had resolved into `.env.{{SERVICE_NAME}}`.
     environment:
       - RUST_LOG=info,{{SERVICE_SLUG}}=info
-      - DATABASE_URL=postgres://{{SERVICE_SLUG}}:${DB_PASSWORD:-secret}@db:5432/{{SERVICE_SLUG}}
       - REDIS_URL=redis://redis:6379
       - WORKER_THREADS={{WORKERS}}
       - BATCH_SIZE={{BATCH_SIZE}}

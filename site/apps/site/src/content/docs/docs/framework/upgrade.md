@@ -1,6 +1,6 @@
 ---
 title: Upgrade
-description: How mx upgrade keeps a project current with the templates, what it will never overwrite, and the two migrations you can feel (the compose project name, and container names).
+description: How mx upgrade keeps a project current with the templates, what it will never overwrite, and the four migrations you can feel (the compose project name, container names, host ports, and Traefik label names).
 sidebar:
   order: 6
 ---
@@ -196,19 +196,100 @@ One exception: the global router container is still `mx-router`. It is installed
 once per machine rather than per project, so it has nothing to collide with, and
 `mx router` addresses it by that name.
 
-:::note[What this does and does not unblock]
-Two projects of the same shape no longer collide on container names. That is the
-whole of the claim. Running two same-shape stacks fully concurrently is still
-blocked by two separate issues: dev overrides publish fixed host ports for
-Postgres and Redis, so the second stack's `5432` is taken, and the Traefik router
-names in the labels are not qualified by project, so two projects shipping the
-same service name register the same router. Both are tracked
-(`mech-crate-1a0`, `mech-crate-298`) and neither is fixed yet.
+:::note[What this unblocks]
+Container names were the first of three things standing between two same-shape
+stacks and running side by side. The other two landed with the migrations below:
+host ports stopped being pinned, and Traefik label names started carrying the
+compose project. Two copies of the same recipe now `make dev` concurrently with no
+hand edits.
 
-Different projects with *different* service names and domains do coexist, which
-is the ordinary case and what the [router](/docs/framework/router/) is for. It is
-specifically two copies of the same shape that hit these limits.
+One thing is still yours to do, and it is the hostname. Both stacks run, but
+Traefik serves a given host to exactly one of them, so the second stack exports
+`<SERVICE_UPPER>_ROUTER_HOST` to claim its own. See
+[the router](/docs/framework/router/#two-ecosystems-at-once).
 :::
+
+## Migrating: host ports
+
+Every dev override used to publish a fixed host port, which is why a second stack
+died on `Bind for 0.0.0.0:5432 failed: port is already allocated` with nothing in
+the project to edit short of hand-patching a shipped template. The repair asked
+one question per port: who dials it?
+
+Ports that **tooling** dials on demand now publish on host port `0`, which Docker
+allocates from the free range, so they can never collide:
+
+| Container port | Was | Pin it with |
+|---|---|---|
+| Postgres 5432 | `5432:5432` | `DB_HOST_PORT` |
+| Redis 6379 | `6379:6379` | `REDIS_HOST_PORT` |
+| Node inspector 9229 | `9229:9229` | `NODE_DEBUG_HOST_PORT` |
+| Worker metrics 9090 | `9090:9090` | `METRICS_HOST_PORT` |
+| Vite 5173 (laravel) | `5173:5173` | `VITE_HOST_PORT` |
+| Inertia SSR 13714 | `13714:13714` | `INERTIA_SSR_HOST_PORT` |
+
+Discover the allocated one instead of guessing:
+
+```bash
+docker compose -p "$COMPOSE_PROJECT_NAME" port db 5432
+```
+
+Or pin one for a session, leaving its siblings ephemeral:
+
+```bash
+DB_HOST_PORT=5432 make dev
+```
+
+Ports a **browser** dials from a URL it already holds keep today's number as a
+default and gain an override, so an overriding second stack moves instead of
+failing to boot: `LEPTOS_RELOAD_HOST_PORT` (3001), `ZOLA_LIVERELOAD_PORT` (1024),
+`NGINX_HTTP_PORT` / `NGINX_HTTPS_PORT`, `TRAEFIK_HTTP_PORT` /
+`TRAEFIK_HTTPS_PORT` / `TRAEFIK_DASHBOARD_PORT`, and the global router's own
+`MX_ROUTER_HTTP_PORT` / `MX_ROUTER_HTTPS_PORT`.
+
+:::caution[24678 is gone, not parameterized]
+The astro and nuxt dev overrides published `24678:24678` labelled "Vite HMR", and
+so did this repo's own site. Nothing was listening on it: a live astro dev
+container has 4321 open and nothing else, nuxt has 3000 and nothing else. Both
+frameworks carry HMR over the app's own port, and the router upgrades that
+websocket same-origin. Docker binds a published host port whether or not anything
+answers behind it, so the publish cost a real port for nothing: an astro stack
+holding 24678 killed a nuxt stack's boot outright. The three publishes are gone,
+along with the `EXPOSE 24678` in each dev Dockerfile that made them look
+justified. HMR still works, through the router, at the app's own hostname.
+:::
+
+What breaks is a script or GUI connection profile pointed at `localhost:5432`,
+`localhost:6379`, `localhost:9229`, `localhost:9090`, `localhost:5173`,
+`localhost:13714` or `localhost:24678` of an mx dev stack. Discover the port or
+pin it.
+
+## Migrating: Traefik label names
+
+`traefik.http.routers.<service>.*` is now
+`traefik.http.routers.${COMPOSE_PROJECT_NAME}-<service>.*`, and the same for
+`.services.` and `.middlewares.`.
+
+Traefik keeps one router table, one service table and one middleware table per
+provider for the whole machine, so the old unqualified names meant two projects
+that each scaffolded an `api` service wrote the same key. Mismatched labels made
+Traefik drop the router outright and 404 both hostnames; matching labels were
+quieter and worse, merging both containers into one load-balancer pool so
+consecutive requests alternated between two projects' apps with nothing logged.
+
+Compose resolves `COMPOSE_PROJECT_NAME` from the project name it already
+resolved, so nothing has to be exported and the qualification holds under a
+hand-rolled `docker compose -f …`. **Hostnames are unchanged**, and the routing
+rule gained a per-service override in the default position:
+
+```yaml
+- traefik.http.routers.${COMPOSE_PROJECT_NAME}-api.rule=Host(`${API_ROUTER_HOST:-api.localhost}`)
+```
+
+What breaks is a script or dashboard bookmark that addressed a router or service
+entry by its bare service name. `api@docker` is now `myproj-api@docker`. The
+global `mx-router` container is unaffected: it configures Traefik by file rather
+than by label, and one machine has one router.
 
 ## Recipes are upgraded separately
 

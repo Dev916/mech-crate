@@ -71,15 +71,21 @@ Two house rules keep the lane honest:
 - Lane tests live beside the suite that owns their subject, not in one central
   file. The test is the first thing whoever fixes it should read.
 
-The two numbers partition the workspace: the lane reports 13 tests, 13 red; the
-gate suite in the same tree reports 252 passed, 13 skipped. If they stop summing,
-either a lane test lost its `#[ignore]` or a gate test grew one.
+The two numbers partition the workspace: the lane reports 12 tests, 12 red; the
+gate suite in the same tree reports 427 passed, 12 skipped. If they stop summing
+to 439, either a lane test lost its `#[ignore]` or a gate test grew one.
 
 `mech-crate-z5i`, the `mx upgrade` discovery defect, is the first row retired the
 intended way. Its test lost the `#[ignore]`, joined the gate, and its row left the
 index, taking the lane from 14 to 13. That is what the workflow above looks like
 when it completes, and the [Upgrade](/docs/framework/upgrade/) page now documents
 a command that works instead of one that does not.
+
+`mech-crate-gjl`, the `mx self-update` source-root defect, is the second, and it
+shows the failure mode the two numbers exist to catch: the fix landed, the test
+joined the gate, the row left the index, and the *counts* stayed where they were
+for two releases. The lane has been 12 since then. They are corrected, and the
+correction is written down in the index rather than applied silently.
 
 Several pages in these docs still point at this lane, because pointing at it is
 the alternative to quietly writing around a defect: `mech-crate-vxq`,

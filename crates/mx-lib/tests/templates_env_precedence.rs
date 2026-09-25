@@ -1,32 +1,67 @@
-//! Conformance sweep for the documented env layering order (bd:mech-crate-lwe).
+//! Conformance sweep for env layering and credential delivery
+//! (bd:mech-crate-lwe + bd:mech-crate-q1w).
 //!
-//! The contract, from `docs/development/mx-app-playbook.md`: container env is
-//! layered `.env.shared` → `.env.secrets` → `.env.<service>`, and Compose applies
-//! an `env_file:` list in order with **last one winning**. So the list order *is*
-//! the precedence: a file that lists `.env.secrets` before `.env.shared` silently
-//! inverts it and a project-wide default beats the secret meant to override it.
+//! Two halves of one contract, because both failures have the same root: what
+//! Compose reads from an `env_file` layer and what the Compose **CLI** can see
+//! are different things.
 //!
-//! Eight recipe fragments shipped that inversion and the zola recipe omitted the
-//! secrets layer outright. This sweep is the regression net for the whole class,
-//! not those nine files: it walks **every** compose file under `templates/`
-//! (recipes included, dev overrides included) and asserts
+//! **Layering order.** From `docs/development/mx-app-playbook.md`: container env
+//! is layered `.env.shared` → `.env.secrets` → `.env.<service>`, and Compose
+//! applies an `env_file:` list in order with **last one winning**. So the list
+//! order *is* the precedence: a file that lists `.env.secrets` before
+//! `.env.shared` silently inverts it and a project-wide default beats the secret
+//! meant to override it.
+//!
+//! **Credential delivery.** The Compose CLI interpolates `${VAR}` from the
+//! compose PROJECT DIRECTORY's `.env` only — never from an `env_file` layer,
+//! which it hands to the daemon unread. No mx scaffold has a project-dir `.env`,
+//! so `${DB_PASSWORD}` in a compose file renders EMPTY with a
+//! `variable is not set` warning. Worse, an `environment:` block OUTRANKS every
+//! `env_file` layer, so such a reference does not merely fail to resolve: it
+//! overwrites the literal `scripts/generate-secrets.sh` already wrote into
+//! `.env.<service>`. The rust-api recipe is the model — credentials and
+//! everything derived from them (`DATABASE_URL`) live in the env files, where the
+//! generator resolves `${…}` into literals, and `environment:` carries only
+//! literal, non-credential app settings.
+//!
+//! This sweep is the regression net for both classes. It walks **every** compose
+//! file under `templates/` (recipes included, dev overrides included) *and* under
+//! the repo's own `site/docker/compose/`, which ships the same shape and is
+//! otherwise outside every templates-only net, and asserts
 //!
 //!   1. every `env_file:` list is in the documented relative order,
 //!   2. any list carrying the shared layer also carries the secrets layer,
-//!   3. db-bearing recipes reach their services with the secrets layer, and
-//!   4. the walker actually sees every `env_file:` key shipped in `templates/`
-//!      (so a parser that silently skips a file can't make 1-3 vacuous).
+//!   3. db-bearing recipes reach their services with the secrets layer,
+//!   4. the walker actually sees every `env_file:` key shipped in the swept roots
+//!      (so a parser that silently skips a file can't make 1-3 vacuous),
+//!   5. no `environment:` value interpolates a variable that lives in an env file,
+//!      and
+//!   6. no shipped env config file hardcodes a database password, which is how
+//!      `:secret@` outlived the credentials it was standing in for.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 const SHARED: &str = ".env.shared";
 const SECRETS: &str = ".env.secrets";
 
-fn templates_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../templates")
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Every `*.yml` / `*.yaml` under `templates/`, recursively, sorted.
+fn templates_root() -> PathBuf {
+    repo_root().join("templates")
+}
+
+/// Directories this sweep walks: the shipped templates, plus the repo's own site
+/// infra. The site's compose files were scaffolded from the astro recipe and drift
+/// with it, so a net that stops at `templates/` lets the dogfood copy rot — which
+/// is exactly what happened (bd:mech-crate-q1w).
+fn swept_roots() -> Vec<PathBuf> {
+    vec![templates_root(), repo_root().join("site/docker/compose")]
+}
+
+/// Every `*.yml` / `*.yaml` under the swept roots, recursively, sorted.
 fn yaml_files() -> Vec<PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let entries = std::fs::read_dir(dir)
@@ -43,17 +78,24 @@ fn yaml_files() -> Vec<PathBuf> {
     }
 
     let mut out = Vec::new();
-    walk(&templates_root(), &mut out);
+    for root in swept_roots() {
+        assert!(
+            root.is_dir(),
+            "setup: swept root {} does not exist",
+            root.display()
+        );
+        walk(&root, &mut out);
+    }
     out.sort();
     assert!(
         out.len() >= 30,
-        "setup: expected the shipped templates to carry dozens of YAML files, saw {}",
+        "setup: expected the swept roots to carry dozens of YAML files, saw {}",
         out.len()
     );
     out
 }
 
-/// Compose files: a YAML doc under `templates/` with a top-level `services`
+/// Compose files: a YAML doc in a swept root with a top-level `services`
 /// mapping. Excludes the router's static Traefik config and the recipes' app
 /// CI workflows, which are YAML but not Compose.
 fn compose_files() -> Vec<PathBuf> {
@@ -159,8 +201,14 @@ fn layer_rank(entry: &str) -> u8 {
 }
 
 fn rel(path: &Path) -> String {
-    path.strip_prefix(templates_root())
-        .unwrap_or(path)
+    // Both roots are spelled relative to the crate manifest, so strip the repo
+    // root rather than `templates/` — otherwise a site path prints as `../../…`.
+    let repo = repo_root();
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let base = repo.canonicalize().unwrap_or(repo);
+    canonical
+        .strip_prefix(&base)
+        .unwrap_or(&canonical)
         .to_string_lossy()
         .to_string()
 }
@@ -311,12 +359,12 @@ fn db_bearing_recipes_layer_the_secrets_file() {
 }
 
 /// Coverage guard: the ordering assertions above are only as good as the walker
-/// feeding them. Every `env_file:` key shipped in a `templates/` YAML file must
-/// be one the sweep actually read — otherwise a file Compose honors (a new
-/// recipe, a dev override, a file whose placeholders break the parse) could
-/// invert precedence and every test above would still pass.
+/// feeding them. Every `env_file:` key shipped in a swept YAML file must be one
+/// the sweep actually read — otherwise a file Compose honors (a new recipe, a dev
+/// override, a file whose placeholders break the parse) could invert precedence
+/// and every test above would still pass.
 #[test]
-fn the_sweep_reads_every_env_file_key_shipped_in_templates() {
+fn the_sweep_reads_every_env_file_key_shipped_in_the_swept_roots() {
     let mut unread: Vec<String> = Vec::new();
     let mut total_keys = 0;
 
@@ -348,5 +396,287 @@ fn the_sweep_reads_every_env_file_key_shipped_in_templates() {
         unread.is_empty(),
         "the env precedence sweep does not read every shipped env_file list:\n{}",
         unread.join("\n")
+    );
+}
+
+// ── Credential delivery (bd:mech-crate-q1w) ─────────────────────────────────
+
+/// Every shipped env config file: the `env.*` sources inside a `config/`
+/// directory, which are the ones the installer lays down as
+/// `docker/.config/.env.*`. `env.secrets.template` counts — it is the seed
+/// `scripts/init.sh` copies to `.env.secrets`. An app-level `.env` template
+/// (`recipes/laravel/app/env.template`) does not: it lands in `apps/<name>/` and
+/// is the framework's own config, not a compose `env_file` layer.
+fn env_config_files() -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.parent().and_then(Path::file_name) == Some("config".as_ref())
+                && path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("env."))
+            {
+                out.push(path);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(&templates_root(), &mut out);
+    out.sort();
+    assert!(
+        out.len() >= 10,
+        "setup: expected the shipped templates to carry many env config files, saw {}",
+        out.len()
+    );
+    out
+}
+
+/// True when a value is the generator's *input* rather than a credential: empty,
+/// or still one of the placeholder conventions `scripts/.bashrc` recognizes. Pass
+/// 1 of `generate-secrets.sh` fills these in; they are correct as shipped.
+fn is_generator_input(value: &str) -> bool {
+    value.is_empty()
+        || value.starts_with("__GENERATE_")
+        || value.starts_with("CHANGE_ME")
+        || value == "changeme"
+}
+
+/// `KEY=VALUE` pairs of one env config file, comments and blanks skipped.
+fn env_config_pairs(path: &Path) -> Vec<(String, String)> {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("setup: read {}: {e}", path.display()))
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+        .collect()
+}
+
+/// Every variable name any shipped env config file defines. These are exactly the
+/// names that reach a container through an `env_file` layer — and therefore
+/// exactly the names the Compose CLI cannot interpolate.
+fn env_file_variable_names() -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for file in env_config_files() {
+        for (key, _) in env_config_pairs(&file) {
+            // Recipe sources carry `{{SERVICE_UPPER}}_DB_PASSWORD`; the
+            // neutralized stem is still the shape a compose file would reference.
+            names.insert(neutralize_placeholders(&key));
+        }
+    }
+    names
+}
+
+/// The `${NAME}` / `$NAME` references in one value, in order. `$$` is Compose's
+/// escape for a literal `$` (deferring expansion to the container), so a `$$VAR`
+/// is not a CLI interpolation and is skipped.
+fn interpolated_names(value: &str) -> Vec<String> {
+    let bytes: Vec<char> = value.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != '$' {
+            i += 1;
+            continue;
+        }
+        if bytes.get(i + 1) == Some(&'$') {
+            i += 2; // escaped literal `$`, resolved in the container
+            continue;
+        }
+        if bytes.get(i + 1) == Some(&'{') {
+            let Some(close) = bytes[i + 2..].iter().position(|c| *c == '}') else {
+                break;
+            };
+            let inner: String = bytes[i + 2..i + 2 + close].iter().collect();
+            // Strip `:-default` / `-default` / `:?err` modifiers.
+            let name = inner
+                .split([':', '-', '?', '+'])
+                .next()
+                .unwrap_or(&inner)
+                .to_string();
+            if !name.is_empty() {
+                out.push(name);
+            }
+            i += 2 + close + 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == '_') {
+            j += 1;
+        }
+        if j > i + 1 {
+            out.push(bytes[i + 1..j].iter().collect());
+        }
+        i = j.max(i + 1);
+    }
+    out
+}
+
+/// Every `environment:` entry of one compose file, as
+/// `(service, key, value)`. Handles both Compose shapes: a mapping
+/// (`KEY: value`) and a list (`- KEY=value`). A list entry with no `=` inherits
+/// from the host environment and carries no value to check.
+fn environment_entries(compose: &Path) -> Vec<(String, String, String)> {
+    let Some(doc) = parse_compose(compose) else {
+        panic!("{}: not valid YAML", compose.display());
+    };
+    let Some(services) = doc.get("services").and_then(|v| v.as_mapping()) else {
+        return Vec::new();
+    };
+
+    fn scalar(v: &serde_yaml::Value) -> Option<String> {
+        match v {
+            serde_yaml::Value::String(s) => Some(s.clone()),
+            serde_yaml::Value::Bool(b) => Some(b.to_string()),
+            serde_yaml::Value::Number(n) => Some(n.to_string()),
+            serde_yaml::Value::Null => Some(String::new()),
+            _ => None,
+        }
+    }
+
+    let mut out = Vec::new();
+    for (name, body) in services {
+        let service = name
+            .as_str()
+            .unwrap_or("<non-string service key>")
+            .to_string();
+        let Some(raw) = body.get("environment") else {
+            continue;
+        };
+
+        match raw {
+            serde_yaml::Value::Mapping(map) => {
+                for (k, v) in map {
+                    let key = k.as_str().unwrap_or("<non-string key>").to_string();
+                    if let Some(value) = scalar(v) {
+                        out.push((service.clone(), key, value));
+                    }
+                }
+            }
+            serde_yaml::Value::Sequence(seq) => {
+                for v in seq {
+                    let Some(entry) = scalar(v) else { continue };
+                    match entry.split_once('=') {
+                        Some((k, value)) => {
+                            out.push((service.clone(), k.to_string(), value.to_string()))
+                        }
+                        None => continue, // pass-through from the host env
+                    }
+                }
+            }
+            other => panic!(
+                "{}: unexpected `environment` shape {other:?}",
+                compose.display()
+            ),
+        }
+    }
+    out
+}
+
+/// bd:mech-crate-q1w — the non-dev path rendered `DATABASE_URL` empty. Compose
+/// interpolates `${VAR}` in a compose file from the project directory's `.env`
+/// only; an `env_file` layer is opaque to it. No mx scaffold has a project-dir
+/// `.env`, so every such reference resolved to nothing and `docker compose
+/// config` warned `variable is not set`.
+///
+/// It is worse than an empty render. An `environment:` block beats every
+/// `env_file` layer, so `DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@…` in
+/// compose **replaced** the working literal that `generate-secrets.sh` had
+/// already resolved into `.env.<service>`. The recipe with no such line
+/// (rust-api) was the only one whose non-dev boot could reach its database.
+///
+/// So: an `environment:` value may not interpolate any variable that an env
+/// config file defines. Those names belong to the `env_file` layers, where the
+/// generator has already turned them into literals.
+#[test]
+fn no_compose_environment_value_interpolates_an_env_file_variable() {
+    let from_env_files = env_file_variable_names();
+    for root in ["DB_USER", "DB_PASSWORD", "DB_NAME"] {
+        assert!(
+            from_env_files.contains(root),
+            "setup: {root} must be defined by some shipped env config file, or this net is vacuous"
+        );
+    }
+
+    let mut offenders: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for compose in compose_files() {
+        for (service, key, value) in environment_entries(&compose) {
+            checked += 1;
+            let mut hits: Vec<String> = interpolated_names(&value)
+                .into_iter()
+                .filter(|n| from_env_files.contains(n))
+                .collect();
+            hits.dedup();
+            if !hits.is_empty() {
+                offenders.push(format!(
+                    "{} [{service}] {key}={value} — interpolates {hits:?}, which live in env_file layers the Compose CLI never reads",
+                    rel(&compose)
+                ));
+            }
+        }
+    }
+
+    assert!(
+        checked >= 40,
+        "setup: expected the swept compose files to declare many environment entries, saw {checked}"
+    );
+    assert!(
+        offenders.is_empty(),
+        "{} compose `environment:` value(s) interpolate an env_file variable:\n{}",
+        offenders.len(),
+        offenders.join("\n")
+    );
+}
+
+/// bd:mech-crate-q1w (the other half) — a hardcoded `:secret@` in a shipped env
+/// file is the same defect wearing a disguise. It renders non-empty, so nothing
+/// warns, and it was right for exactly as long as every project shared one
+/// password. Once `generate-secrets.sh` made credentials per-project, `secret`
+/// became a value that authenticates against nothing. Derive from the generated
+/// roots instead: the generator resolves `${DB_PASSWORD}` into the real literal.
+#[test]
+fn no_shipped_env_config_hardcodes_a_database_password() {
+    // Keys whose value is a database password, or a URL that embeds one.
+    const PASSWORD_KEYS: [&str; 3] = ["DB_PASSWORD", "POSTGRES_PASSWORD", "DATABASE_URL"];
+
+    let mut offenders: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for file in env_config_files() {
+        for (key, value) in env_config_pairs(&file) {
+            let stem = neutralize_placeholders(&key);
+            let is_password_key = PASSWORD_KEYS
+                .iter()
+                .any(|k| stem == *k || stem.ends_with(&format!("_{k}")));
+            if !is_password_key || is_generator_input(&value) {
+                continue;
+            }
+            checked += 1;
+            // A derived value references the generated root; a literal does not.
+            if !value.contains("${") {
+                offenders.push(format!(
+                    "{} {key}={value} — a literal credential. Derive it from the generated roots (`${{DB_PASSWORD}}` etc.) so generate-secrets.sh resolves it per project",
+                    rel(&file)
+                ));
+            }
+        }
+    }
+
+    assert!(
+        checked >= 5,
+        "setup: expected the shipped env config files to define several database password keys, saw {checked}"
+    );
+    assert!(
+        offenders.is_empty(),
+        "{} shipped env value(s) hardcode a database credential:\n{}",
+        offenders.len(),
+        offenders.join("\n")
     );
 }

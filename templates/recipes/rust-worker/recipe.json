@@ -38,15 +38,21 @@
       "flag": "--llm",
       "default": "false",
       "description": "Enable local LLM support"
+    },
+    "rust": {
+      "flag": "--rust",
+      "default": "1.91",
+      "description": "Rust version"
     }
   },
-  
+
   "placeholders": {
     "SERVICE_NAME": { "source": "name" },
     "SERVICE_SLUG": { "source": "name", "transform": "rust_crate" },
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
     "WORKERS": { "source": "option:workers" },
-    "BATCH_SIZE": { "source": "option:batch_size" }
+    "BATCH_SIZE": { "source": "option:batch_size" },
+    "RUST_VERSION": { "source": "option:rust" }
   },
   
   "directories": [

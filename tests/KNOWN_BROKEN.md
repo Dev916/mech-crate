@@ -47,13 +47,13 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | mech-crate-dqw | `kb_doctor_reports_router_status` | `crates/mx-cli/tests/known_broken.rs` | `mx doctor` reports on the router (network / container / port 80) alongside its structure and docker checks | integration |
 | mech-crate-4jw | `corpus::store::tests::kb_lexical_arm_separates_relevant_from_irrelevant` | `crates/mx-lib/src/corpus/store.rs` | With the vector arm held equal (identical embeddings, orthogonal to the query), the lexical arm separates a relevant from an irrelevant ~1.2KB chunk by ≥5× and ≥0.05 of final score. Measured today: **2.18× / 0.0062** | integration (DB) |
 
-13 lane tests, all named `kb_*` (the one exception, `z5i`, left the lane when
+12 lane tests, all named `kb_*` (the one exception, `z5i`, left the lane when
 its fix landed).
 
-**Scoreboard** (`make test-known-broken`): `13 tests run: 0 passed, 13 failed,
-252 skipped` — 13 rows above, 13 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `252 passed, 13 skipped`. Those two numbers
-partition the workspace; if they stop summing to 265, either a lane test lost
+**Scoreboard** (`make test-known-broken`): `12 tests run: 0 passed, 12 failed,
+427 skipped` — 12 rows above, 12 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `427 passed, 12 skipped`. Those two numbers
+partition the workspace; if they stop summing to 439, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -87,6 +87,32 @@ rather than over the files that happened to be wrong:
 | `templates_secret_generation.rs` | `make init` generates real dev credentials for every db-bearing recipe, idempotently, and no recipe ships an unconsumed `__GENERATE_*__` placeholder (bd:mech-crate-rqc) |
 | `templates_multi_service.rs` | `s="a b"` survives the make layer as one argument, list-capable targets pass every name to compose, and single-service targets refuse a list loudly (bd:mech-crate-3kq) |
 | `templates_compose_hygiene.rs` | no shipped compose file pins a `container_name` or joins an `external: true` network mx never creates, and the db healthcheck probes the configured role at container runtime (bd:mech-crate-4n4, bd:mech-crate-xhf, bd:mech-crate-v6z) |
+
+**bd:mech-crate-gjl** is the second lane row retired the intended way, and it
+retired quietly: `kb_self_update_finds_the_source_root_recorded_by_init` lost its
+`#[ignore]` and joined the gate when `mx self-update` landed, taking the lane
+13 → 12, but the counts in this file were not moved with it. They are moved now.
+That is exactly the bookkeeping debt this scoreboard exists to catch, so it is
+recorded rather than quietly corrected.
+
+Wave 3 repeated Wave 2's pattern once more: none of its four defects had a lane
+row, so all four landed against fresh red tests that joined the gate directly,
+taking it 417 → 427 and the workspace total 429 → 439. The lane is untouched at
+12. Two new conformance suites carry the growth, both of them nets over a class
+and both walking `templates/` **and** the repo's own `site/docker/compose/`, so
+the dogfood copy cannot drift away from what the recipes ship:
+
+| Suite | Holds |
+|---|---|
+| `templates_compose_ports.rs` | every host-side port publish is `${VAR:-<default>}`, with the default fixed per class: `0` for a port tooling dials on demand, a real number for one a browser dials from a URL it already holds. A container port the classification table has never seen fails deliberately, because publishing a host port is a design call (bd:mech-crate-1a0, with the legacy-template overlap of bd:mech-crate-qpy) |
+| `templates_traefik_labels.rs` | every `traefik.http.{routers,services,middlewares}` name is `${COMPOSE_PROJECT_NAME}`-qualified, definition and reference alike, and every router rule's hostname sits in the default position of a `<SERVICE_UPPER>_ROUTER_HOST` override. `templates/router/` is pinned as the deliberate file-configured singleton exception (bd:mech-crate-298) |
+
+The two fixes that carry no suite of their own extended existing ones:
+bd:mech-crate-fq3 (rust-worker's unexpanded `{{RUST_VERSION}}`) added an
+unexpanded-placeholder net to `recipes_conformance.rs` in the shape of Wave 2's
+`__GENERATE_*__` net, and bd:mech-crate-q1w (non-dev `DATABASE_URL` rendering
+empty) extended `templates_env_precedence.rs` to refuse a compose `environment:`
+value that interpolates a name only an `env_file` layer defines.
 
 ## Notes on placement deviations
 

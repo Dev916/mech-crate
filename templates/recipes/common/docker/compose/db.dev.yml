@@ -3,7 +3,10 @@
 services:
   db:
     ports:
-      - "5432:5432"  # Expose for local tools (pgAdmin, DBeaver)
+      # Ephemeral by default so a second stack never collides here. Find it with
+      #   docker compose -p "$COMPOSE_PROJECT_NAME" port db 5432
+      # Set DB_HOST_PORT to pin one for a GUI client (pgAdmin, DBeaver).
+      - "${DB_HOST_PORT:-0}:5432"
     environment:
       POSTGRES_LOG_STATEMENT: all
     command:

@@ -25,10 +25,16 @@ services:
       db:
         condition: service_healthy
     labels:
+      # Traefik keeps ONE router/service table per provider for the whole
+      # machine, so these names carry the compose project (bd:mech-crate-298);
+      # the compose CLI supplies COMPOSE_PROJECT_NAME from the project name it
+      # resolved. The hostname keeps its default; a second stack that scaffolded
+      # the same service name moves with
+      # `{{SERVICE_UPPER}}_ROUTER_HOST=other.localhost make dev`.
       - traefik.enable=true
-      - traefik.http.routers.{{SERVICE_NAME}}.rule=Host(`{{DOMAIN}}`)
-      - traefik.http.routers.{{SERVICE_NAME}}.entrypoints=web
-      - traefik.http.services.{{SERVICE_NAME}}.loadbalancer.server.port=3000
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.rule=Host(`${{{SERVICE_UPPER}}_ROUTER_HOST:-{{DOMAIN}}}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-{{SERVICE_NAME}}.loadbalancer.server.port=3000
       - traefik.docker.network=devmesh-traefik
     restart: unless-stopped
     healthcheck:

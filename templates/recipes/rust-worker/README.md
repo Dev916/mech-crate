@@ -450,9 +450,21 @@ redis-cli PUBSUB NUMSUB jobs
 # Check job status
 cargo run -- status --job-id=<uuid>
 
-# View metrics
-curl http://localhost:9090/metrics
+# View metrics: 9090 is the CONTAINER port, published on one Docker allocates
+curl "http://localhost:$(docker compose -p "$COMPOSE_PROJECT_NAME" \
+  port {{SERVICE_NAME}} 9090 | cut -d: -f2)/metrics"
 ```
+
+`METRICS_HOST_PORT` defaults to `0`, so the dev override publishes the metrics
+endpoint on a host port Docker allocates rather than pinning 9090, and two worker
+stacks coexist. Pin it for a session when a scrape config wants a fixed number:
+
+```bash
+METRICS_HOST_PORT=9090 make dev
+```
+
+Inside the container the port is always 9090: the healthcheck, a sibling service
+and a Prometheus job on the same network all keep using it.
 
 ### Testing
 
@@ -562,8 +574,16 @@ cargo run --features dhat-heap -- worker
 
 ## Links
 
-- **Metrics**: http://localhost:9090/metrics
-- **Health**: http://localhost:9090/health
+Both endpoints listen on container port 9090. The dev override publishes it on a
+host port Docker allocates, so ask for the number rather than assuming 9090:
+
+```bash
+docker compose -p "$COMPOSE_PROJECT_NAME" port {{SERVICE_NAME}} 9090
+# 0.0.0.0:32791  ->  http://localhost:32791/metrics
+#                    http://localhost:32791/health
+```
+
+Pin it with `METRICS_HOST_PORT=9090 make dev` when a tool needs a fixed address.
 
 ## References
 
