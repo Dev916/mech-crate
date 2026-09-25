@@ -3,7 +3,16 @@
 <!--
   Weekly autonomous technique-research run (template).
   Install with scripts/launchd/install-research-weekly.sh, which substitutes
-  __HOME__ and __REPO__ and bootstraps the agent into the user's gui domain.
+  __HOME__ and __SOURCE__ and bootstraps the agent into the user's gui domain.
+
+  __SOURCE__ is a clone the bot owns (default ~/.mech-crate/research-source),
+  never a human's checkout: the launcher below fast-forwards that clone to
+  origin/main before exec'ing the script, so the script, the skill and the
+  corpus the run sees are always the merged state of main, and a diverged or
+  dirty working copy elsewhere can never be committed from or corrupted.
+  The update happens before exec, so the script file is never rewritten
+  underneath a running bash.
+
   A LaunchAgent, not a crontab entry: cron jobs on macOS cannot read the login
   Keychain that holds Claude Code's OAuth credentials (every cron run from
   2026-07-20 to 2026-09-14 failed with "Not logged in"), and launchd runs a
@@ -16,7 +25,8 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>__REPO__/scripts/research-weekly.sh</string>
+    <string>-c</string>
+    <string>S="__SOURCE__"; L="__HOME__/.mech-crate/research-cron.log"; if git -C "$S" fetch -q origin main &amp;&amp; git -C "$S" reset -q --hard origin/main; then MECH_CRATE_SOURCE="$S" exec /bin/bash "$S/scripts/research-weekly.sh"; else echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] launcher: could not update $S to origin/main; running the checked-out script" &gt;&gt; "$L"; MECH_CRATE_SOURCE="$S" exec /bin/bash "$S/scripts/research-weekly.sh"; fi</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>

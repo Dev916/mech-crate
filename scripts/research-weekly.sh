@@ -10,9 +10,11 @@
 # slot after the Mac wakes, where cron silently skips it.
 #
 # Invokes headless Claude Code with the technique-research skill in autonomous
-# mode, inside a dedicated worktree (~/.mech-crate/research-worktree on branch
-# research-bot-main, reset to origin/main every run) so the owner's checkout is
-# never read or written, whatever state it is in. The run ingests UNTRUSTED web
+# mode. The bot owns its source: a clone at ~/.mech-crate/research-source that
+# the launcher fast-forwards to origin/main before exec'ing this file, and a
+# worktree of it (~/.mech-crate/research-worktree on branch research-bot-main,
+# reset to origin/main every run) where the run edits and commits. No human
+# checkout is read or written, whatever state it is in. The run ingests UNTRUSTED web
 # content, so permissions are scoped to an explicit allowlist (no
 # --dangerously-skip-permissions): repo file edits, the specific CLIs the
 # pipeline needs, web fetch/search, and the mx MCP tools. Output is
@@ -23,7 +25,7 @@
 # Logs:   ~/.mech-crate/research-cron.log
 set -u
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
-SRC="${MECH_CRATE_SOURCE:-$HOME/dev/dev916/mech-crate}"
+SRC="${MECH_CRATE_SOURCE:-$HOME/.mech-crate/research-source}"
 WT="$HOME/.mech-crate/research-worktree"
 LOG="$HOME/.mech-crate/research-cron.log"
 mkdir -p "$HOME/.mech-crate"

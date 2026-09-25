@@ -64,7 +64,7 @@ The autonomous run is a **launchd user agent** (`~/Library/LaunchAgents/com.mech
 - Pause/off: `launchctl bootout gui/$(id -u)/com.mechcrate.research-weekly`; resume: `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mechcrate.research-weekly.plist`
 - Retime: edit `StartCalendarInterval` in the plist, then bootout + bootstrap
 - Logs/last run: `tail ~/.mech-crate/research-cron.log`
-- Template and installer: `scripts/launchd/com.mechcrate.research-weekly.plist` and `scripts/launchd/install-research-weekly.sh` in the repo
+- Template and installer: `scripts/launchd/com.mechcrate.research-weekly.plist` and `scripts/launchd/install-research-weekly.sh` in the repo. The agent runs from a bot-owned clone (`~/.mech-crate/research-source`, fast-forwarded to `origin/main` at every launch), and `~/.claude/skills/technique-research` is a symlink into that clone, so a change to this skill reaches the bot the Monday after it merges with no manual copy.
 
 (Claude Code's in-session CronCreate is NOT used — those jobs are session-only and expire after 7 days. The old `3 9 * * 1` crontab line must not be re-added.)
 
