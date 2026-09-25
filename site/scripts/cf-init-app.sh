@@ -93,34 +93,77 @@ if [[ ! "$APP_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
     warn "App name '$APP_NAME' contains unusual characters. Proceeding anyway..."
 fi
 
-# Load Cloudflare configuration
-# Supports both project-local and global (linked) configurations
+# Load Cloudflare configuration.
+#
+# Same contract as make/cloudflare.mk: one canonical pair
+# CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN (the names wrangler reads from
+# the environment), with CF_ACCOUNT_ID / CF_API_TOKEN accepted as deprecated
+# aliases. Resolution order is global config then project config, project
+# winning, and each scope is read on its own so a project file carrying only
+# the deprecated alias still beats a global file carrying the canonical name.
 MX_GLOBAL_CF_CONFIG="${HOME}/.mech-crate/config/infra/cloudflare.env"
 
-if [[ -f "$CF_ENV_FILE" ]]; then
-    # Check if linked to global config
-    if grep -q "^MX_INFRA_USE_GLOBAL=true" "$CF_ENV_FILE" 2>/dev/null; then
-        if [[ -f "$MX_GLOBAL_CF_CONFIG" ]]; then
-            source "$MX_GLOBAL_CF_CONFIG"
-        else
-            error "Project is linked to global config, but no global config found at $MX_GLOBAL_CF_CONFIG"
-        fi
-    else
-        # Use project-local config
-        source "$CF_ENV_FILE"
-    fi
-else
-    # No project config - try global config directly
-    if [[ -f "$MX_GLOBAL_CF_CONFIG" ]]; then
-        source "$MX_GLOBAL_CF_CONFIG"
-    else
-        error "Cloudflare not configured. Run 'make cf-setup' first."
+# Print the account id one credentials file supplies, canonical name first.
+# Runs in a subshell so sourcing a credentials file cannot leak into this one.
+cf_account_id_from() {
+    local file="$1"
+    [[ -f "$file" ]] || return 0
+    (
+        CLOUDFLARE_ACCOUNT_ID=""
+        CF_ACCOUNT_ID=""
+        # shellcheck source=/dev/null
+        source "$file" >/dev/null 2>&1 || true
+        printf '%s' "${CLOUDFLARE_ACCOUNT_ID:-$CF_ACCOUNT_ID}"
+    )
+}
+
+CF_LINKED_TO_GLOBAL=false
+if [[ -f "$CF_ENV_FILE" ]] && grep -q "^MX_INFRA_USE_GLOBAL=true" "$CF_ENV_FILE" 2>/dev/null; then
+    CF_LINKED_TO_GLOBAL=true
+    if [[ ! -f "$MX_GLOBAL_CF_CONFIG" ]]; then
+        error "Project is linked to global config, but no global config found at $MX_GLOBAL_CF_CONFIG. Run 'mx infra setup cloudflare' first."
     fi
 fi
 
-if [[ -z "$CF_ACCOUNT_ID" ]]; then
-    error "CF_ACCOUNT_ID not set. Run 'make cf-setup' first."
+# Lowest scope first, so the highest one wins for everything else the files
+# carry (CF_DOCKER_PLATFORM, CLOUDFLARE_API_TOKEN).
+if [[ -f "$MX_GLOBAL_CF_CONFIG" ]]; then
+    # shellcheck source=/dev/null
+    source "$MX_GLOBAL_CF_CONFIG"
 fi
+if [[ -f "$CF_ENV_FILE" && "$CF_LINKED_TO_GLOBAL" != true ]]; then
+    # shellcheck source=/dev/null
+    source "$CF_ENV_FILE"
+fi
+
+CF_ACCOUNT_ID_SOURCE="none"
+CLOUDFLARE_ACCOUNT_ID="$(cf_account_id_from "$MX_GLOBAL_CF_CONFIG")"
+if [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+    CF_ACCOUNT_ID_SOURCE="global"
+fi
+if [[ "$CF_LINKED_TO_GLOBAL" != true ]]; then
+    CF_PROJECT_ACCOUNT_ID="$(cf_account_id_from "$CF_ENV_FILE")"
+    if [[ -n "$CF_PROJECT_ACCOUNT_ID" ]]; then
+        CLOUDFLARE_ACCOUNT_ID="$CF_PROJECT_ACCOUNT_ID"
+        CF_ACCOUNT_ID_SOURCE="project"
+    fi
+fi
+
+if [[ -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+    echo -e "${RED}✗${NC} No Cloudflare account id found." >&2
+    echo "" >&2
+    echo "  Looked for CLOUDFLARE_ACCOUNT_ID (deprecated alias CF_ACCOUNT_ID) in:" >&2
+    echo "    project: $CF_ENV_FILE" >&2
+    echo "    global:  $MX_GLOBAL_CF_CONFIG" >&2
+    echo "" >&2
+    echo "  Configure credentials with either:" >&2
+    echo "    mx infra setup cloudflare   # global config, shared by every project" >&2
+    echo "    make cf-setup               # this project's config, which wins over the global one" >&2
+    exit 1
+fi
+
+export CLOUDFLARE_ACCOUNT_ID
+info "Cloudflare account id resolved from the $CF_ACCOUNT_ID_SOURCE config"
 
 APP_DIR="$CF_APPS_DIR/$APP_NAME"
 
@@ -363,7 +406,7 @@ EOF
 name = "${APP_NAME}"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
-account_id = "${CF_ACCOUNT_ID}"
+account_id = "${CLOUDFLARE_ACCOUNT_ID}"
 
 # Development settings
 workers_dev = true
@@ -612,7 +655,7 @@ EOF
 name = "${APP_NAME}"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
-account_id = "${CF_ACCOUNT_ID}"
+account_id = "${CLOUDFLARE_ACCOUNT_ID}"
 
 # Development settings
 workers_dev = true
@@ -774,7 +817,7 @@ EOF
 name = "${APP_NAME}-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
-account_id = "${CF_ACCOUNT_ID}"
+account_id = "${CLOUDFLARE_ACCOUNT_ID}"
 workers_dev = true
 
 [vars]
@@ -783,7 +826,7 @@ CONTAINER_INSTANCE_ID = "${APP_NAME}-dev"
 [[containers]]
 name = "${APP_NAME}"
 class_name = "ContainerDO"
-image = "registry.cloudflare.com/${CF_ACCOUNT_ID}/${APP_NAME}:v0.0.1"
+image = "registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/${APP_NAME}:v0.0.1"
 max_instances = ${MAX_INSTANCES}
 
 [[durable_objects.bindings]]
@@ -803,7 +846,7 @@ workers_dev = true
 [[env.preview.containers]]
 name = "${APP_NAME}"
 class_name = "ContainerDO"
-image = "registry.cloudflare.com/${CF_ACCOUNT_ID}/${APP_NAME}:v0.0.1"
+image = "registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/${APP_NAME}:v0.0.1"
 max_instances = 3
 
 [[env.preview.durable_objects.bindings]]
@@ -837,7 +880,7 @@ EOF
 [[env.production.containers]]
 name = "${APP_NAME}"
 class_name = "ContainerDO"
-image = "registry.cloudflare.com/${CF_ACCOUNT_ID}/${APP_NAME}:v0.0.1"
+image = "registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/${APP_NAME}:v0.0.1"
 max_instances = ${PROD_MAX_INSTANCES}
 
 [[env.production.durable_objects.bindings]]

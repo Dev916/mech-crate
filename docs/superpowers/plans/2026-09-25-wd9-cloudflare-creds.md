@@ -28,4 +28,4 @@ Conventions: one commit per task in repo style; `make test` green after every ta
 - Gates green: `make test`, `make check`; site `npm test` + `npx astro build` (only if site content touched, else state untouched); `mx rag ingest --dry-run` 0 warnings.
 - PR open from `fix/wd9-cloudflare-creds` to main, ci.yml + site.yml green. Do NOT merge.
 
-- [ ] PR title `fix: cloudflare credential resolution — one variable name, global fallback`; body: summary + design call + doc updates; repo trailer convention.
+- [x] PR title `fix: cloudflare credential resolution: one variable name, global fallback`; body: summary + design call + doc updates; repo trailer convention.

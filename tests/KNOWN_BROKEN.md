@@ -50,9 +50,9 @@ a fix landed without bookkeeping — surfaced, not silently green.
 when their fixes landed).
 
 **Scoreboard** (`make test-known-broken`): `11 tests run: 0 passed, 11 failed,
-438 skipped`: 11 rows above, 11 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `438 passed, 11 skipped`. Those two numbers
-partition the workspace; if they stop summing to 449, either a lane test lost
+441 skipped`: 11 rows above, 11 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `441 passed, 11 skipped`. Those two numbers
+partition the workspace; if they stop summing to 452, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -106,7 +106,7 @@ the dogfood copy cannot drift away from what the recipes ship:
 | `templates_compose_ports.rs` | every host-side port publish is `${VAR:-<default>}`, with the default fixed per class: `0` for a port tooling dials on demand, a real number for one a browser dials from a URL it already holds. A container port the classification table has never seen fails deliberately, because publishing a host port is a design call (bd:mech-crate-1a0, with the legacy-template overlap of bd:mech-crate-qpy) |
 | `templates_traefik_labels.rs` | every `traefik.http.{routers,services,middlewares}` name is `${COMPOSE_PROJECT_NAME}`-qualified, definition and reference alike, and every router rule's hostname sits in the default position of a `<SERVICE_UPPER>_ROUTER_HOST` override. `templates/router/` is pinned as the deliberate file-configured singleton exception (bd:mech-crate-298) |
 
-**bd:mech-crate-wd9** (Cloudflare credential resolution) is the second lane row
+**bd:mech-crate-wd9** (Cloudflare credential resolution) is the third lane row
 retired the intended way, and the first retired by *replacing* its test rather
 than un-ignoring it. The lane test asserted the contract through a heuristic that
 only holds for a makefile which reads a credential name verbatim out of a single
@@ -123,6 +123,17 @@ Lane 12 → 11, gate 427 → 438 (8 in the new suite, 3 unit tests on the
 | Suite | Holds |
 |---|---|
 | `templates_cloudflare_credentials.rs` | one canonical credential pair (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`, the names wrangler reads from the environment) that nothing writes under a second spelling; `cloudflare.mk` reading the global credentials file before the project one so the project wins per scope, deprecated `CF_ACCOUNT_ID` alias included; and an unconfigured machine failing loudly with a message naming `mx infra setup cloudflare` (bd:mech-crate-wd9) |
+
+The same fix's docs pass found the second half of the defect's blast radius:
+`site/scripts/cf-setup.sh` and `site/scripts/cf-init-app.sh` were byte-identical
+copies of the templates and had just gone stale, still writing the deprecated
+spelling with nothing failing. They were re-synced and the copy is now pinned, so
+the next template change to either script cannot rot its twin in silence. Gate
+438 → 441, workspace total 449 → 452.
+
+| Suite | Holds |
+|---|---|
+| `site_scripts_sync.rs` | the `site/scripts/` copies of `templates/scripts/cf-setup.sh` and `cf-init-app.sh` are byte-identical to the templates they came from, and both carry the canonical credential name. The pinned list is explicit: the rest of `site/scripts/` has legitimately diverged, and a test that discovered its own expectation would assert nothing (bd:mech-crate-wd9) |
 
 The two fixes that carry no suite of their own extended existing ones:
 bd:mech-crate-fq3 (rust-worker's unexpanded `{{RUST_VERSION}}`) added an
