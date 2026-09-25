@@ -16,18 +16,30 @@ output of it, and you should know how the text got there.
 
 ## The run
 
-A user crontab entry fires
+A launchd user agent (`com.mechcrate.research-weekly`) fires
 [`scripts/research-weekly.sh`](https://github.com/Dev916/mech-crate/blob/main/scripts/research-weekly.sh)
-every Monday morning (`3 9 * * 1`). It invokes headless Claude Code against the
+every Monday morning at 09:03. The script checks out a dedicated git worktree
+at `origin/main`, so the owner's working copy is never touched, and invokes
+headless Claude Code there against the
 [`technique-research`](https://github.com/Dev916/mech-crate/tree/main/skills/technique-research)
 skill in autonomous mode, with an explicit tool allowlist rather than blanket
 permissions. The run ingests untrusted web content, so what it can touch is
-enumerated. Logs land in `~/.mech-crate/research-cron.log`; pausing it is
-commenting out one crontab line.
+enumerated. Logs land in `~/.mech-crate/research-cron.log`; pausing it is one
+`launchctl bootout`. It is a LaunchAgent rather than a crontab entry because a
+cron job on macOS cannot read the login Keychain that holds Claude Code's
+credentials, and because launchd runs a missed slot after the machine wakes
+where cron silently drops it. The template and installer live in
+[`scripts/launchd/`](https://github.com/Dev916/mech-crate/tree/main/scripts/launchd).
 
 ## Picking a topic
 
-Autonomous mode walks a ladder and stops at the first hit:
+Every autonomous run first takes a Hacker News trend pulse: the week's top
+stories, the Ask HN and Show HN threads, and a keyword search for each thin
+corpus category, screened for software-engineering relevance and checked
+against what the corpus already covers. Up to three new candidate topics land
+in the backlog, each with its HN link and a one-clause rationale, so what
+practitioners are arguing about this week reaches the queue without anyone
+filing it. Then autonomous mode walks a ladder and stops at the first hit:
 
 1. The top unchecked entry in
    [`RESEARCH_BACKLOG.md`](/docs/corpus/process/research-backlog/), which

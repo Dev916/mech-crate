@@ -165,7 +165,7 @@ All defined in `crates/mx-mcp-server/src/tools/mod.rs`; transport in `crates/mx-
 - Deployed as a Cloudflare **Workers static-assets** bundle (not Pages) via `wrangler deploy` (`site/apps/site/wrangler.jsonc`, `.github/workflows/site.yml`)
 
 ### Research automation
-- `scripts/research-weekly.sh` — a *user crontab* entry (`3 9 * * 1`, Mondays 09:03), not a GitHub workflow: `timeout 7200 claude -p "…technique-research… autonomous mode"` with an explicit `--allowedTools` allowlist and deliberately **no** skip-permissions flag, because the run ingests untrusted web content; output is PR-gated, log at `~/.mech-crate/research-cron.log`
+- `scripts/research-weekly.sh` — a *launchd user agent* (`com.mechcrate.research-weekly`, Mondays 09:03; template and installer in `scripts/launchd/`), not a GitHub workflow, running in a dedicated worktree at `~/.mech-crate/research-worktree`: `timeout 7200 claude -p "…technique-research… autonomous mode"` with an explicit `--allowedTools` allowlist and deliberately **no** skip-permissions flag, because the run ingests untrusted web content; output is PR-gated, log at `~/.mech-crate/research-cron.log`
 - Audit trail: `docs/development/RESEARCH_LOG.md` (11 rows, 2026-07-18 → 2026-08-14; verdicts NEW ×8, FRESH ×2, IMPROVE+FRESH ×1) and `docs/development/RESEARCH_BACKLOG.md` (16 entries, 14 open)
 
 ### Bash layer (`bin/lib/`, 17 files, ~6,380 lines) — vestigial
@@ -349,7 +349,7 @@ step in CI would keep the corpus from drifting from the repo that defines it.
 | Corpus status | `mx rag status` · `mx rag gaps --days 30 --min-count 2` · MCP `rag_health` |
 | MCP server | `mx mcp build` · `mx mcp config` · binary at `bin/mx-mcp` |
 | Site | `cd site/apps/site && npm run dev` (4321) · `npm run build` · `npm test` · `npm run diagrams:check` |
-| Research run | `scripts/research-weekly.sh` (cron Mondays 09:03); log `~/.mech-crate/research-cron.log` |
+| Research run | `scripts/research-weekly.sh` (launchd agent `com.mechcrate.research-weekly`, Mondays 09:03); log `~/.mech-crate/research-cron.log` |
 | Issue tracker | `bd ready` · `bd show <id>` · `bd update <id> --claim` (`.beads/`) |
 | Machine state | `~/.mech-crate/{templates,recipes,router,mcp,config}` |
 
