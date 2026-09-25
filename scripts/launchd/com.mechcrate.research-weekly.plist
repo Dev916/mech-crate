@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Weekly autonomous technique-research run (template).
+  Install with scripts/launchd/install-research-weekly.sh, which substitutes
+  __HOME__ and __REPO__ and bootstraps the agent into the user's gui domain.
+  A LaunchAgent, not a crontab entry: cron jobs on macOS cannot read the login
+  Keychain that holds Claude Code's OAuth credentials (every cron run from
+  2026-07-20 to 2026-09-14 failed with "Not logged in"), and launchd runs a
+  missed calendar slot after the Mac wakes, where cron silently skips it.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mechcrate.research-weekly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/scripts/research-weekly.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>3</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.mech-crate/research-launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.mech-crate/research-launchd.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
