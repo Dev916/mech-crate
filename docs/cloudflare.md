@@ -161,6 +161,8 @@ Example endpoints generated:
 | Command | Description |
 |---------|-------------|
 | `make cf-setup` | Interactive setup wizard |
+| `make cf-vars` | Show the resolved credentials and which scope supplied them |
+| `make cf-check-credentials` | Fail early, naming both config paths, when no account id resolves |
 | `make cf-login` | Authenticate with Cloudflare |
 | `make cf-whoami` | Show current authentication |
 | `make cf-status` | Show all apps status |
@@ -227,17 +229,43 @@ curl -X POST https://pricelove.co/_container/restart
 
 ### Environment Variables
 
-The `.env.cloudflare` file (created by `cf-setup`):
+Credentials use the two names wrangler itself reads, `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`, so the value in a file reaches the deploy untranslated.
+They resolve from two scopes, highest precedence first: the environment (or the
+`make` command line), then the project file, then the global file.
+
+| Scope | File | Written by |
+|-------|------|------------|
+| Project | `infra/cloudflare/.env.cloudflare` | `make cf-setup` |
+| Global | `~/.mech-crate/config/infra/cloudflare.env` | `mx infra setup cloudflare` |
+
+The `.env.cloudflare` file (created by `cf-setup`, gitignored):
 
 ```bash
 # Required
-CF_ACCOUNT_ID=your_account_id
+CLOUDFLARE_ACCOUNT_ID=your_account_id
 
 # Optional (for CI/CD)
 CLOUDFLARE_API_TOKEN=your_api_token
 
 # Build options
 CF_DOCKER_PLATFORM=linux/amd64
+```
+
+A global config alone is a complete setup: `make cf-init` and the deploy targets
+resolve from it, and a project file is only needed when one project deploys to a
+different account than the rest of the workstation.
+
+`CF_ACCOUNT_ID` and `CF_API_TOKEN` are **deprecated aliases**. They are still
+read, at their own scope's precedence, so a file written by an older `cf-setup`
+keeps working; nothing writes them any more, and the toolchain names the file
+that still uses them.
+
+Two targets make the resolution visible instead of guessable:
+
+```bash
+make cf-vars              # resolved account id, which scope supplied it, both file paths
+make cf-check-credentials # fails loudly, naming both paths and both fixes, when nothing resolves
 ```
 
 ### Per-App Configuration
@@ -290,9 +318,12 @@ jobs:
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: make cf-deploy-all
 ```
+
+CI needs no credentials file: the environment is the highest-precedence scope, so
+those two variables are enough on their own.
 
 ### Required Secrets
 
@@ -301,7 +332,7 @@ Create in your repo settings:
 | Secret | Description |
 |--------|-------------|
 | `CLOUDFLARE_API_TOKEN` | API token with Workers & Registry permissions |
-| `CF_ACCOUNT_ID` | Your Cloudflare account ID |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
 
 ## Adding Multiple Apps
 
