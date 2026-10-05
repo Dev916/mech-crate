@@ -88,6 +88,10 @@ sources:
   - https://grafana.com/security/security-advisories/cve-2026-13720/
   - https://henrikgerdes.me/blog/2025-11-grafana-mess/
   - https://grafana.com/docs/mimir/latest/release-notes/v3.0/
+  - https://github.com/grafana/dashboard-linter/blob/main/docs/rules/target-rate-interval-rule.md
+  - https://github.com/grafana/dashboard-linter/blob/main/docs/index.md
+  - https://github.com/grafana/terraform-provider-grafana/releases/tag/v4.47.0
+  - https://github.com/grafana/gcx/releases/tag/v1.4.0
 ---
 
 # Grafana in Practice: Dashboards, Alerting, the LGTM Stack, and Observability as Code
@@ -140,9 +144,9 @@ Grafana recommends the "minor / bi-monthly" upgrade strategy, with changelog rev
 
 **Sprawl control.** Use query variables instead of per-node copies [13]; library panels, where "that change propagates to all instances" [16]; usage insights to "find most-used, broken, and unused dashboards", which is Enterprise and Cloud only [15]; restore of deleted dashboards, GA in 13.0 [3]; and provisioned dashboards with `allowUiUpdates: false`, which refuse UI saves [43].
 
-**Variables.** With multi-value or "Include All", "the variable value becomes a regular expression pattern", so queries must use `=~` [17]. For `rate()` and `increase()`, "Always use `$__rate_interval` instead of a fixed interval or `$__interval`", because a fixed `[5m]` "breaks at different zoom levels" and `$__interval` "can be too small for rate()" [17]. The rule is `max($__interval + scrape_interval, 4 * scrape_interval)`, where scrape_interval is the per-query Min step or else the data source's Scrape interval setting [17]. That setting must match Prometheus: if it "is left at the default 15s but your actual Prometheus scrape interval is 60s, $__rate_interval calculates too small a window" [17]. The rule is scoped: `$__rate_interval` is "designed for use with rate() and increase()" [17], and the dashboard linter flags any `rate`, `irate` or `increase` target that does not use it [51].
+**Variables.** With multi-value or "Include All", "the variable value becomes a regular expression pattern", so queries must use `=~` [17]. For `rate()` and `increase()`, "Always use `$__rate_interval` instead of a fixed interval or `$__interval`", because a fixed `[5m]` "breaks at different zoom levels" and `$__interval` "can be too small for rate()" [17]. The rule is `max($__interval + scrape_interval, 4 * scrape_interval)`, where scrape_interval is the per-query Min step or else the data source's Scrape interval setting [17]. That setting must match Prometheus: if it "is left at the default 15s but your actual Prometheus scrape interval is 60s, $__rate_interval calculates too small a window" [17]. The rule is scoped: `$__rate_interval` is "designed for use with rate() and increase()" [17], and the dashboard linter's `target-rate-interval-rule` "Checks that each target uses $__rate_interval" [78].
 
-**Units, thresholds, links.** Prometheus names carry base units (`_seconds`, `_bytes`, `_total`) [23]; set the matching panel unit so axes read correctly, which the dashboard linter checks as a rule (`panel-units-rule`) [51]. Data links "allow you to link to other panels, dashboards, and external resources" while keeping the source panel's context [20], which is how drill-down from a RED overview to a per-instance view is wired [13].
+**Units, thresholds, links.** Prometheus names carry base units (`_seconds`, `_bytes`, `_total`) [23]; set the matching panel unit so axes read correctly, which the dashboard linter's `panel-units-rule` checks ("Checks that each panel uses has valid units defined") [78]. Data links "allow you to link to other panels, dashboards, and external resources" while keeping the source panel's context [20], which is how drill-down from a RED overview to a per-instance view is wired [13].
 
 **Transformations versus query-side work.** Transformations manipulate data "returned by a query before the system applies a visualization" [19], and using "the output of one transformation as the input to another transformation" "results in a performance gain" [19].
 
@@ -170,7 +174,7 @@ sum by (type) (count_over_time({service_name="rust-worker", env="prod"} |= "job 
 
 **Exemplars** are "a specific trace representative of measurement taken in a given time interval", the bridge from a latency panel to one trace [28].
 
-**Cardinality control.** `mimirtool analyze grafana` and `analyze ruler` list the metrics that dashboards and rules use, and `analyze prometheus` then shows which stored metrics are *not* used [29]; it works against Mimir, Prometheus or Cloud [29]. Adaptive Metrics recommends aggregating "underutilized metrics into lower-cardinality versions" and is a Grafana Cloud feature only [30].
+**Cardinality control.** `mimirtool analyze grafana` and `analyze ruler` list the metrics that dashboards and rules use, and `analyze prometheus` then shows which stored metrics are *not* used [29]; it works against Mimir, Prometheus or Cloud [29]. Adaptive Metrics recommends aggregating "underutilized metrics into lower-cardinality versions" and is documented under Grafana Cloud [30].
 
 ## 4. Alerting strategy
 
@@ -232,7 +236,7 @@ groups:
           summary: "{{ $labels.job }} spent 10% of its 30-day error budget in 3 days"
 ```
 
-Grafana SLO creates SLOs with their alert rules, an SLO dashboard showing "burn rate, error budget, SLI results", and maintenance windows that "pause error budget consumption and burn rate alerting"; it is documented as a Grafana Cloud feature only [41].
+Grafana SLO creates SLOs with their alert rules, an SLO dashboard showing "burn rate, error budget, SLI results", and maintenance windows that "pause error budget consumption and burn rate alerting"; it is documented under Grafana Cloud [41].
 
 **Alerting HA.** Every instance evaluates every rule; the Alertmanagers gossip on TCP and UDP port 9094 to avoid duplicate notifications, choosing "availability over consistency" [42]. Memberlist is preferred and Redis is the fallback "only in environments where direct communication between Grafana servers is not possible" [42]. `ha_single_node_evaluation = true` makes one automatically chosen primary instance evaluate rules, and requires HA clustering to be configured [42].
 
@@ -326,17 +330,17 @@ groups:
 | Tool | Manages | Status (2026-10) |
 |---|---|---|
 | File provisioning | data sources, dashboards, alerting, folders [43][44] | stable; alerting files not on Cloud [38] |
-| Terraform provider | dashboards, folders, data sources, rule groups, contact points, policies, mute timings, service accounts [47] | v4.47.0, 2026-09-30 [47] |
+| Terraform provider | dashboards, folders, data sources, rule groups, contact points, policies, mute timings, service accounts [47] | v4.47.0, 2026-09-30 [79] |
 | Foundation SDK | typed builders in Go, TypeScript, Python, PHP, Java; "best suited for Grafana >= 12" [48] | official [44][48] |
 | Grafonnet (Jsonnet) | dashboard JSON generation | "Grafonnet is not officially supported by Grafana. Instead, use the Foundation SDK" [44] |
 | Git Sync | "only supports dashboards and folders"; up to four nested folders; Pure Git needs Smart HTTP protocol v2 over HTTPS [45] | GA in 13.0 [3]; Cloud Free: 1 repository, 20 resources [45] |
-| `gcx` CLI | dashboards, alerts, SLOs, queries over the `/apis` layer, Grafana 12+ [49][44] | generally available badge; v1.4.0, 2026-10-02 [49] |
+| `gcx` CLI | dashboards, alerts, SLOs, queries over the `/apis` layer, Grafana 12+ [49][44] | generally available badge [49]; v1.4.0, 2026-10-02 [80] |
 | `grafanactl` | predecessor CLI | "being deprecated" in favour of gcx, announced for archiving on June 1st, 2026 [50] |
 | Grafana Operator | dashboards, folders, data sources as Kubernetes custom resources [44] | listed as an additional tool [44] |
 
 Git Sync guidance: "Do not sync more than 1,000 resources per repository connection as of today", and "Full-instance sync is experimental" [45]. The `/apis` layer is Kubernetes-style, `/apis/<GROUP>/<VERSION>/namespaces/<NAMESPACE>/<RESOURCE>[/<NAME>]`, with `default` as the namespace for organization 1, for example `GET /apis/dashboard.grafana.app/v1/namespaces/default/dashboards/production-overview` [46].
 
-**Review in CI.** `dashboard-linter` lints dashboards that use a Prometheus data source; its `rate-interval-rule` "Checks that every target with a `rate`, `irate` or `increase` function uses `$__rate_interval`" [51]. `mixtool` is "a helper for easily working with jsonnet mixins" [52].
+**Review in CI.** `dashboard-linter` lints dashboards that use a Prometheus data source [51]; its rule doc, headed `rate-interval-rule` (listed in the index as `target-rate-interval-rule`), "Checks that every target with a `rate`, `irate` or `increase` function uses `$__rate_interval` for the range of the data to process" [77][78]. `mixtool` is "a helper for easily working with jsonnet mixins" [52].
 
 ## 6. Collection and correlation
 
@@ -395,7 +399,7 @@ basic_auth_password = ${GRAFANA_METRICS_PASSWORD}
 
 The metrics setting matters because "By default, metrics from Grafana itself can be accessed without authentication" [71].
 
-**Advisory process, two worked examples.** Grafana publishes CVEs with CVSS scores and fixed versions per supported line [72]. CVE-2026-76154 (High, 7.3, published 2026-09-17): a stored XSS in the Geomap panel's MapLibre base layer lets "a user with the Editor role" run JavaScript in another session, "enabling escalation to Org Admin"; fixed in 12.4.11, 13.0.9, 13.1.6 and 13.2.2 [73]. CVE-2026-13720 (Medium, 5.4, published 2026-09-29): an Editor could set file-provisioning annotations through the dashboard API, after which "administrators can no longer update or delete it through Grafana"; fixed in 12.4.12, 13.0.10, 13.1.7 and 13.2.3 [74]. Both start from the Editor role [73][74], and both fixes required the 2026-09 patch releases on every line [1][74].
+**Advisory process, two worked examples.** Grafana publishes CVEs with CVSS scores and fixed versions per supported line [72]. CVE-2026-76154 (High, 7.3, published 2026-09-17): a stored XSS in the Geomap panel's MapLibre base layer lets "a user with the Editor role" run JavaScript in another session, "enabling escalation to Org Admin"; its Fixed Versions field reads "<12.3.0 >=12.4.11 <13.0.0 >=13.0.9 <13.1.0 >=13.1.6 <13.2.0 >=13.2.2", so releases before 12.3.0 are listed as unaffected and the fixes are 12.4.11, 13.0.9, 13.1.6 and 13.2.2 [73]. CVE-2026-13720 (Medium, 5.4, published 2026-09-29): an Editor could set file-provisioning annotations through the dashboard API, after which "administrators can no longer update or delete it through Grafana"; its Fixed Versions field begins "<12.0.0", so releases before 12.0.0 are listed as unaffected, and the fixes are 12.4.12, 13.0.10, 13.1.7 and 13.2.3 [74]. Both start from the Editor role [73][74], and both fixes required the 2026-09 patch releases on every line [1][74].
 
 ## Agreed vs folklore (compressed)
 
