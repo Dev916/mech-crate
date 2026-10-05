@@ -44,6 +44,30 @@ project that needs a different account than the rest of the workstation.
 Credential files are gitignored. Nothing in this flow puts a token in a committed
 file, and nothing sends one anywhere except the provider.
 
+### Cloudflare, specifically
+
+The Cloudflare deploy toolchain (`make/cloudflare.mk` and the `cf-*` scripts)
+reads **both** scopes on every invocation, with no linking required:
+
+1. the environment, or the `make` command line
+2. project `infra/cloudflare/.env.cloudflare`
+3. global `~/.mech-crate/config/infra/cloudflare.env`
+
+One `mx infra setup cloudflare` is therefore a complete setup for every project
+on the workstation, and `make cf-setup` is the per-project override. The two
+variables are wrangler's own names, `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`, so the value in a file reaches the deploy untranslated.
+Each scope is read on its own, so a project file is what wins, whichever spelling
+it uses: the older `CF_ACCOUNT_ID` / `CF_API_TOKEN` names are deprecated aliases,
+still read so an existing config keeps working, and written by nothing.
+
+Two targets make all of that visible rather than guessable:
+
+```bash
+make cf-vars              # the resolved id, which scope supplied it, both file paths
+make cf-check-credentials # fails loudly, naming both paths and both fixes, when nothing resolves
+```
+
 ## The full guide
 
 Provider-by-provider setup, the resolution flow in detail, staging-versus-production
@@ -58,13 +82,18 @@ subcommand`. It is tracked as `mech-crate-vxq` with a red test in the
 [known-broken lane](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md);
 the fix may equally turn out to be deleting the doc references.
 
-Two adjacent defects are open in the same lane and worth knowing about before you
-lean on this path: `mech-crate-wd9` (the `*_ACCOUNT_ID` variable name
-`mx infra setup cloudflare` writes does not match the one
-`templates/make/cloudflare.mk` reads) and `mech-crate-066` (`mx infra link` does
-not write the marker `mx infra inspect` looks for). Each has a red test asserting
-the fixed behaviour. See [Testing](/docs/framework/testing/) for what that lane
-is and why the defects are published rather than hidden.
+One adjacent defect is still open in the same lane and worth knowing about before
+you lean on this path: `mech-crate-066`, where `mx infra link` does not write the
+marker `mx infra inspect` looks for. It has a red test asserting the fixed
+behaviour. See [Testing](/docs/framework/testing/) for what that lane is and why
+the defects are published rather than hidden.
+
+`mech-crate-wd9` used to sit beside it: the account-id variable
+`mx infra setup cloudflare` wrote was not the one `templates/make/cloudflare.mk`
+read, and the mk consulted the project file only, so global credentials reached
+no `cf-*` target at all. Both halves are fixed, and the resolution order above is
+the shipped behaviour rather than the intended one. Linking is what
+`mech-crate-066` still blocks, and the Cloudflare path no longer needs it.
 :::
 
 ## Related
