@@ -109,7 +109,7 @@ The doc deliberately does not repeat the deep single-rung docs already in this c
 |---|---|---|---|---|
 | 0. No retrieval | Whole corpus in a cached prompt | Under 200,000 tokens, "no need for RAG" (Anthropic, 2024) [4]; long context beats RAG when resourced [5] | Tokens per call; context rot as length grows [6][7] | Corpus outgrows the window or quality drops with length |
 | 1. Naive RAG | Chunk, embed, top-k | Seven documented failure points [8] | An index to keep fresh | Eval shows misses on exact terms or rank order |
-| 2. Hybrid + rerank + chunking | Lexical arm, fusion, cross-encoder, better chunks | Top-20 retrieval failure 5.7% to 1.9% with contextual embeddings, contextual BM25 and reranking [4] | A second index, a reranker call | Queries are vague, multi-part or filter-shaped |
+| 2. Hybrid + rerank + chunking | Lexical arm, fusion, cross-encoder, better chunks | Top-20 retrieval failure 5.7% to 1.9% with contextual embeddings, contextual BM25 and reranking (vendor-reported) [4] | A second index, a reranker call | Queries are vague, multi-part or filter-shaped |
 | 3. Query-side | Rewrite, HyDE, multi-query, step-back, routing, self-query | Query2doc +3% to 15% BM25 [11]; step-back +27% TimeQA [16] | One or more LLM calls before retrieval | Answers need cross-chunk structure |
 | 4. Index-side | Late interaction, page images, propositions, RAPTOR, parent docs | RAPTOR +20% absolute on QuALITY with GPT-4 [23] | Storage (multi-vector) or LLM indexing passes | Single-shot retrieval cannot reach the answer |
 | 5. Corrective and agentic | Retrieval as a tool in a loop; graders | IRCoT up to +21 retrieval points [17]; Search-R1 +41% (7B) [29] | Latency, tool calls, token spend | Questions are corpus-global or multi-hop over entities |
@@ -124,7 +124,7 @@ The doc deliberately does not repeat the deep single-rung docs already in this c
 
 **Where the term came from.** On 2025-06-27 Simon Willison noted that "context engineering" was gaining traction, quoting Shopify CEO Tobi Lutke ("I really like the term 'context engineering' over prompt engineering") and Andrej Karpathy ("+1 for 'context engineering' over 'prompt engineering'") [1]. Karpathy's gloss lists the ingredients: "task descriptions and explanations, few shot examples, RAG, related (possibly multimodal) data, tools, state and history, compacting" [1].
 
-**The primary definition.** Anthropic's engineering post (2025-09-29) defines it as "the set of strategies for curating and maintaining the optimal set of tokens (information) during LLM inference, including all the other information that may land there outside of the prompts" [2]. Its operating principle is to find "the smallest set of high-signal tokens that maximize the likelihood of your desired outcome" [2]. Its July 2026 follow-up for Claude 5 models reports that Anthropic "removed over 80% of Claude Code's system prompt" with "no measurable loss on our coding evaluations", and replaces "put it all upfront" with progressive disclosure: skills and deferred tools loaded "at the right times" [3]. Manus's equally primary counterpart (2025-07-18) argues that "the KV-cache hit rate is the single most important metric for a production-stage AI agent" and reports an average input-to-output token ratio "around 100:1" [76].
+**The primary definition.** Anthropic's engineering post (2025-09-29) defines it as "the set of strategies for curating and maintaining the optimal set of tokens (information) during LLM inference, including all the other information that may land there outside of the prompts" [2]. Its operating principle is to find "the smallest set of high-signal tokens that maximize the likelihood of your desired outcome" [2]. Its July 2026 follow-up for Claude 5 models reports that Anthropic "removed over 80% of Claude Code's system prompt" with "no measurable loss on our coding evaluations" (vendor-reported), and replaces "put it all upfront" with progressive disclosure: skills and deferred tools loaded "at the right times" [3]. Manus's equally primary counterpart (2025-07-18) argues that "the KV-cache hit rate is the single most important metric for a production-stage AI agent" and reports an average input-to-output token ratio "around 100:1" (vendor-reported) [76].
 
 **Rung 0: do not retrieve if you do not have to.** Anthropic's 2024-09 guidance: "If your knowledge base is smaller than 200,000 tokens (about 500 pages of material), you can just include the entire knowledge base in the prompt" [4]. A controlled study found that "when resourced sufficiently, LC consistently outperforms RAG in terms of average performance", while "RAG's significantly lower cost remains a distinct advantage"; its Self-Route method routes each query to RAG or long context by model self-reflection and "significantly reduces the computation cost while maintaining a comparable performance to LC" [5].
 
@@ -143,15 +143,15 @@ The doc deliberately does not repeat the deep single-rung docs already in this c
 
 **Where it breaks.** Barnett et al. (2024-01) derived seven failure points from three deployed systems in research, education and biomedicine [8]:
 
-| FP | Name [8] | What you see | Usual fix (rung) |
-|---|---|---|---|
-| 1 | Missing Content | Answer not in the corpus; model guesses | Abstention prompt, coverage audit (9, 10) |
-| 2 | Missed the Top Ranked Documents | Right chunk exists but ranks below k | Hybrid and reranking (2) |
-| 3 | Not in Context, consolidation strategy limitations | Retrieved but dropped during assembly | Budget and ordering (9) |
-| 4 | Not Extracted | In context, model fails to use it | Less noise, ordering (9) |
-| 5 | Wrong Format | Ignores the requested table or list | Prompt and output schema |
-| 6 | Incorrect Specificity | Too general or too detailed | Query rewriting (3) |
-| 7 | Incomplete | Partial answer across chunks | Decomposition, agentic loops (3, 5) |
+| FP | Name [8] | What you see [8] |
+|---|---|---|
+| 1 | Missing Content | Answer not in the corpus; model guesses |
+| 2 | Missed the Top Ranked Documents | Right chunk exists but ranks below k |
+| 3 | Not in Context, consolidation strategy limitations | Retrieved but dropped during assembly |
+| 4 | Not Extracted | In context, model fails to use it |
+| 5 | Wrong Format | Ignores the requested table or list |
+| 6 | Incorrect Specificity | Too general or too detailed |
+| 7 | Incomplete | Partial answer across chunks |
 
 Their two takeaways are the reason this ladder ends in evaluation: "validation of a RAG system is only feasible during operation", and "the robustness of a RAG system evolves rather than designed in at the start" [8].
 
@@ -161,16 +161,14 @@ Their two takeaways are the reason this ladder ends in evaluation: "validation o
 
 This rung is owned by `rag-retrieval-fusion-and-chunking.md`, which covers RRF versus tuned convex combination, why a pg_trgm lexical arm can contribute nothing over long chunks, AST-aware code chunking, token-based sizing, contextual retrieval economics, late chunking and cross-encoder reranking, and which metric to use for each change. Read it before this section's neighbours.
 
-The headline numbers it relies on, re-verified here: Anthropic's contextual retrieval "can reduce the number of failed retrievals by 49% and, when combined with reranking, by 67%" on their top-20-chunk evaluation [4]. BEIR's zero-shot result that "re-ranking and late-interaction-based models on average achieve the best zero-shot performances, however, at high computational costs" is the reason reranking sits on this rung and late interaction on rung 4 [9].
+The headline numbers it relies on, re-verified here: Anthropic's contextual retrieval "can reduce the number of failed retrievals by 49% and, when combined with reranking, by 67%" on their top-20-chunk evaluation (vendor-reported) [4]. BEIR's zero-shot result that "re-ranking and late-interaction-based models on average achieve the best zero-shot performances, however, at high computational costs" is the reason reranking sits on this rung and late interaction on rung 4 [9].
 
 | Move | Buys | Costs | Source |
 |---|---|---|---|
 | Working lexical arm (BM25 class) | Rare-term and identifier recall | Second index | [9] |
 | Fusion (RRF, then tuned blend) | Robust merge of arms | A golden set to tune | see sibling doc |
-| Contextual chunk prefixes | 49% fewer top-20 failures | One LLM pass at ingest | [4] |
-| Cross-encoder rerank | 67% fewer failures with the above | One model call per query | [4] |
-
-This pass found no newer primary source that changes those recommendations since the sibling doc's 2026-07-26 research date, so it remains the authority for rung 2 [4][9].
+| Contextual chunk prefixes | 49% fewer top-20 failures (vendor-reported) | One LLM pass at ingest | [4] |
+| Cross-encoder rerank | 67% fewer failures with the above (vendor-reported) | One model call per query | [4] |
 
 **Climb signal.** Rung 2 fixes ranking of chunks that match the query; it cannot fix a query that does not match the chunk, the "gap between the input text and the needed knowledge in retrieval" [14]. When misses survive hybrid plus reranking and the failing queries are vague, multi-part or carry filters (*2024 incidents in the billing service*), climb to query-side techniques [14][19].
 
@@ -228,12 +226,12 @@ These techniques change the unit and shape of what is stored, which Dense X show
 
 | Position | Primary statement | Evidence offered | Date |
 |---|---|---|---|
-| No index: agentic grep and file reads | Claude Code's Boris Cherny: "In our testing we found that agentic search out-performed RAG for the kinds of things people use Code for." [30] | Internal testing; no numbers published [30] | 2025-02-24 |
+| No index: agentic grep and file reads | The Hacker News account `bcherny`, replying about Claude Code: "In our testing we found that agentic search out-performed RAG for the kinds of things people use Code for." [30] | Internal testing; no numbers published [30] | 2025-02-24 |
 | Same, with the reasoning | Claude Code drops CLAUDE.md in up front while "primitives like glob and grep" retrieve files just in time, "effectively bypassing the issues of stale indexing and complex syntax trees" [2] | Design rationale [2] | 2025-09-29 |
 | Keep a semantic index | Cursor: semantic search gave "on average 12.5% higher accuracy in answering questions", 6.5% to 23.5% by model; code retention +0.3%, and +2.6% "on large codebases with 1,000 files or more" [31] | Offline eval plus online A/B (vendor-reported) [31] | 2025-11-06 |
 | Ranked structural map | Aider builds a tree-sitter map of definitions and ranks it with "a graph ranking algorithm" on a file-dependency graph, fitted to `--map-tokens`, which "defaults to 1k tokens" [32] | Design; no ablation published [32] | 2023-10-22 |
 
-The honest reading, which `multi-agent-systems-in-practice.md` section 4 documents in more detail, is that the only published A/B is vendor-run and modest on retention, and no one has published the same harness with grep versus a code graph [31]. Both sides agree on a hybrid: Anthropic calls Claude Code's own design "this hybrid model" [2], and Cursor writes that "the combination of these two leads to the best outcomes" [31].
+The honest reading, which `multi-agent-systems-in-practice.md` section 4 documents in more detail, is that the only published A/B is vendor-run and modest on retention [31]. Both sides agree on a hybrid: Anthropic calls Claude Code's own design "this hybrid model" [2], and Cursor writes that "the combination of these two leads to the best outcomes" [31].
 
 **Cost.** Every loop iteration is another model call and another set of tool results in the window; HippoRAG's comparison puts iterative retrieval like IRCoT at 10 to 30 times the cost of its single-step method [38]. Section 9's budget and compaction rules apply with more force here [2][61].
 
@@ -241,7 +239,7 @@ The honest reading, which `multi-agent-systems-in-practice.md` section 4 documen
 
 ## 6. Graph RAG
 
-**Microsoft GraphRAG.** An LLM builds "an entity knowledge graph from the source documents", then pregenerates "community summaries for all groups of closely related entities"; global questions are answered by map-reduce over those summaries [33]. On "global sensemaking questions over datasets in the 1 million token range" it gave "substantial improvements over a conventional RAG baseline for both the comprehensiveness and diversity of generated answers" [33]. The repository warns: "GraphRAG indexing can be an expensive operation, please read all of the documentation to understand the process and costs involved, and start small" [34]. DRIFT search (2024-10-31) adds community information to local search; it beat local search on comprehensiveness "78% of the time" and on diversity "81% of the time" [35].
+**Microsoft GraphRAG.** An LLM builds "an entity knowledge graph from the source documents", then pregenerates "community summaries for all groups of closely related entities"; global questions are answered by map-reduce over those summaries [33]. On "global sensemaking questions over datasets in the 1 million token range" it gave "substantial improvements over a conventional RAG baseline for both the comprehensiveness and diversity of generated answers" [33]. The repository warns: "GraphRAG indexing can be an expensive operation, please read all of the documentation to understand the process and costs involved, and start small" [34]. DRIFT search (2024-10-31) adds community information to local search; it beat local search on comprehensiveness "78% of the time" and on diversity "81% of the time" (vendor-reported) [35].
 
 **Cheaper variants.** LazyGraphRAG (2024-11-25) defers LLM work to query time: "LazyGraphRAG data indexing costs are identical to vector RAG and 0.1% of the costs of full GraphRAG", with "comparable answer quality to GraphRAG Global Search for global queries, but more than 700 times lower query cost" (vendor-reported) [36]. LightRAG combines graph structure with vectors in "a dual-level retrieval system" and adds "an incremental update algorithm" for new data [37].
 
@@ -254,16 +252,16 @@ The honest reading, which `multi-agent-systems-in-practice.md` section 4 documen
 | "recent studies report that GraphRAG frequently underperforms vanilla RAG on many real-world tasks" | GraphRAG-Bench [41] |
 | "basic RAG is comparable to or outperforms GraphRAG in simple fact retrieval tasks" | GraphRAG-Bench v3, observation 1 [41] |
 | GraphRAG models "show a clear advantage in complex reasoning, Contextual Summarize, and creative generation" | GraphRAG-Bench v3, observation 2 [41] |
-| Average tokens per query on its Novel dataset: vanilla RAG 879, MS-GraphRAG local 38,707, global 331,375, HippoRAG2 1,008 | GraphRAG-Bench v3, Figure 9 [41] |
+| Average tokens per query on its Novel dataset: vanilla RAG 879, MS-GraphRAG local 38,707, global 331,375, HippoRAG2 1,008 | GraphRAG-Bench v3, Figure 8 [41] |
 | RAG and GraphRAG show "distinct strengths" by task; combining them gives "consistent performance improvements" | RAG vs. GraphRAG [40] |
 
-The same GraphRAG-Bench text also puts global search prompts at up to about 40,000 tokens, which does not match its own Figure 9 average; treat the token numbers as order-of-magnitude [41].
+The same GraphRAG-Bench text also puts global search prompts at up to about 40,000 tokens, which does not match its own Figure 8 average; treat the token numbers as order-of-magnitude [41].
 
 **Construction cost and quality.** Every LLM-built graph pays an extraction pass over the whole corpus [33][34], HippoRAG 2 confirms the factual-recall regression [39], and GraphRAG-Bench attributes it to graph processing that "may introduce redundant or noisy information for simpler queries" [41].
 
 **Decision rule.** Global, thematic questions over a large narrative corpus: GraphRAG global or LazyGraphRAG [33][36]. Multi-hop entity questions: HippoRAG 2 class, which keeps token cost near vanilla RAG [39][41]. Simple fact lookup: stay on rungs 2 to 4 [41]. Route between them rather than replacing vector RAG [40].
 
-**Climb signal.** If the corpus is source code, the entities and edges already exist precisely in the language toolchain; do not ask an LLM to guess them [43][48].
+**Climb signal.** If the corpus is source code, definitions and references are already computed by language tooling: SCIP indexers and language servers expose them directly [43][48].
 
 ## 7. Code graphs and code intelligence as context
 
@@ -283,7 +281,7 @@ The same GraphRAG-Bench text also puts global search prompts at up to about 40,0
 
 **Freshness is the hard part.** Claude Code's stated reason for grep is avoiding "stale indexing" [2]. Cursor's answer is a Merkle tree "which lets it detect exactly which files and directories have changed without reprocessing everything", plus reuse of a teammate's index: time-to-first-query fell from 7.87 seconds to 525 milliseconds at the median and from 4.03 hours to 21 seconds at the 99th percentile (vendor-reported) [53]. Stack graphs made incrementality a design constraint for the same reason [45].
 
-**How to expose it to an agent.** The useful surface is small and verb-shaped: symbol search, definition, references (callers), callees, and impact of a change, returning short ranked lists rather than files [43][48][52]. Tool design and naming are covered in `mcp-server-tool-design.md`.
+**How to expose it to an agent.** The primitives on offer are "Go to definition, Find references, and Find implementations" from SCIP [43], symbol-based definition and reference lookup from language servers [48], and entity search with multi-hop traversal over a dependency graph in LocAgent [52]; this doc's recommended tool surface is in Synthesis, and tool design is covered in `mcp-server-tool-design.md`.
 
 **Climb signal.** When the agent's problem is not finding code but remembering decisions, preferences and facts across sessions and sources, the next rung is memory [54][60].
 
@@ -294,17 +292,17 @@ The same GraphRAG-Bench text also puts global search prompts at up to about 40,0
 | System | Idea | Claim | Status of the claim |
 |---|---|---|---|
 | MemGPT (now Letta) | "virtual context management" modelled on OS memory tiers, moving data between fast and slow memory [54] | Handles documents and multi-session chat beyond the window [54] | Qualitative [54] |
-| Mem0 | Extract, consolidate and retrieve salient facts; optional graph memory [55] | 26% relative LLM-as-a-Judge gain over the OpenAI baseline; 91% lower p95 latency and over 90% token savings versus full context on LoCoMo [55] | Disputed [58][59] |
-| Zep / Graphiti | "temporally-aware knowledge graph engine" over conversations and business data [42] | DMR 94.8% vs 93.4% for MemGPT; LongMemEval accuracy up to +18.5% with 90% lower latency [42] | Vendor paper [42] |
+| Mem0 | Extract, consolidate and retrieve salient facts; optional graph memory [55] | 26% relative LLM-as-a-Judge gain over the OpenAI baseline; 91% lower p95 latency and over 90% token savings versus full context on LoCoMo [55] | Self-reported; disputed [58][59] |
+| Zep / Graphiti | "temporally-aware knowledge graph engine" over conversations and business data [42] | DMR 94.8% vs 93.4% for MemGPT; LongMemEval accuracy up to +18.5% with 90% lower latency [42] | Self-reported (vendor paper) [42] |
 | Anthropic memory tool | Claude "stores what it learns in files under /memories"; the tool "operates client-side" and your handler maps the path to storage [60] | Not a benchmark claim [60] | Product docs [60] |
 
 **The benchmarks.** LoCoMo dialogues average "300 turns and 9K tokens" over "up to 35 sessions" [56]. LongMemEval has 500 questions testing five abilities (extraction, multi-session reasoning, temporal reasoning, knowledge updates, abstention) and found "a 30% accuracy drop" for commercial assistants and long-context LLMs [57].
 
-**The disputes.** Zep's rebuttal to Mem0 (2025-05-06) argues Mem0's paper rests on "a flawed benchmark (LoCoMo) and a demonstrably incorrect implementation of a competitor system (Zep)", notes LoCoMo's Category 5 "was unusable due to missing ground truth answers", and later corrected its own figure to "75.14% +/- 0.17" [58]. Letta (2025-08-12) reported that an agent "simply storing conversation histories in files" scored 74.0% on LoCoMo with GPT-4o mini, above "Mem0's reported 68.5%", and concluded it is "much more important to consider whether an agent will be able to effectively use a retrieval tool" than the retrieval mechanism [59]. Treat every memory leaderboard number as vendor-run until reproduced [58][59].
+**The disputes.** Zep's rebuttal to Mem0 (2025-05-06) argues Mem0's paper rests on "a flawed benchmark (LoCoMo) and a demonstrably incorrect implementation of a competitor system (Zep)", notes LoCoMo's Category 5 "was unusable due to missing ground truth answers", and later corrected its own figure to "75.14% +/- 0.17" [58]. Letta (2025-08-12) reported that an agent "simply storing conversation histories in files" scored 74.0% on LoCoMo with GPT-4o mini (vendor-reported), above "Mem0's reported 68.5%", and concluded it is "much more important to consider whether an agent will be able to effectively use a retrieval tool" than the retrieval mechanism [59]. Every figure in this subsection was measured by a memory vendor on its own or a competitor's product [55][58][59].
 
 **Context management primitives from the model vendor.** Anthropic's context editing clears stale tool results with `clear_tool_uses_20250919` once context crosses a threshold, clears thinking blocks with `clear_thinking_20251015`, and offers SDK compaction, noting "server-side compaction is generally preferred" [61].
 
-**"Context lake": a vendor label, not a standard.** The term has at least three incompatible public definitions:
+**"Context lake": a vendor label, not a standard.** The term has four published definitions from three vendors, and they do not agree:
 
 | Who | Definition (verbatim) | Emphasis |
 |---|---|---|
@@ -347,17 +345,17 @@ LIMIT 20;
 
 Retrieval decides what is eligible; assembly decides what the model actually sees, in what order, with what labels [2][72].
 
-| Lever | Evidence | Rule |
-|---|---|---|
-| Token budget | Anthropic: the "smallest set of high-signal tokens" [2] | Fix a budget per call; fill by marginal value, not top-k |
-| Ordering | Performance "is often highest when relevant information occurs at the beginning or end of the input context" and degrades in the middle [72] | Strongest evidence at the edges |
-| Diversity | MMR "strives to reduce redundancy while maintaining query relevance"; λ=1 is plain relevance ranking, λ=0 maximal diversity [73] | Penalise similarity to already-chosen chunks |
-| Deduplication | Near-duplicates waste budget and add noise [7][73] | Hash plus near-duplicate threshold before MMR |
-| Compression | LLMLingua allows "up to 20x compression with little performance loss" on GSM8K, BBH, ShareGPT and Arxiv-March23 [74] | Compress long, low-precision context, not instructions |
-| Provenance | Citations let users "track and verify the sources" [75] | Tag every chunk with a stable source ID |
-| Just-in-time vs preload | Agents keep "lightweight identifiers" and load on demand; hybrid preloads some data [2] | Preload stable, small, always-needed context; fetch the rest |
-| Compaction and notes | Compaction, structured note-taking, and sub-agents that return "a condensed, distilled summary", often 1,000 to 2,000 tokens [2]; Manus's `todo.md` "recitation" [76] | Summarise and restart long loops; keep plans in files |
-| Tool-result clearing | `clear_tool_uses_20250919` drops stale results past a threshold [61] | Clear in chunks; see the caching doc for prefix effects |
+| Lever | Evidence |
+|---|---|
+| Token budget | Anthropic: the "smallest set of high-signal tokens" [2] |
+| Ordering | Performance "is often highest when relevant information occurs at the beginning or end of the input context" and degrades in the middle [72] |
+| Diversity | MMR "strives to reduce redundancy while maintaining query relevance"; λ=1 is plain relevance ranking, λ=0 maximal diversity [73] |
+| Deduplication | Carbonell and Goldstein found retrieved passages "often contain duplicate or near-replication in the sentences" and that "MMR reduces or eliminates such redundancy" [73] |
+| Compression | LLMLingua allows "up to 20x compression with little performance loss" on GSM8K, BBH, ShareGPT and Arxiv-March23 [74] |
+| Provenance | Citations let users "track and verify the sources" [75] |
+| Just-in-time vs preload | Agents keep "lightweight identifiers" and load on demand; hybrid preloads some data [2] |
+| Compaction and notes | Compaction, structured note-taking, and sub-agents that return "a condensed, distilled summary", often 1,000 to 2,000 tokens [2]; Manus's `todo.md` "recitation" [76] |
+| Tool-result clearing | `clear_tool_uses_20250919` drops stale results past a threshold [61] |
 
 Caching interactions (what invalidates a prefix, why clearing should be chunky) are in `llm-token-cache-efficiency.md`. Manus's cache-first stance is the counterweight to aggressive per-turn editing: stable prefixes are worth protecting [76].
 
@@ -473,7 +471,7 @@ Ragas positions these as usable "without having to rely on ground truth human an
 
 **LLM-judge caveats.** MT-Bench found strong judges reach "over 80% agreement" with humans, and also documented "position, verbosity, and self-enhancement biases" [83]. Mem0 versus Zep is a live example of judge-scored benchmarks producing contested results [55][58].
 
-**Gating retrieval changes in CI.** Seven-failure-points' lesson that validation "is only feasible during operation" means the golden set must keep growing from production misses [8]. A workable gate: run component metrics on every retrieval change, end-to-end triad metrics on a fixed sample, fail the build on regressions beyond a tolerance, and report judge scores with the judge model pinned [77][81][83].
+**Gating retrieval changes in CI.** The failure-points paper's lesson is that validation "is only feasible during operation" [8]; the gate this doc recommends is in Synthesis.
 
 ## 11. Decision table: the lowest rung that suffices
 
@@ -483,7 +481,7 @@ Ragas positions these as usable "without having to rely on ground truth human an
 | Docs, any size | Keyword and identifier heavy | Low latency | 2: hybrid plus rerank | [4][9] |
 | Docs with metadata | Filters, such as *2025 incidents in service X* | One extra call OK | 3: self-query | [19] |
 | Docs, model knows the domain | Short, vague | One extra call OK | 3: HyDE or Query2doc | [10][11] |
-| Internal jargon | Short, vague | Any | 2, plus synonyms in the index; avoid LLM expansion | [13] |
+| Internal jargon | Short, vague | Any | 2: hybrid plus rerank; avoid LLM expansion | [9][13] |
 | Scanned PDFs, slides, tables | Visual layout matters | Storage OK | 4: page-image multi-vector | [21] |
 | Long narrative docs | Whole-document questions | Indexing spend OK | 4: RAPTOR-style summaries | [23] |
 | Any | Multi-hop | Seconds of latency OK | 5: iterative or agentic retrieval | [17][29] |
@@ -503,18 +501,48 @@ Climb only when your eval says so: every rung above 2 adds latency, cost or an i
 
 | Claim | What the evidence says |
 |---|---|
-| *RAG means a vector database* | BM25 is "a robust baseline" [9]; Claude Code retrieves with grep and no index [2][30]; a file-based agent scored 74.0% on LoCoMo [59] |
+| *RAG means a vector database* | BM25 is "a robust baseline" [9]; Claude Code retrieves with grep and no index [2][30]; a file-based agent scored 74.0% on LoCoMo (vendor-reported) [59] |
 | *Long context windows killed RAG* | Long context wins on quality when resourced, RAG on cost [5]; 11 of 13 models fall below half their baseline at 32K without literal matches [6] |
 | *GraphRAG is strictly better* | Basic RAG matches or beats it on simple facts at a fraction of the tokens [41]; indexing is "expensive" [34] |
 | *Agents do not need an index* | Cursor measured +12.5% QA accuracy with semantic search (vendor-reported) [31]; LSP gives symbol navigation grep cannot [48] |
-| *More context is better* | Performance degrades in the middle [72] and with length [7]; Anthropic cut over 80% of a system prompt with no measured loss [3] |
-| *Embeddings are enough for code* | Precise navigation comes from compiler-grade indexers and language servers [44][48]; graph-guided localization reaches 92.7% file-level accuracy [52] |
-| *Context lake is an industry standard* | Three vendors' incompatible definitions, no open spec [62][64][65][66] |
+| *More context is better* | Performance degrades in the middle [72] and with length [7]; Anthropic cut over 80% of a system prompt with no measured loss (vendor-reported) [3] |
+| *Embeddings are enough for code* | Precise navigation comes from compiler-grade indexers and language servers [44][48]; graph-guided localization reaches up to 92.7% file-level accuracy [52] |
+| *Context lake is an industry standard* | Four published definitions from three vendors, no open spec [62][64][65][66] |
 
 ## Synthesis (inferred)
 
 **The ladder as a decision rule.** Measure first, then climb one rung at a time, and only on the failure your eval shows. Rung 0 and rung 2 cover most document corpora; rung 3 is a per-query-type patch, not a default; rung 4 is chosen by document shape; rung 5 by question shape; rung 6 only for global or multi-hop entity questions; rung 7 is the native structure for code and should come from the toolchain, not an LLM; rung 8 is governance more than retrieval; rungs 9 and 10 apply at every level. A system that skipped rung 10 is not on any rung; it is guessing.
 
+**Rules this doc draws from the cited sections.** The tables below are the doc's own guidance, mapped onto rows in sections 1 and 9.
+
+| FP | Usual fix (rung) |
+|---|---|
+| 1 Missing Content | Abstention prompt, coverage audit (9, 10) |
+| 2 Missed the Top Ranked Documents | Hybrid and reranking (2) |
+| 3 Not in Context, consolidation strategy limitations | Budget and ordering (9) |
+| 4 Not Extracted | Less noise, ordering (9) |
+| 5 Wrong Format | Prompt and output schema |
+| 6 Incorrect Specificity | Query rewriting (3) |
+| 7 Incomplete | Decomposition, agentic loops (3, 5) |
+
+| Lever (section 9) | Rule |
+|---|---|
+| Token budget | Fix a budget per call; fill by marginal value, not top-k |
+| Ordering | Strongest evidence at the edges |
+| Diversity | Penalise similarity to already-chosen chunks |
+| Deduplication | Hash plus near-duplicate threshold before MMR |
+| Compression | Compress long, low-precision context, not instructions |
+| Provenance | Tag every chunk with a stable source ID |
+| Just-in-time vs preload | Preload stable, small, always-needed context; fetch the rest |
+| Compaction and notes | Summarise and restart long loops; keep plans in files |
+| Tool-result clearing | Clear in chunks; see the caching doc for prefix effects |
+
+**Code tooling.** If the corpus is code, do not ask an LLM to extract entities and edges that the language toolchain already computes (section 7). Expose code intelligence to agents as a small, verb-shaped surface: symbol search, definition, references (callers), callees, and the impact of a change, each returning short ranked lists of IDs rather than whole files.
+
+**Evaluation gate.** Grow the golden set from production misses, since validation only becomes possible during operation (section 10). Run component metrics on every retrieval change and end-to-end triad metrics on a fixed sample, fail the build on regressions beyond a tolerance, and report judge scores with the judge model pinned.
+
+**What this pass did not find.** No published study runs the same agent harness on the same tasks with grep versus a code graph and reports the difference; Cursor's A/B compares semantic search with grep, not graphs (section 5). No primary source newer than the sibling doc's 2026-07-26 research date changed the rung 2 recommendations.
+
 **Reference architecture for a small team's context lake.** One Postgres (pgvector plus a real BM25 extension) as the system of record for chunks, with columns for `source_uri`, `chunk_no`, `updated_at`, `acl_groups` and a content hash; row security for permissions; a change-driven vectorizer (pgai-style or a queue fed by source webhooks) for freshness; a code-intelligence service (LSP or SCIP index) kept separate because its freshness model is per-commit; file-based agent memory with explicit write tools before any memory product; one MCP server exposing a handful of verb-shaped tools (search, fetch by ID, symbol lookup, references) that return IDs plus short excerpts, so the agent fetches just in time; an assembly layer like the example above; and a golden set wired into CI. Move vectors to an object-store-native index only when Postgres storage cost, not query latency, becomes the constraint. Calling this a "context lake" is optional; the properties are what matter.
 
-**Application note for this corpus (inferred).** The mx techniques corpus is 82 docs and 2,857 chunks in Postgres with pgvector and `text-embedding-3-small`, served through MCP `rag_*` tools, alongside a separate code-graph MCP server. At roughly 1,200 characters per chunk that is on the order of 3.4 million characters, roughly 850,000 tokens at 4 characters per token, well above the rung 0 threshold, so retrieval is justified. Exposing retrieval as tools the agent calls on demand, plus a code graph, puts the stack at rung 5 for access pattern and rung 7 for code, but its retrieval core sits at rung 1 to 2: whether the lexical arm actually contributes is the open question `rag-retrieval-fusion-and-chunking.md` raised. The next cheapest move is not a graph or a memory layer. It is rung 10 then rung 2: build the 50 to 100 query golden set, confirm the lexical arm moves rankings (or replace it with BM25 and RRF), and add a reranker; after that, the assembly rules in section 9 (dedup, MMR, provenance IDs in `rag_*` results) are cheap and directly reduce wasted tokens in agent sessions. GraphRAG is not indicated: the corpus is modest in size, and its questions are mostly "how do I do X", which are local lookups.
+**Application note for this corpus (inferred).** As of 2026-10-05, before this doc is ingested, the mx techniques corpus is 82 docs and 2,857 chunks in Postgres with pgvector and `text-embedding-3-small`, served through MCP `rag_*` tools, alongside a separate code-graph MCP server. At roughly 1,200 characters per chunk that is on the order of 3.4 million characters, roughly 850,000 tokens at 4 characters per token, well above the rung 0 threshold, so retrieval is justified. Exposing retrieval as tools the agent calls on demand, plus a code graph, puts the stack at rung 5 for access pattern and rung 7 for code, but its retrieval core sits at rung 1 to 2: `rag-retrieval-fusion-and-chunking.md` measured its pg_trgm lexical arm as arithmetically incapable of reordering results, and the open question is whether that has been fixed since. The next cheapest move is not a graph or a memory layer. It is rung 10 then rung 2: build the 50 to 100 query golden set, check whether the lexical arm now moves rankings (if not, replace it with BM25 and RRF), and add a reranker; after that, the assembly rules in section 9 (dedup, MMR, provenance IDs in `rag_*` results) are cheap and directly reduce wasted tokens in agent sessions. GraphRAG is not indicated: the corpus is modest in size, and its questions are mostly "how do I do X", which are local lookups.
