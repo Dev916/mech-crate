@@ -43,6 +43,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The weekly research bot can exit 0 without opening a PR; this drives
+      # scripts/research-weekly.sh with a stub claude and checks it notices.
+      - run: scripts/tests/research-weekly-outcome.sh
 
   test:
     name: test (nextest + doc-tests)
