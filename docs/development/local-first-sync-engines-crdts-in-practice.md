@@ -106,7 +106,7 @@ sources:
 
 # Local-First Sync Engines and CRDTs in Practice
 
-Companion to `appendix-consistency-models.md`, which covers the theory (state-based and operation-based CRDTs, G-Counter, PN-Counter, LWW register, OR-Set, strong eventual consistency). This doc is about the engineering decision: what to build an offline-capable, multi-device app on in late 2026, and what goes wrong once it ships. Bracketed numbers refer to the Sources section at the end. Version numbers and project statuses were checked on 2026-10-05 and will drift; section 9 lists what to re-check.
+Companion to `appendix-consistency-models.md`, which covers the theory (state-based and operation-based CRDTs, G-Counter, PN-Counter, LWW register, OR-Set, strong eventual consistency). This doc is about the engineering decision: what to build an offline-capable, multi-device app on in late 2026, and what goes wrong once it ships. Bracketed numbers refer to the Sources section at the end. Version numbers and project statuses were checked on 2026-10-05 and will drift; the closing paragraph of the Synthesis section lists what to re-check.
 
 ## 1. The first question is who orders the writes
 
@@ -116,7 +116,7 @@ Companion to `appendix-consistency-models.md`, which covers the theory (state-ba
 
 **"Sync engine" and "local-first" are now separate terms.** The 2019 Ink & Switch essay set seven ideals (no spinners, work not trapped on one device, network optional, seamless collaboration, the long now, security and privacy by default, user ownership) and already flagged history growth, schema evolution and access control as open problems [8]. By 2025 Adam Wiggins, a co-author, was describing local-first as "a set of principles to give users ownership of their work" and a superset of, or overlap with, sync [6]. A PowerSync recap of Local-First Conf 2025 reports a separate SyncConf track for sync engines as a UX tool [7]. Zero's documentation states the split outright: "Zero is not local-first. It's a client-server system with an authoritative server." [9]
 
-**A taxonomy that still holds.** Mathews' 2023 grouping was replicated data structures (Yjs, Automerge), replicated database tables (ElectricSQL, PowerSync) and replication as protocol (Replicache) [4]. Convex's "map of sync" adds nine axes to place a product on: data size, update rate, structure; input latency, offline support, concurrent clients; centralization, flexibility, consistency [5]. Updated for 2026, there are five architectures:
+**A taxonomy that still holds.** Mathews' 2023 grouping was replicated data structures (Yjs, Automerge), replicated database tables (ElectricSQL, PowerSync) and replication as protocol (Replicache) [4]. Convex's "map of sync" adds nine axes to place a product on: data size, update rate, structure; input latency, offline support, concurrent clients; centralization, flexibility, consistency [5]. Updated for 2026 by this doc, the products below fall into five architectures (the grouping is this doc's own, extending [4] and [5]):
 
 | Architecture | Who resolves conflicts | Examples | Offline writes |
 |---|---|---|---|
@@ -124,7 +124,7 @@ Companion to `appendix-consistency-models.md`, which covers the theory (state-ba
 | Read-path replication from Postgres | Your API (writes are yours) | Electric [38] | Yours to build |
 | Server-authoritative sync with client mutation replay | Server re-runs mutators or accepts uploads | Zero [11], PowerSync [43], Replicache [49], Linear's engine [74] | PowerSync yes; Zero no [10] |
 | Event log with client rebase | Global total order of events | LiveStore [15], Actual Budget's message log [64] | Yes |
-| CRDT documents | The data type's merge function | Automerge, Yjs, Loro | Yes, including peer to peer |
+| CRDT documents | The data type's merge function [1] | Automerge, Yjs, Loro [16][21][27] | Yes, including peer to peer [1] |
 
 ## 2. Sync engines: what each does on the write path
 
@@ -134,9 +134,9 @@ Companion to `appendix-consistency-models.md`, which covers the theory (state-ba
 
 **Zero (Rocicorp).** GA as of March 2026 [13]. A `zero-cache` service holds a Postgres replica and serves incrementally maintained queries; it is Postgres-only, supports "only TypeScript clients", and is recommended for datasets under 100GB [9]. Writes are custom mutators that run optimistically on the client and then again, authoritatively, at your server's push endpoint [11]; permissions are ordinary server code [12]. Offline reads work but "writes are rejected", for a stated reason: "Foreign keys and other constraints can pass while offline, but break when the user reconnects." [10] Its predecessor Replicache "is now in maintenance mode" and existing users are told to migrate to Zero [49].
 
-**LiveStore.** Event-sourced: events are the source of truth and are materialized into SQLite. Sync is Git-like: "Local pending events which haven't been pushed yet need to be rebased on top of the latest upstream events before they can be pushed", which yields a global total order [15]. The project says not to use it when an existing database is the source of truth, and that client data must fit in an in-memory SQLite database [14]. Version 0.4.0 (2026-06-02), Apache-2.0, documented as beta [88].
+**LiveStore.** Event-sourced: events are the source of truth and are materialized into SQLite [15]. Sync is Git-like: "Local pending events which haven't been pushed yet need to be rebased on top of the latest upstream events before they can be pushed", which yields a global total order [15]. The project says not to use it when an existing database is the source of truth, and that client data must fit in an in-memory SQLite database [14]. Version 0.4.0 (2026-06-02), Apache-2.0, documented as beta [88].
 
-**Turso.** Two generations. libSQL embedded replicas read locally and send writes to the remote primary [51]. Turso Sync, on the Rust rewrite of the engine, accepts local writes with explicit `push()` and `pull()` and resolves conflicts as "last push wins" [50]. The March 2025 beta announcement said it was not recommended for production and had no durability guarantees [52], and the engine's latest tag on 2026-10-02 was still a pre-release (`v0.8.2-pre.2`) [85].
+**Turso.** Two generations. libSQL embedded replicas read locally and send writes to the remote primary [51]. Turso Sync, on the Rust rewrite of the engine, accepts local writes with explicit `push()` and `pull()` and resolves conflicts as "last push wins" [50]. The March 2025 beta announcement said it was not recommended for production and had no durability guarantees [52], and the engine tagged `v0.8.2-pre.2` on 2026-10-02 and a non-pre-release `v0.8.2` on 2026-10-06 [85].
 
 **Convex.** Server-authoritative; optimistic updates are rolled back when the mutation completes [53].
 
@@ -172,7 +172,7 @@ Companion to `appendix-consistency-models.md`, which covers the theory (state-ba
 - **Eg-walker** (Gentle and Kleppmann, EuroSys 2025) stores the event graph of index-based operations and builds CRDT state only transiently when merging concurrent edits. The abstract's claim: "Compared to existing CRDTs, it consumes an order of magnitude less memory in the steady state, and loading a document from disk is orders of magnitude faster. Compared to OT, merging long-running branches is orders of magnitude faster." It covers plain text [59]. Loro says it "closely resembles Eg-walker in terms of algorithmic properties" while persisting more ID and integrity data [27].
 - **Ordered lists without a CRDT.** Figma uses fractional indexing with the server assigning a unique position on collision [69].
 
-**Benchmarks, with their conditions.** Joseph Gentle's 2021 run of one editing trace (about 260k edits) took 291s in Automerge 1.0 preview, 0.97s in Yjs 13.5.5 and 0.056s in native Diamond Types; the point was that data structures, not the algorithm, dominated [60]. The crdt-benchmarks B4 table (Yjs 13.6.11, Loro 0.10.1, Automerge 2.1.10) gives parse times of 39ms, 13ms and 1,805ms [61]. Loro's native table (M2 Max, 2024-10-18) gives decode times of 0.189ms for Loro, 2.19ms for diamond-types, 3.82ms for yrs and 506.30ms for automerge, with Loro's own caveat that such numbers "serve as indicators of the absence of performance pitfalls rather than as measures of which project is superior" [62]. Every comparative table found predates Automerge 3 [16][61][62].
+**Benchmarks, with their conditions.** Joseph Gentle's 2021 run of one editing trace (author-reported: Diamond Types is his own library) (about 260k edits) took 291s in Automerge 1.0 preview, 0.97s in Yjs 13.5.5 and 0.056s in native Diamond Types; the point was that data structures, not the algorithm, dominated [60]. The crdt-benchmarks B4 table (Yjs 13.6.11, Loro 0.10.1, Automerge 2.1.10) gives parse times of 39ms, 13ms and 1,805ms [61]. Loro's native table (M2 Max, 2024-10-18) gives decode times of 0.189ms for Loro, 2.19ms for diamond-types, 3.82ms for yrs and 506.30ms for automerge, with Loro's own caveat that such numbers "serve as indicators of the absence of performance pitfalls rather than as measures of which project is superior" [62]. Every comparative table found predates Automerge 3 [16][61][62].
 
 ## 5. Production pitfalls
 
@@ -184,9 +184,9 @@ Companion to `appendix-consistency-models.md`, which covers the theory (state-ba
 
 **Clocks.** Actual Budget orders per-field messages with hybrid logical clocks (wall time, counter, node id), uses a Merkle tree to find where two replicas diverge, and allows one minute of clock drift, rejecting messages from a client whose clock differs by more [64]. It is still actively released [65].
 
-**Schema evolution.** Old clients keep writing old shapes. Cambria proposed bidirectional lenses applied on read and remained a research project; the write-up reports that the team found its own prototype issue tracker "too unstable to be our only system of record during the project" [66]. With an event log, read models are rebuilt cheaply but every historical event must stay readable [14].
+**Schema evolution.** Old clients keep writing old shapes, which is the problem Cambria set out to solve [66]. Cambria proposed bidirectional lenses applied on read and remained a research project; the write-up reports that the team found its own prototype issue tracker "too unstable to be our only system of record during the project" [66]. With an event log, read models are rebuilt cheaply but every historical event must stay readable [14].
 
-**Undo.** Undo must revert only the local user's operations. Loro's `UndoManager` works this way [67]; Figma's rule is that undoing a lot, copying something, and redoing back to the present should leave the document unchanged [68].
+**Undo.** Undo should revert only the local user's operations, which is how Loro's `UndoManager` behaves [67]; Figma's rule is that undoing a lot, copying something, and redoing back to the present should leave the document unchanged [68].
 
 **Browser storage.** Safari's tracking prevention deletes "all of a website's script-writable storage after seven days of Safari use without user interaction on the site", with installed home-screen web apps exempt [70]. Elsewhere, best-effort storage is evicted a whole origin at a time under pressure unless `navigator.storage.persist()` is granted [71]. For SQLite in the browser, the official `opfs` VFS needs COOP/COEP headers; `opfs-sahpool` does not and has "the highest OPFS performance" but "does not support multiple simultaneous connections" [54]. wa-sqlite is a maintained alternative [55].
 
@@ -198,12 +198,12 @@ Companion to `appendix-consistency-models.md`, which covers the theory (state-ba
 
 ## 6. What shipped products chose
 
-- **Figma.** "Figma isn't using true CRDTs though." Server-authoritative last-write-wins per property per object; "Simultaneous editing of the same text value doesn't work in Figma." [68]
+- **Figma.** "Figma isn't using true CRDTs though." Server-authoritative last-write-wins per property per object; "simultaneous editing of the same text value doesn't work in Figma." [68]
 - **Linear.** A custom engine in which the server assigns a monotonically increasing sync id giving a total order, with a client object graph persisted to IndexedDB and a transaction queue. This rests on a community reverse-engineering write-up [74]; Linear's own account is a recorded talk [75].
-- **Notion.** Offline mode (December 2025) turned the SQLite cache into a durable store, tracks each reason a page is offline ("we should only remove a page from the offline set when the last reason disappears"), and "pages that are marked as available offline are dynamically migrated to our new CRDT data model for conflict-resolution" [73]. The post does not name the CRDT.
+- **Notion.** Offline mode (December 2025) turned the SQLite cache into a durable store, tracks each reason a page is offline ("We should only remove a page from the offline set when the last reason disappears"), and "pages that are marked as available offline are dynamically migrated to our new CRDT data model for conflict-resolution" [73]. The post does not name the CRDT.
 - **Actual Budget.** Per-field LWW messages in SQLite, hybrid logical clocks, a Merkle tree and a small sync server [64].
 
-**What practitioners argue (opinion, not established fact).** A September 2025 essay by the founder of SQLite AI argued that local-first apps are rare because sync makes every app a distributed system, and proposed hybrid logical clocks plus CRDTs over SQLite [83]. In the 485-comment Hacker News thread, commenters replied that adopting a CRDT forces its data model onto the whole application, and that no algorithm can decide which of two users' conflicting font choices should win, which is why many products require being online to edit [82].
+**What practitioners argue (opinion, not established fact).** A September 2025 essay by the founder of SQLite AI argued that local-first apps are rare because sync makes every app a distributed system, and proposed hybrid logical clocks plus CRDTs over SQLite [83]. In the 485-comment Hacker News thread, commenters replied that adopting a CRDT forces its data model onto the whole application, and that, as one commenter put it, "There is definitely no general solution but for some domains there may be acceptable solutions", with merges of code best left to the human user [82].
 
 ## 7. Rust and Swift
 
@@ -249,7 +249,7 @@ These are inferences drawn across the sources above; they are not themselves cit
 
 **Connection to our own repos.** hq and meetnotes describe themselves as local-first in the single-machine sense (one laptop, local Postgres). None of the above applies until one of them needs a second device or a second user writing offline; at that point rung 3 or 4 is the likely fit.
 
-**What would change this doc.** Zero supporting offline writes or native clients; Yjs 14 going stable; an independent benchmark that includes Automerge 3; Keyhive leaving pre-alpha; Turso Sync shipping a non-pre-release engine with durability guarantees; Jazz 2 leaving alpha; Electric dropping or de-emphasizing the Postgres sync service.
+**What would change this doc.** Zero supporting offline writes or native clients; Yjs 14 going stable; an independent benchmark that includes Automerge 3; Keyhive leaving pre-alpha; Turso documenting durability guarantees for Sync (the engine itself left pre-release with `v0.8.2` on 2026-10-06 [85]); Jazz 2 leaving alpha; Electric dropping or de-emphasizing the Postgres sync service.
 
 ## Sources
 
