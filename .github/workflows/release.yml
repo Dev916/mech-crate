@@ -15,6 +15,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # The pinned Rust toolchain. Must equal `channel` in rust-toolchain.toml;
+  # the ci.yml lint job checks every workflow and fails on a mismatch.
+  RUST_TOOLCHAIN: "1.99.0"
   RELEASES_REPO: unyform-ai/mech-crate-releases
   # TAP_REPO is where the tap-bump job opens the Formula/mechcrate.rb PR.
   TAP_REPO: unyform-ai/homebrew-tap
@@ -94,8 +97,9 @@ jobs:
       MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
         with:
@@ -313,7 +317,9 @@ jobs:
       TRIPLE: ${{ matrix.triple }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-${{ matrix.triple }}

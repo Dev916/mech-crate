@@ -12,6 +12,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The pinned Rust toolchain. Must equal `channel` in rust-toolchain.toml;
+  # the ci.yml lint job checks every workflow and fails on a mismatch.
+  RUST_TOOLCHAIN: "1.99.0"
 
 jobs:
   lint:
@@ -20,8 +23,22 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # One source of truth for the compiler version: rust-toolchain.toml.
+      # Every workflow repeats it as RUST_TOOLCHAIN (the action cannot read
+      # the file), so this step refuses to lint when any copy has drifted.
+      - name: Workflows must pin the toolchain rust-toolchain.toml pins
+        run: |
+          set -euo pipefail
+          file="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)"
+          mapfile -t pins < <(grep -h '^  RUST_TOOLCHAIN:' .github/workflows/*.yml | tr -d '" ' | cut -d: -f2 | sort -u)
+          if [[ -z "$file" || "${#pins[@]}" -ne 1 || "${pins[0]}" != "$file" ]]; then
+            echo "::error::rust-toolchain.toml pins '$file' but the workflows pin '${pins[*]}'; change them together"
+            exit 1
+          fi
+          echo "toolchain $file pinned consistently"
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
@@ -48,7 +65,9 @@ jobs:
       MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
@@ -76,8 +95,9 @@ jobs:
       MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
@@ -107,7 +127,9 @@ jobs:
       MX_RAG_TEST_DATABASE_URL: postgres://postgres@localhost:55433/mx_rag
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
