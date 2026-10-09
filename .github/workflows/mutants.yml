@@ -23,6 +23,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The pinned Rust toolchain. Must equal `channel` in rust-toolchain.toml;
+  # the ci.yml lint job checks every workflow and fails on a mismatch.
+  RUST_TOOLCHAIN: "1.99.0"
 
 permissions:
   contents: read
@@ -38,7 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@v2
 

@@ -166,7 +166,7 @@ mech-crate/
 
 ### Prerequisites
 
-- **Rust 1.75+**: Install via [rustup](https://rustup.rs/)
+- **Rust**: install [rustup](https://rustup.rs/); the repo pins the exact toolchain in `rust-toolchain.toml` and rustup installs it on the first build (upgrades are deliberate PRs, see that file)
 - **Docker**: For testing recipes and running local pgvector (techniques corpus)
 - **Make**: For project Makefiles
 
