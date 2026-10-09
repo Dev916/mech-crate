@@ -26,8 +26,10 @@
 set -u
 export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 SRC="${MECH_CRATE_SOURCE:-$HOME/.mech-crate/research-source}"
-WT="$HOME/.mech-crate/research-worktree"
-LOG="$HOME/.mech-crate/research-cron.log"
+# RESEARCH_WORKTREE and RESEARCH_LOG exist for the test harness
+# (scripts/tests/research-weekly-outcome.sh); production uses the defaults.
+WT="${RESEARCH_WORKTREE:-$HOME/.mech-crate/research-worktree}"
+LOG="${RESEARCH_LOG:-$HOME/.mech-crate/research-cron.log}"
 mkdir -p "$HOME/.mech-crate"
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG"; }
 
@@ -54,14 +56,34 @@ fi
 export MECH_CRATE_ROOT="$WT"
 cd "$WT" || exit 1
 
-timeout 7200 claude -p "Invoke the technique-research skill (Skill tool, skill: technique-research) in autonomous mode: no topic given: follow its Phase 0 (Hacker News trend pulse, then the autonomous ladder). Follow the skill exactly. The repo is \$MECH_CRATE_ROOT ($WT); branch research/<slug> off origin/main there." \
+# Headless print mode gives background subagents only 600 s after the model's
+# turn ends and then terminates WITH EXIT 0. The 2026-09-28 run died that way
+# while its web-research subagent was still working, and opened no PR. 0 means
+# wait until they report (the model is then re-invoked); `timeout` is the bound.
+export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0
+
+RUN_OUT=$(mktemp "${TMPDIR:-/tmp}/research-weekly.XXXXXX")
+timeout 7200 claude -p "Invoke the technique-research skill (Skill tool, skill: technique-research) in autonomous mode: no topic given: follow its Phase 0 (Hacker News trend pulse, then the autonomous ladder). Follow the skill exactly. The repo is \$MECH_CRATE_ROOT ($WT); branch research/<slug> off origin/main there. This run is headless: nobody will prompt you again. If you dispatch a subagent, keep working on the other steps; if you have to stop and wait for it, say so, and you will be re-invoked when it reports. The run is only finished when the PR is open: end by printing its URL on a line of its own." \
   --allowedTools "Read" "Write" "Edit" "Glob" "Grep" "Skill" "Agent" "TodoWrite" "WebSearch" "WebFetch" "ToolSearch" \
     "Bash(git:*)" "Bash(gh pr:*)" "Bash(gh issue:*)" "Bash(cargo:*)" "Bash(mx:*)" "Bash(curl:*)" "Bash(jq:*)" "Bash(date:*)" \
     "Bash(ls:*)" "Bash(cat:*)" "Bash(grep:*)" "Bash(mkdir:*)" "Bash(head:*)" "Bash(tail:*)" "Bash(wc:*)" \
     "mcp__mx__rag_context" "mcp__mx__rag_search" "mcp__mx__rag_search_category" "mcp__mx__rag_find_implementation" \
     "mcp__mx__rag_get_guidance" "mcp__mx__rag_compare_approaches" "mcp__mx__rag_find_related" "mcp__mx__rag_health" \
     "mcp__x__search_recent" "mcp__x__get_user" \
-  >> "$LOG" 2>&1
-rc=$?
-log "run finished (exit $rc)"
+  < /dev/null 2>&1 | tee -a "$LOG" > "$RUN_OUT"
+rc=${PIPESTATUS[0]}
+
+# Exit 0 does not mean a PR exists (see above), so the outcome is read from
+# what the run printed. No PR and no deliberate stop is a failed run: say so in
+# the log and exit non-zero so `launchctl print` shows it.
+pr=$(grep -Eo 'https://github\.com/[^/ ]+/[^/ ]+/pull/[0-9]+' "$RUN_OUT" | tail -n 1)
+if [ -n "$pr" ]; then
+  log "run finished (exit $rc, PR $pr)"
+elif grep -Eq '(^|[^A-Za-z])FRESH([^A-Za-z]|$)|insufficient sources' "$RUN_OUT"; then
+  log "run finished (exit $rc, no PR: the run reported FRESH or insufficient sources)"
+else
+  log "run finished WITHOUT a PR (exit $rc): failed run, read its output above"
+  [ "$rc" -eq 0 ] && rc=3
+fi
+rm -f "$RUN_OUT"
 exit $rc
