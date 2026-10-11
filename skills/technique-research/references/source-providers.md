@@ -29,10 +29,15 @@ Every entry defines:
 
 ### hackernews
 - **Status:** active
-- **Use when:** innovation/project-discovery and "how do experienced engineers argue about this" topics; also the tech-radar sweep
-- **Query:** no-auth Algolia HN API via curl: `curl -s "https://hn.algolia.com/api/v1/search?query=<url-encoded topic>&tags=story&hitsPerPage=15"` (add `&numericFilters=created_at_i><epoch>` for freshness); fetch linked articles for top relevant hits, and comment threads via `tags=comment` when the discussion itself is the signal
-- **Returns:** story/article claims cited by URL (+ HN discussion link), confidence MEDIUM for linked primary sources, LOW for comment claims — comment-only claims must be corroborated or marked inferred
-- **Cost note:** free, no auth, fast; rank by points/num_comments for signal
+- **Use when:** always (second default provider, alongside web): every topic gets one topic search; every autonomous run additionally runs the trend pulse below
+- **Query (topic):** no-auth Algolia HN API via curl: `curl -s "https://hn.algolia.com/api/v1/search?query=<url-encoded topic>&tags=story&hitsPerPage=15"`. For freshness add `&numericFilters=created_at_i%3E<epoch>` — the `>` and any `,` inside `numericFilters` MUST be URL-encoded (`%3E`, `%2C`); sent raw, Algolia answers with a non-JSON error page. Fetch linked articles for the top relevant hits, and comment threads via `tags=comment` when the discussion itself is the signal. Discussion link for a hit: `https://news.ycombinator.com/item?id=<objectID>`.
+- **Query (trend pulse, autonomous runs):** with `since=$(( $(date +%s) - 7*86400 ))`:
+  1. Top stories: `curl -s "https://hn.algolia.com/api/v1/search?tags=story&numericFilters=created_at_i%3E${since}%2Cpoints%3E150&hitsPerPage=40"`
+  2. Ask/Show HN: `curl -s "https://hn.algolia.com/api/v1/search?tags=(ask_hn,show_hn)&numericFilters=created_at_i%3E${since}%2Cpoints%3E80&hitsPerPage=15"`
+  3. Per thin corpus category (from `mcp__mx__rag_health` → `by_category`, lowest 2-3): `curl -s "https://hn.algolia.com/api/v1/search?query=<category keyword>&tags=story&numericFilters=created_at_i%3E${since}%2Cpoints%3E100&hitsPerPage=10"`
+  Parse `hits[].title`, `points`, `num_comments`, `url`, `objectID`, `created_at`. Screen for software-engineering relevance; the front page is mostly general news, so expect to keep 5-10 of 40.
+- **Returns:** story/article claims cited by URL (+ HN discussion link), confidence MEDIUM for linked primary sources, LOW for comment claims — comment-only claims must be corroborated or marked inferred. The trend pulse returns candidate topics for `RESEARCH_BACKLOG.md`, never claims.
+- **Cost note:** free, no auth, fast; rank by points/num_comments for signal; the pulse is three to six curl calls and a few thousand tokens of titles
 
 ### context7
 - **Status:** planned
