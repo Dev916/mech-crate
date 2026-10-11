@@ -71,9 +71,9 @@ Two house rules keep the lane honest:
 - Lane tests live beside the suite that owns their subject, not in one central
   file. The test is the first thing whoever fixes it should read.
 
-The two numbers partition the workspace: the lane reports 12 tests, 12 red; the
-gate suite in the same tree reports 427 passed, 12 skipped. If they stop summing
-to 439, either a lane test lost its `#[ignore]` or a gate test grew one.
+The two numbers partition the workspace: the lane reports 11 tests, 11 red; the
+gate suite in the same tree reports 441 passed, 11 skipped. If they stop summing
+to 452, either a lane test lost its `#[ignore]` or a gate test grew one.
 
 `mech-crate-z5i`, the `mx upgrade` discovery defect, is the first row retired the
 intended way. Its test lost the `#[ignore]`, joined the gate, and its row left the
@@ -84,12 +84,22 @@ a command that works instead of one that does not.
 `mech-crate-gjl`, the `mx self-update` source-root defect, is the second, and it
 shows the failure mode the two numbers exist to catch: the fix landed, the test
 joined the gate, the row left the index, and the *counts* stayed where they were
-for two releases. The lane has been 12 since then. They are corrected, and the
-correction is written down in the index rather than applied silently.
+for two releases. They are corrected, and the correction is written down in the
+index rather than applied silently.
+
+`mech-crate-wd9`, the Cloudflare credential defect, is the third, and it retired
+by a route the workflow above does not cover: *replacing* its test rather than
+un-ignoring it. The lane test asserted the contract through a heuristic that only
+holds for a makefile reading one credential name verbatim out of one included
+file. The fix makes `cloudflare.mk` resolve two scopes per credential, so that
+heuristic would have failed against a correct fix. Its subject moved to a suite
+of its own, which holds the same contract behaviourally: real `make` runs against
+scratch project and `HOME` scopes. When a row's test turns out to be the wrong
+shape, the contract is the thing that has to survive, not the assertion.
 
 Several pages in these docs still point at this lane, because pointing at it is
-the alternative to quietly writing around a defect: `mech-crate-vxq`,
-`mech-crate-wd9` and `mech-crate-066` for the
+the alternative to quietly writing around a defect: `mech-crate-vxq` and
+`mech-crate-066` for the
 [infra credential path](/docs/framework/infra-credentials/).
 
 **→ [The lane index on GitHub](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md)**

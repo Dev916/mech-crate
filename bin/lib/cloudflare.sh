@@ -110,7 +110,7 @@ _cf_config_cmd() {
     
     if _cf_is_configured; then
         _cf_load_config
-        echo -e "  ${GREEN}●${NC} Account ID: ${CF_ACCOUNT_ID:-not set}"
+        echo -e "  ${GREEN}●${NC} Account ID: ${CLOUDFLARE_ACCOUNT_ID:-${CF_ACCOUNT_ID:-not set}}"
         echo -e "  ${GREEN}●${NC} Platform: ${CF_DOCKER_PLATFORM:-not set}"
         if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
             echo -e "  ${GREEN}●${NC} API Token: ***configured***"

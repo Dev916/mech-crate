@@ -43,6 +43,8 @@ Three worker types, chosen at `cf-init`:
 | Target | Purpose |
 |---|---|
 | `make cf-setup` | Interactive setup wizard |
+| `make cf-vars` | Show the resolved credentials and the scope they came from |
+| `make cf-check-credentials` | Fail early, with both paths named, when no account id resolves |
 | `make cf-login` / `make cf-whoami` | Authenticate / show auth status |
 | `make cf-status` / `make cf-list` | All apps' status / list configured apps |
 | `make cf-init a=<app> type=<type>` | Initialize an app |
@@ -60,9 +62,15 @@ Three worker types, chosen at `cf-init`:
 | `make cf-restart a=<app>` | Restart the container |
 | `make cf-container-status a=<app>` | Check container status |
 
-Per-app configuration lives in that app's `wrangler.toml`; credentials resolve
-through [`mx infra`](/docs/framework/infra-credentials/) rather than a file in
-the project.
+Per-app configuration lives in that app's `wrangler.toml`. Credentials come from
+[`mx infra`](/docs/framework/infra-credentials/) or from `make cf-setup`, and both
+are read: the environment first, then the project's
+`infra/cloudflare/.env.cloudflare`, then the global
+`~/.mech-crate/config/infra/cloudflare.env`. One
+`mx infra setup cloudflare` per workstation is enough, and `make cf-setup` is the
+override for a project that deploys to a different account. `make cf-vars` prints
+which scope answered; `make cf-check-credentials` fails loudly, naming both paths,
+when none did.
 
 ## The full guides
 

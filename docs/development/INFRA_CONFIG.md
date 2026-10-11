@@ -177,9 +177,18 @@ mx cf config
 ```
 
 **Config Variables:**
-- `CF_ACCOUNT_ID` - Your Cloudflare account ID
+- `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID
 - `CF_DOCKER_PLATFORM` - Docker platform (linux/amd64 or linux/arm64)
 - `CLOUDFLARE_API_TOKEN` - API token for CI/CD (optional)
+
+The two credential names are wrangler's own, so the value in a config file
+reaches the deploy untranslated. `CF_ACCOUNT_ID` / `CF_API_TOKEN` are deprecated
+aliases: still read at their own scope's precedence so an older config keeps
+working, never written. For Cloudflare specifically, both scopes are read with no
+linking required, the project file winning over the global one; `make cf-vars`
+prints which scope supplied the account id and `make cf-check-credentials` fails
+loudly when none did. See `mx-cloudflare-deploy.md` §5 for the as-implemented
+detail.
 
 ### DigitalOcean
 
@@ -241,16 +250,17 @@ For CI/CD pipelines, you typically want to use project-local config with secrets
 ```bash
 # In CI/CD, create the config file directly
 cat > infra/cloudflare/.env.cloudflare << EOF
-CF_ACCOUNT_ID=$CF_ACCOUNT_ID
+CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID
 CF_DOCKER_PLATFORM=linux/amd64
 CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
 EOF
 ```
 
-Or use environment variables directly (MechCrate will fall back to environment):
+Or use environment variables directly. For Cloudflare the environment is the
+highest-precedence scope, above both config files:
 
 ```bash
-export CF_ACCOUNT_ID=...
+export CLOUDFLARE_ACCOUNT_ID=...
 export CLOUDFLARE_API_TOKEN=...
 mx cf deploy myapp
 ```
