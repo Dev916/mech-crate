@@ -1,0 +1,13 @@
+# Pinned on purpose. CI and every developer build use this exact toolchain, so a
+# compiler or clippy upgrade is a deliberate pull request, not a side effect of
+# the stable channel moving (Rust 1.99.0 turned main's required lint check red
+# with no commit on 2026-09-28).
+#
+# To upgrade: change `channel` here and RUST_TOOLCHAIN in every workflow under
+# .github/workflows (the ci.yml lint job fails when they disagree), fix what the
+# new clippy reports, and merge. rustup installs this toolchain on first use in
+# the repo; nothing else on the machine changes.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

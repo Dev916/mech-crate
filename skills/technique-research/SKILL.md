@@ -63,7 +63,7 @@ The autonomous run is a **launchd user agent** (`~/Library/LaunchAgents/com.mech
 - Run now: `launchctl kickstart gui/$(id -u)/com.mechcrate.research-weekly`
 - Pause/off: `launchctl bootout gui/$(id -u)/com.mechcrate.research-weekly`; resume: `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mechcrate.research-weekly.plist`
 - Retime: edit `StartCalendarInterval` in the plist, then bootout + bootstrap
-- Logs/last run: `tail ~/.mech-crate/research-cron.log`
+- Logs/last run: `tail ~/.mech-crate/research-cron.log`. Every run ends with one line: `run finished (exit 0, PR <url>)` on success, `run finished (... no PR: the run reported FRESH or insufficient sources)` for a deliberate stop, or `run finished WITHOUT a PR` (exit 3) for a failed run. The script sets `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` because headless Claude otherwise gives a background subagent 600 s after the model's turn ends and then exits 0 with nothing shipped (the 2026-09-28 run).
 - Template and installer: `scripts/launchd/com.mechcrate.research-weekly.plist` and `scripts/launchd/install-research-weekly.sh` in the repo. The agent runs from a bot-owned clone (`~/.mech-crate/research-source`, fast-forwarded to `origin/main` at every launch), and `~/.claude/skills/technique-research` is a symlink into that clone, so a change to this skill reaches the bot the Monday after it merges with no manual copy.
 
 (Claude Code's in-session CronCreate is NOT used — those jobs are session-only and expire after 7 days. The old `3 9 * * 1` crontab line must not be re-added.)

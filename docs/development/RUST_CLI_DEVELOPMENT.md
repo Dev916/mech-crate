@@ -44,7 +44,7 @@ mech-crate/
 
 ## Prerequisites
 
-- Rust 1.75+ (install via [rustup](https://rustup.rs/))
+- Rust via [rustup](https://rustup.rs/); the exact toolchain is pinned in `rust-toolchain.toml` and installed on the first build
 - Docker (for testing recipes)
 - Make (for project Makefiles)
 
