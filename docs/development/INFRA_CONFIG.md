@@ -32,6 +32,11 @@ mx infra link cloudflare
 mx cf setup
 ```
 
+`mx cf <cmd>` is a thin wrapper over the project's `make cf-<cmd>` targets
+(`make/cloudflare.mk`, present when the project was created with
+`--infra cloudflare`): `mx cf deploy myapp` runs exactly
+`make cf-deploy a=myapp`. `mx cf --help` lists every wrapped target.
+
 ## Hierarchical Config Resolution
 
 When MechCrate needs infrastructure credentials, it looks in this order:
@@ -128,7 +133,7 @@ mx infra link cloudflare
 # Remove link (stop using global config)
 mx infra unlink cloudflare
 
-# Check current config status
+# Check current config status (alias of mx cf vars)
 mx cf config
 ```
 
@@ -172,8 +177,15 @@ mx infra setup cloudflare
 # Project-local setup (if needed)
 mx cf setup
 
-# Check current config source
-mx cf config
+# Show the resolved credentials and which scope supplied them (make cf-vars)
+mx cf vars
+
+# Fail early if no account id resolves (make cf-check-credentials)
+mx cf check-credentials
+
+# Initialize and deploy an app (make cf-init / make cf-deploy)
+mx cf init api.example.com --type=container
+mx cf deploy api.example.com
 ```
 
 **Config Variables:**
@@ -186,9 +198,9 @@ reaches the deploy untranslated. `CF_ACCOUNT_ID` / `CF_API_TOKEN` are deprecated
 aliases: still read at their own scope's precedence so an older config keeps
 working, never written. For Cloudflare specifically, both scopes are read with no
 linking required, the project file winning over the global one; `make cf-vars`
-prints which scope supplied the account id and `make cf-check-credentials` fails
-loudly when none did. See `mx-cloudflare-deploy.md` §5 for the as-implemented
-detail.
+(`mx cf vars`) prints which scope supplied the account id and
+`make cf-check-credentials` (`mx cf check-credentials`) fails loudly when none
+did. See `mx-cloudflare-deploy.md` §5 for the as-implemented detail.
 
 ### DigitalOcean
 
@@ -280,8 +292,8 @@ myproject/
 # Deploy to staging (uses default .env.cloudflare)
 mx cf deploy myapp
 
-# Deploy to production (override with prod config)
-source infra/cloudflare/.env.cloudflare.prod
+# Deploy to production (export the prod config; the environment wins)
+set -a; source infra/cloudflare/.env.cloudflare.prod; set +a
 mx cf deploy myapp
 ```
 
@@ -311,7 +323,7 @@ mx cf config
 
 ```bash
 # Check which config is active
-mx cf config
+mx cf vars
 
 # If linked but want local
 mx infra unlink cloudflare

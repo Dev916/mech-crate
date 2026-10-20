@@ -151,25 +151,6 @@ fn kb_infra_link_writes_marker_and_inspect_resolves_global() {
     );
 }
 
-// ── 4. bd:mech-crate-vxq — phantom `mx cf` command ───────────────────────────
-
-/// `INFRA_CONFIG.md` and the MCP server's resource text both document `mx cf`.
-/// If we keep the docs, the command has to exist (retire this test instead if
-/// the issue is closed by purging the doc references).
-#[test]
-#[ignore = "bd:mech-crate-vxq documented `mx cf` subcommand does not exist"]
-fn kb_mx_cf_subcommand_exists() {
-    let out = mx()
-        .args(["cf", "--help"])
-        .output()
-        .expect("setup: run mx cf");
-    assert!(
-        out.status.success(),
-        "documented `mx cf` must answer --help, got: {}",
-        stderr_of(&out)
-    );
-}
-
 // ── 5. bd:mech-crate-9be — `recipes apply --fix` is a dead flag ──────────────
 
 /// `--fix` is bound as `_fix` and ignored, so `apply` and `apply --fix` do the

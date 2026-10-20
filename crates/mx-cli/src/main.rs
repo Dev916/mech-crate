@@ -17,9 +17,9 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 mod commands;
 
 use commands::{
-    add::AddCommand, build::BuildCommand, cc_plugin::CcPluginCommand, dev::DevCommand,
-    docs::DocsCommand, doctor::DoctorCommand, infra::InfraCommand, init::InitCommand,
-    mcp::McpCommand, new::NewCommand, rag::RagCommand, recipes::RecipesCommand,
+    add::AddCommand, build::BuildCommand, cc_plugin::CcPluginCommand, cf::CfCommand,
+    dev::DevCommand, docs::DocsCommand, doctor::DoctorCommand, infra::InfraCommand,
+    init::InitCommand, mcp::McpCommand, new::NewCommand, rag::RagCommand, recipes::RecipesCommand,
     router::RouterCommand, self_update::SelfUpdateCommand, unyform::UnyformCommand,
 };
 
@@ -83,6 +83,9 @@ enum Commands {
 
     /// Manage infrastructure providers
     Infra(InfraCommand),
+
+    /// Cloudflare Workers and Containers (proxied to make cf-*)
+    Cf(CfCommand),
 
     /// MCP server management
     Mcp(McpCommand),
@@ -266,6 +269,7 @@ async fn main() -> Result<()> {
         Commands::Docs(cmd) => cmd.run().await,
         Commands::Router(cmd) => cmd.run().await,
         Commands::Infra(cmd) => cmd.run().await,
+        Commands::Cf(cmd) => cmd.run().await,
         Commands::Mcp(cmd) => cmd.run().await,
         Commands::Rag(cmd) => cmd.run().await,
         Commands::Doctor(cmd) => cmd.run().await,

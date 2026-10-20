@@ -354,9 +354,13 @@ Each recipe provides:
 | `mx infra setup [provider]` | Configure provider credentials |
 | `mx infra list` | List configured providers |
 | `mx infra link <provider>` | Link project to global config |
-| `mx cf setup` | Cloudflare setup wizard |
-| `mx cf init <app>` | Initialize a Cloudflare worker |
-| `mx cf deploy <app>` | Deploy to Cloudflare |
+| `mx cf setup` | Cloudflare setup wizard (project-local credentials) |
+| `mx cf vars` | Show resolved Cloudflare credentials and their source (alias: `mx cf config`) |
+| `mx cf check-credentials` | Fail early when no Cloudflare account id resolves |
+| `mx cf init <app> [--type=worker\|cron\|container]` | Initialize a Cloudflare app |
+| `mx cf deploy <app>` | Deploy an app to Cloudflare production |
+
+`mx cf <cmd>` runs the project's `make cf-<cmd>` target (an app becomes `a=<app>`); `mx cf --help` lists every one.
 
 ## Build Options
 

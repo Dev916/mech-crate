@@ -7,7 +7,7 @@ use_cases:
   - deploying an mx app to Cloudflare Workers + Containers front to back
   - setting up Cloudflare credentials that the deploy toolchain actually reads
   - onboarding an existing apps/<svc> service to the Cloudflare container path
-  - avoiding the documented-but-unimplemented mx cf command and other drift
+  - using the mx cf wrapper over the make cf-* targets, and avoiding doc drift
 summary: The as-implemented mx Cloudflare flow researched from source, covering mx new --infra scaffolding, cf-setup/cf-init onboarding, the Worker+Container runtime model, and the credential model (one canonical variable pair, global-then-project resolution), with an 8-item drift/gap inventory whose credential rows are now closed.
 provenance: researched
 researched: 2026-07-19
@@ -23,7 +23,7 @@ sources:
 
 # mx Cloudflare Deploy (As Implemented)
 
-Companion to `mx-app-playbook.md` (§build: `mx-recipes-and-build.md`). This documents what the Cloudflare path **actually does today**, because two shipped docs describe flows that don't exist — follow this, not `INFRA_CONFIG.md`'s `mx cf` examples (§5). All citations are repo-relative paths in the mech-crate repo.
+Companion to `mx-app-playbook.md` (§build: `mx-recipes-and-build.md`). This documents what the Cloudflare path **actually does today**, because two shipped docs describe flows that don't exist — follow this where the two disagree (§5). `mx cf <cmd>` now exists as a thin wrapper over `make cf-<cmd>` (§6 item 1). All citations are repo-relative paths in the mech-crate repo.
 
 ## 1. The model: Worker + Container via Durable Object
 
@@ -98,13 +98,12 @@ Token absent from both files is fine: wrangler falls back to its OAuth login.
 
 **Still broken (verified; do not send agents down these):**
 - `mx infra link`/`unlink` are stubs (print-only) [infra.rs:307-333], and the two link mechanisms that do exist disagree: the Rust resolver looks for a `.env.linked` marker file [config.rs:117] while the bash scripts look for `MX_INFRA_USE_GLOBAL=true` **inside** the env file [cf-init-app.sh:120]. Neither is ever written by tooling. This matters much less now: the global fallback covers what linking was for, so the common case needs no link at all.
-- **`mx cf <anything>` does not exist.** No `Cf` variant in the CLI command enum [crates/mx-cli/src/main.rs:34-151]; `INFRA_CONFIG.md` (`mx cf setup/config/deploy`) and the MCP server's resource text both document a phantom command.
 
 **Agent rule:** one `mx infra setup cloudflare` per workstation covers every project on it. Add `make cf-setup` only when a single project needs a different account than the rest. When credentials look wrong, run `make cf-vars` first: it names the scope that answered, and that is usually the whole diagnosis.
 
-## 6. Drift & gaps inventory (as of research date; items 2 and 4 closed 2026-09-25)
+## 6. Drift & gaps inventory (as of research date; items 2 and 4 closed 2026-09-25, item 1 closed 2026-10-20)
 
-1. `mx cf` documented in INFRA_CONFIG.md + MCP resources, unimplemented in the CLI.
+1. **Closed 2026-10-20** (bd:mech-crate-vxq). Was: `mx cf` documented in INFRA_CONFIG.md + MCP resources, unimplemented in the CLI. Now `mx cf <cmd>` runs `make cf-<cmd>` in the project root (an app argument becomes `a=<app>`; `mx cf config` is an alias of `mx cf vars`), and `crates/mx-cli/tests/docs_drift.rs` fails if either doc names an mx command the CLI lacks.
 2. **Closed 2026-09-25** (bd:mech-crate-wd9). Was: `CLOUDFLARE_ACCOUNT_ID` (mx infra) vs `CF_ACCOUNT_ID` (toolchain) mismatch, which made global credentials unusable by deploys. Now one canonical pair, with the old spelling read as a deprecated alias (§5).
 3. `mx infra link/unlink` stubs; `.env.linked` marker vs `MX_INFRA_USE_GLOBAL` in-file flag — two incompatible, both unwired.
 4. **Closed 2026-09-25** (same change). Was: `cloudflare.mk` had no global-credential fallback, including the project file only. Now it reads global then project, so the project wins per scope and a global-only workstation deploys (§5).
@@ -115,7 +114,7 @@ Token absent from both files is fine: wrangler falls back to its OAuth login.
 
 ## 7. Agent quick-reference
 
-- CF flow = `make cf-setup` → `make cf-init a=<app> type=container` → edit the app Dockerfile → `make cf-deploy a=<app>`. Never `mx cf` (doesn't exist).
+- CF flow = `make cf-setup` → `make cf-init a=<app> type=container` → edit the app Dockerfile → `make cf-deploy a=<app>`. `mx cf setup` / `mx cf init <app> --type=container` / `mx cf deploy <app>` are the same targets through the CLI.
 - Credentials the deploys read: `CLOUDFLARE_ACCOUNT_ID` (+ optional `CLOUDFLARE_API_TOKEN`), resolved from the environment, then `infra/cloudflare/.env.cloudflare`, then `~/.mech-crate/config/infra/cloudflare.env`. `make cf-vars` prints which scope answered; `make cf-check-credentials` is the guard that fails loudly when none did. `CF_ACCOUNT_ID` is a deprecated alias: read, warned about, never written.
 - Production URL comes from `[env.production] routes` in the app's wrangler.toml; local dev URLs still come from the mx router.
 - The Worker proxies everything to the container; container image versions come from `package.json` (`v<version>`), unlike every other mx build path.

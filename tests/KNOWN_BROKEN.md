@@ -35,7 +35,6 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | bd id | Test | Where | Asserts (once fixed) | Tier |
 |---|---|---|---|---|
 | mech-crate-066 | `kb_infra_link_writes_marker_and_inspect_resolves_global` | `crates/mx-cli/tests/known_broken.rs` | `mx infra link cloudflare` creates the resolver's `.env.linked` marker, after which `mx infra inspect` resolves to the global credentials | integration |
-| mech-crate-vxq | `kb_mx_cf_subcommand_exists` | `crates/mx-cli/tests/known_broken.rs` | The documented `mx cf` subcommand exists (`mx cf --help` exits 0). *Retire this test if the issue is instead closed by purging the doc references.* | integration |
 | mech-crate-9be | `kb_recipes_apply_fix_changes_behavior` | `crates/mx-cli/tests/known_broken.rs` | `mx recipes apply <r> --fix` output differs from a plain apply — i.e. `--fix` performs the advertised dependency-drift comparison (wiremock Unyform stub) | integration |
 | mech-crate-rnj | `kb_both_unyform_clients_use_the_same_org_path_segment` | `crates/mx-mcp-server/tests/known_broken_unyform.rs` | The CLI client (`mx_lib::unyform`) and the MCP client request the same `/v1/orgs/<seg>/recipes` path against a recording wiremock (today: org **id** vs org **slug**) | integration |
 | mech-crate-dpi | `kb_build_platform_reaches_the_build_script` | `crates/mx-cli/tests/known_broken.rs` | `mx build svc --platform linux/arm64` reaches `scripts/build.sh` through the real `make _build` (recording build.sh stub) | integration |
@@ -46,13 +45,13 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | mech-crate-dqw | `kb_doctor_reports_router_status` | `crates/mx-cli/tests/known_broken.rs` | `mx doctor` reports on the router (network / container / port 80) alongside its structure and docker checks | integration |
 | mech-crate-4jw | `corpus::store::tests::kb_lexical_arm_separates_relevant_from_irrelevant` | `crates/mx-lib/src/corpus/store.rs` | With the vector arm held equal (identical embeddings, orthogonal to the query), the lexical arm separates a relevant from an irrelevant ~1.2KB chunk by ≥5× and ≥0.05 of final score. Measured today: **2.18× / 0.0062** | integration (DB) |
 
-11 lane tests, all named `kb_*` (the exceptions, `z5i` and `wd9`, left the lane
-when their fixes landed).
+10 lane tests, all named `kb_*` (the exceptions, `z5i`, `wd9` and `vxq`, left
+the lane when their fixes landed).
 
-**Scoreboard** (`make test-known-broken`): `11 tests run: 0 passed, 11 failed,
-441 skipped`: 11 rows above, 11 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `441 passed, 11 skipped`. Those two numbers
-partition the workspace; if they stop summing to 452, either a lane test lost
+**Scoreboard** (`make test-known-broken`): `10 tests run: 0 passed, 10 failed,
+458 skipped`: 10 rows above, 10 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `458 passed, 10 skipped`. Those two numbers
+partition the workspace; if they stop summing to 468, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -141,6 +140,22 @@ unexpanded-placeholder net to `recipes_conformance.rs` in the shape of Wave 2's
 `__GENERATE_*__` net, and bd:mech-crate-q1w (non-dev `DATABASE_URL` rendering
 empty) extended `templates_env_precedence.rs` to refuse a compose `environment:`
 value that interpolates a name only an `env_file` layer defines.
+
+**bd:mech-crate-vxq** (the phantom `mx cf` command) is the fourth lane row
+retired. The issue allowed either fix, and its lane test said to retire it if the
+docs were purged instead; the command was implemented, so the test's subject
+held, and it was deleted rather than un-ignored because two gate suites now pin
+it more strongly: `cli_surface.rs` sweeps `cf` and five nested `cf` subcommands
+through `--help`, and the new suite below runs the wrapper for real. `mx cf <cmd>`
+is a thin proxy that runs `make cf-<cmd>` in the project root (an app becomes
+`a=<app>`), on the same code path as `mx dev/up/down/logs`. Lane 11 → 10, gate
+441 → 458 (9 in `cf_wrapper.rs`, 3 in `docs_drift.rs`, 5 unit tests on the
+subcommand-to-target mapping), workspace total 452 → 468.
+
+| Suite | Holds |
+|---|---|
+| `cf_wrapper.rs` | `mx cf vars` / `config` / `check-credentials` reach the real shipped `cloudflare.mk` through the wrapper against scratch `HOME` and project scopes; app arguments and `--type` are validated by clap; a project without `make/cloudflare.mk` gets an error naming it (bd:mech-crate-vxq) |
+| `docs_drift.rs` | every `mx ...` invocation `INFRA_CONFIG.md`, `mx-cloudflare-deploy.md` and the MCP `mx://docs/commands` resource teach parses as a real top-level or nested subcommand (`mx <a> [<b>] --help` exits 0), so a documented command cannot outlive its implementation again (bd:mech-crate-vxq) |
 
 ## Notes on placement deviations
 
