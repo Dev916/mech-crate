@@ -301,7 +301,7 @@ Patterns worth extracting that no doc yet covers:
 - **`bin/lib/` is 6,380 lines of dead bash** still shipped in tarballs, with a `scripts/package.sh` comment claiming it is "sourced by mx-mcp" — nothing sources it. `bin/lib/mcp.sh` still manages a Weaviate backend the Rust path replaced.
 - **README-vs-code:** the README advertises "40+ tools" (actual: 47) and "60+ curated docs" (actual: 68); it flags `mx upgrade` as mid-repair, which matches `bd:mech-crate-z5i`. `make help` says `make upgrade` reinstalls to `~/.local/bin`; the target actually copies into `bin/`. `site/apps/site/README.md` is still the astro-recipe scaffold README and describes Vue, PrimeVue, Tailwind, Pinia, Drizzle, Postgres and Redis — none of which the site uses.
 - **Two Traefiks.** `templates/docker/compose/traefik.yml` is a per-project Traefik on network `traefik` binding 8080; it would fight the global `mx-router` for 80/443 if used.
-- **Two Unyform clients.** `crates/mx-lib/src/unyform/` and `crates/mx-mcp-server/src/unyform/` are separate implementations that disagree on the org path segment (id vs slug) — `bd:mech-crate-rnj` holds the red test.
+- **Two Unyform clients.** `crates/mx-lib/src/unyform/` and `crates/mx-mcp-server/src/unyform/` are separate implementations, but they share one org path convention: `mx_lib::unyform::org_url` and `resolve_org_slug` put the org **slug** in `/v1/orgs/{org}` for both (bd:mech-crate-rnj).
 - **`docs/development/repos/` is invisible to the site.** The loader's flat, non-recursive scan means repo profiles are ingested into the corpus but never published — which matches their `publish: false`, but by two independent mechanisms rather than one.
 
 ### Synthesis (inferred)

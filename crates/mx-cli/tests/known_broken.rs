@@ -119,7 +119,8 @@ async fn kb_recipes_apply_fix_changes_behavior() {
         serde_json::json!({
             "api_key": "test-key",
             "url": server.uri(),
-            "org_id": "org_test"
+            "org_id": "org_test",
+            "org_slug": "test"
         })
         .to_string(),
     )

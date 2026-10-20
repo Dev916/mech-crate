@@ -3,6 +3,7 @@
 //! HTTP client for interacting with the Unyform.ai API.
 //! Handles authentication, recipe management, and user operations.
 
+use mx_lib::unyform::{org_url, resolve_org_slug};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -43,6 +44,9 @@ pub struct Credentials {
     pub api_key: Option<String>,
     pub url: Option<String>,
     pub org_id: Option<String>,
+    /// The default org's slug: the segment `/v1/orgs/{org}/...` addresses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub org_slug: Option<String>,
 }
 
 /// Session storage
@@ -178,6 +182,7 @@ impl UnyformClient {
                 api_key: None,
                 url: None,
                 org_id: None,
+                org_slug: None,
             });
         }
         let content = std::fs::read_to_string(&path)?;
@@ -254,16 +259,13 @@ impl UnyformClient {
         Err(UnyformError::NotAuthenticated)
     }
 
-    /// Get the default organization slug
+    /// Get the default organization slug, the `/v1/orgs/{org}` segment.
+    ///
+    /// Resolved by the same rule as the CLI client
+    /// ([`mx_lib::unyform::resolve_org_slug`]) so both address the same org.
     pub fn get_default_org(&self) -> Result<String, UnyformError> {
-        if let Ok(Some(session)) = self.load_session() {
-            if let Some(user) = session.user {
-                if let Some(org) = user.organizations.first() {
-                    return Ok(org.slug.clone());
-                }
-            }
-        }
-        Err(UnyformError::Config("No organization found".to_string()))
+        resolve_org_slug(&self.config_dir)
+            .ok_or_else(|| UnyformError::Config("No organization found".to_string()))
     }
 
     /// Login with API key
@@ -299,6 +301,11 @@ impl UnyformClient {
             api_key: Some(api_key.to_string()),
             url: Some(base_url.to_string()),
             org_id: login_resp.user.organizations.first().map(|o| o.id.clone()),
+            org_slug: login_resp
+                .user
+                .organizations
+                .first()
+                .map(|o| o.slug.clone()),
         };
         self.save_credentials(&creds)?;
 
@@ -361,7 +368,7 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(format!("{}/v1/orgs/{}/recipes", url, org))
+            .get(org_url(&url, &org, "recipes"))
             .header("Authorization", &auth)
             .send()
             .await?;
@@ -388,9 +395,10 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(format!(
-                "{}/v1/orgs/{}/recipes/{}/versions",
-                url, org, recipe_name
+            .get(org_url(
+                &url,
+                &org,
+                &format!("recipes/{}/versions", recipe_name),
             ))
             .header("Authorization", &auth)
             .send()
@@ -433,9 +441,10 @@ impl UnyformClient {
 
         let response = self
             .client
-            .get(format!(
-                "{}/v1/orgs/{}/recipes/{}/versions/{}",
-                url, org, recipe_name, version
+            .get(org_url(
+                &url,
+                &org,
+                &format!("recipes/{}/versions/{}", recipe_name, version),
             ))
             .header("Authorization", &auth)
             .send()

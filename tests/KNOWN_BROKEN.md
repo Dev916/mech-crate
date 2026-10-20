@@ -35,7 +35,6 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | bd id | Test | Where | Asserts (once fixed) | Tier |
 |---|---|---|---|---|
 | mech-crate-9be | `kb_recipes_apply_fix_changes_behavior` | `crates/mx-cli/tests/known_broken.rs` | `mx recipes apply <r> --fix` output differs from a plain apply — i.e. `--fix` performs the advertised dependency-drift comparison (wiremock Unyform stub) | integration |
-| mech-crate-rnj | `kb_both_unyform_clients_use_the_same_org_path_segment` | `crates/mx-mcp-server/tests/known_broken_unyform.rs` | The CLI client (`mx_lib::unyform`) and the MCP client request the same `/v1/orgs/<seg>/recipes` path against a recording wiremock (today: org **id** vs org **slug**) | integration |
 | mech-crate-dpi | `kb_build_platform_reaches_the_build_script` | `crates/mx-cli/tests/known_broken.rs` | `mx build svc --platform linux/arm64` reaches `scripts/build.sh` through the real `make _build` (recording build.sh stub) | integration |
 | mech-crate-fr6 | `kb_make_rebuild_is_a_real_target` | `crates/mx-cli/tests/known_broken.rs` | `make rebuild` is a real target: `make -n rebuild` prints at least one command instead of nothing | integration |
 | mech-crate-ten | `kb_nuxt_recipe_ships_the_release_scripts_make_invokes` | `crates/mx-lib/tests/recipes_conformance.rs` | The nuxt recipe's app `package.json` declares every `yarn release*` script `templates/make/release.mk` invokes. *Retire if the issue is closed by making `make release` degrade gracefully instead.* | integration |
@@ -44,13 +43,14 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | mech-crate-dqw | `kb_doctor_reports_router_status` | `crates/mx-cli/tests/known_broken.rs` | `mx doctor` reports on the router (network / container / port 80) alongside its structure and docker checks | integration |
 | mech-crate-4jw | `corpus::store::tests::kb_lexical_arm_separates_relevant_from_irrelevant` | `crates/mx-lib/src/corpus/store.rs` | With the vector arm held equal (identical embeddings, orthogonal to the query), the lexical arm separates a relevant from an irrelevant ~1.2KB chunk by ≥5× and ≥0.05 of final score. Measured today: **2.18× / 0.0062** | integration (DB) |
 
-9 lane tests, all named `kb_*` (the exceptions, `z5i`, `wd9`, `vxq` and `066`,
-left the lane when their fixes landed).
+8 lane tests, all named `kb_*` (the exceptions, `z5i`, `wd9`, `vxq` and `066`,
+left the lane when their fixes landed; `rnj` kept its `kb_` name when it
+graduated).
 
-**Scoreboard** (`make test-known-broken`): `9 tests run: 0 passed, 9 failed,
-485 skipped`: 9 rows above, 9 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `485 passed, 9 skipped`. Those two numbers
-partition the workspace; if they stop summing to 494, either a lane test lost
+**Scoreboard** (`make test-known-broken`): `8 tests run: 0 passed, 8 failed,
+492 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `492 passed, 8 skipped`. Those two numbers
+partition the workspace; if they stop summing to 500, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -171,11 +171,28 @@ writer in `mx-lib`, 2 on the inspect renderer), workspace total 468 → 494.
 |---|---|
 | `infra_link.rs` | `mx infra link/unlink` write and remove the in-file flag persistently and idempotently, restoring the project file exactly, with honest errors outside a project, for an unknown provider, and without a global config; `mx infra inspect` prints the resolved set with each key's source (environment / project / global, deprecated alias tagged), secrets masked, and reflects the link; a stray `.env.linked` marker is warned about and ignored; and the Rust resolver, `make cf-vars` and `cf-init-app.sh` agree on the account id and its scope before link, after link and after unlink (bd:mech-crate-066) |
 
+**bd:mech-crate-rnj** (the two Unyform clients disagreeing on the org path
+segment) is the sixth lane row retired, and the first since `gjl` retired the
+intended way: `kb_both_unyform_clients_use_the_same_org_path_segment` lost its
+`#[ignore]` and joined the gate, with one added assertion pinning *which*
+segment is right, the org **slug** (`/v1/orgs/acme/recipes`), so the test
+cannot pass by both clients agreeing on the id. Ground truth came from the
+unyform.ai gateway: its JWT-authenticated org routes match `{org}` against the
+caller's org slugs (`AuthenticatedUser::is_member_of` compares `o.slug`) and its
+API-key org routes ignore the segment, so the slug works on both and the id on
+neither. Both clients now build the path with `mx_lib::unyform::org_url` and
+resolve the slug with `mx_lib::unyform::resolve_org_slug`; `login` records
+`org_slug` in `credentials.json`, and the CLI recovers it once from
+`/v1/auth/me` for credentials that predate it. The `9be` lane fixture gained an
+`org_slug` so its arrange half still succeeds. Lane 9 → 8, gate 485 → 492 (the
+graduated test, `cli_client_recovers_the_org_slug_for_id_only_credentials`
+beside it, and 5 unit tests on the two helpers), workspace total 494 → 500.
+
 ## Notes on placement deviations
 
-- **rnj** lives in `mx-mcp-server` rather than `mx-lib`: that is the only crate
-  where *both* Unyform clients are in scope, and the defect is precisely their
-  disagreement.
+- **rnj** (graduated) lives in `mx-mcp-server` rather than `mx-lib`: that is
+  the only crate where *both* Unyform clients are in scope, and the defect was
+  precisely their disagreement.
 - **dpi** exercises the real `make` layer rather than a stub-bin `make`. The CLI
   already forwards `platform=<p>` correctly; the drop happens in
   `templates/make/build.mk`'s `_build`, so a stub `make` test would pass today
