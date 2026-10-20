@@ -31,6 +31,13 @@ APP_NAME := $(a)
 # the project file, then the global file. Each scope is captured on its own so a
 # project file carrying only the deprecated alias still beats a global file
 # carrying the canonical name.
+#
+# Linking (bd:mech-crate-066): a project file containing the exact line
+# MX_INFRA_USE_GLOBAL=true (written by `mx infra link cloudflare`, removed by
+# `mx infra unlink cloudflare`) is linked to the global config. Its values are
+# then ignored, so credentials resolve from the environment, then the global
+# file. `mx infra inspect`, scripts/cf-init-app.sh and this file read that one
+# line; the old `.env.linked` marker file is not honored anywhere.
 
 CF_ID_FROM_ENV := $(CLOUDFLARE_ACCOUNT_ID)
 CF_ID_FROM_ENV_ALIAS := $(CF_ACCOUNT_ID)
@@ -46,16 +53,27 @@ CF_ID_FROM_GLOBAL := $(CLOUDFLARE_ACCOUNT_ID)
 CF_ID_FROM_GLOBAL_ALIAS := $(CF_ACCOUNT_ID)
 CF_TOKEN_FROM_GLOBAL := $(CLOUDFLARE_API_TOKEN)
 CF_TOKEN_FROM_GLOBAL_ALIAS := $(CF_API_TOKEN)
+CF_DOCKER_PLATFORM_FROM_GLOBAL := $(CF_DOCKER_PLATFORM)
 
 CLOUDFLARE_ACCOUNT_ID :=
 CF_ACCOUNT_ID :=
 CLOUDFLARE_API_TOKEN :=
 CF_API_TOKEN :=
+MX_INFRA_USE_GLOBAL :=
 -include $(CF_ENV_FILE)
+CF_PROJECT_LINKED := $(if $(filter true,$(strip $(MX_INFRA_USE_GLOBAL))),true,false)
+ifeq ($(CF_PROJECT_LINKED),true)
+CF_ID_FROM_PROJECT :=
+CF_ID_FROM_PROJECT_ALIAS :=
+CF_TOKEN_FROM_PROJECT :=
+CF_TOKEN_FROM_PROJECT_ALIAS :=
+CF_DOCKER_PLATFORM := $(CF_DOCKER_PLATFORM_FROM_GLOBAL)
+else
 CF_ID_FROM_PROJECT := $(CLOUDFLARE_ACCOUNT_ID)
 CF_ID_FROM_PROJECT_ALIAS := $(CF_ACCOUNT_ID)
 CF_TOKEN_FROM_PROJECT := $(CLOUDFLARE_API_TOKEN)
 CF_TOKEN_FROM_PROJECT_ALIAS := $(CF_API_TOKEN)
+endif
 
 export CLOUDFLARE_ACCOUNT_ID := $(strip $(or \
 	$(CF_ID_FROM_ENV),$(CF_ID_FROM_ENV_ALIAS), \
@@ -105,6 +123,7 @@ cf-vars: ## Show the resolved Cloudflare credential variables (no secrets)
 	@echo "CLOUDFLARE_API_TOKEN=$(if $(CLOUDFLARE_API_TOKEN),***configured***,)"
 	@echo "CF_ENV_FILE=$(CF_ENV_FILE)"
 	@echo "CF_GLOBAL_ENV_FILE=$(CF_GLOBAL_ENV_FILE)"
+	@echo "CF_PROJECT_LINKED=$(CF_PROJECT_LINKED)"
 	@$(if $(CF_DEPRECATED_ALIAS_FILES),echo "DEPRECATED_CF_ACCOUNT_ID_IN=$(CF_DEPRECATED_ALIAS_FILES)",true)
 
 cf-check-credentials: ## Fail early when no Cloudflare account id resolves
@@ -114,6 +133,10 @@ ifeq ($(strip $(CLOUDFLARE_ACCOUNT_ID)),)
 	@echo "  Looked for CLOUDFLARE_ACCOUNT_ID (deprecated alias CF_ACCOUNT_ID) in:" >&2
 	@echo "    project: $(CF_ENV_FILE)" >&2
 	@echo "    global:  $(CF_GLOBAL_ENV_FILE)" >&2
+ifeq ($(CF_PROJECT_LINKED),true)
+	@echo "  This project is linked to the global config (MX_INFRA_USE_GLOBAL=true in $(CF_ENV_FILE)) so its own values are ignored." >&2
+	@echo "  Run 'mx infra unlink cloudflare' to use them again." >&2
+endif
 	@echo "" >&2
 	@echo "  Configure credentials with either:" >&2
 	@echo "    mx infra setup cloudflare   # global config, shared by every project" >&2

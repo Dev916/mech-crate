@@ -82,7 +82,7 @@ Two scopes, consistently located, and both now read [crates/mx-lib/src/infra/con
 
 **One canonical pair: `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`.** Those are the two names wrangler itself reads from the environment, so a value in a credentials file reaches the deploy with no translation step. Every writer emits exactly those names and nothing else [crates/mx-cli/src/commands/infra.rs; templates/scripts/cf-setup.sh]. `CF_ACCOUNT_ID` / `CF_API_TOKEN` survive as **deprecated aliases that consumers read and no writer emits**, so an `.env.cloudflare` produced by an older `make cf-setup` keeps working and the toolchain says so rather than failing.
 
-**Resolution order,** highest precedence first, implemented the same way in `cloudflare.mk` [cloudflare.mk:16-78] and `cf-init-app.sh` [cf-init-app.sh:95-165]:
+**Resolution order,** highest precedence first, implemented the same way in `cloudflare.mk` [cloudflare.mk:16-96] and `cf-init-app.sh` [cf-init-app.sh:96-169]:
 
 1. the environment, or the `make` command line
 2. project `infra/cloudflare/.env.cloudflare`
@@ -96,16 +96,15 @@ Each scope is captured on its own, which is the part worth knowing: a project fi
 
 Token absent from both files is fine: wrangler falls back to its OAuth login.
 
-**Still broken (verified; do not send agents down these):**
-- `mx infra link`/`unlink` are stubs (print-only) [infra.rs:307-333], and the two link mechanisms that do exist disagree: the Rust resolver looks for a `.env.linked` marker file [config.rs:117] while the bash scripts look for `MX_INFRA_USE_GLOBAL=true` **inside** the env file [cf-init-app.sh:120]. Neither is ever written by tooling. This matters much less now: the global fallback covers what linking was for, so the common case needs no link at all.
+**Linking** (bd:mech-crate-066). A project file containing the exact line `MX_INFRA_USE_GLOBAL=true` is linked: its values are ignored and credentials resolve from the environment, then the global file. `mx infra link cloudflare` writes that line (keeping the rest of the file), `mx infra unlink cloudflare` removes it, and `cloudflare.mk` (`CF_PROJECT_LINKED=` in `make cf-vars`), `cf-init-app.sh` and `mx infra inspect cloudflare` all read it. `mx infra inspect cloudflare` prints the same resolved set `make cf-vars` does, per key with its source (`environment` / `project` / `global`, deprecated alias tagged), secrets masked. The `.env.linked` marker file the Rust resolver used to look for is deprecated and ignored; inspect warns about one and link/unlink delete it. Linking is rarely needed: a project with no project file already falls through to global.
 
 **Agent rule:** one `mx infra setup cloudflare` per workstation covers every project on it. Add `make cf-setup` only when a single project needs a different account than the rest. When credentials look wrong, run `make cf-vars` first: it names the scope that answered, and that is usually the whole diagnosis.
 
-## 6. Drift & gaps inventory (as of research date; items 2 and 4 closed 2026-09-25, item 1 closed 2026-10-20)
+## 6. Drift & gaps inventory (as of research date; items 2 and 4 closed 2026-09-25, items 1 and 3 closed 2026-10-20)
 
 1. **Closed 2026-10-20** (bd:mech-crate-vxq). Was: `mx cf` documented in INFRA_CONFIG.md + MCP resources, unimplemented in the CLI. Now `mx cf <cmd>` runs `make cf-<cmd>` in the project root (an app argument becomes `a=<app>`; `mx cf config` is an alias of `mx cf vars`), and `crates/mx-cli/tests/docs_drift.rs` fails if either doc names an mx command the CLI lacks.
 2. **Closed 2026-09-25** (bd:mech-crate-wd9). Was: `CLOUDFLARE_ACCOUNT_ID` (mx infra) vs `CF_ACCOUNT_ID` (toolchain) mismatch, which made global credentials unusable by deploys. Now one canonical pair, with the old spelling read as a deprecated alias (§5).
-3. `mx infra link/unlink` stubs; `.env.linked` marker vs `MX_INFRA_USE_GLOBAL` in-file flag — two incompatible, both unwired.
+3. **Closed 2026-10-20** (bd:mech-crate-066). Was: `mx infra link/unlink` stubs, with a `.env.linked` marker (Rust) and an `MX_INFRA_USE_GLOBAL` in-file flag (bash) that disagreed and were never written. Now the in-file flag is the one mechanism, written and removed by `mx infra link/unlink` and read by `mx infra inspect`, `cloudflare.mk` and `cf-init-app.sh` alike; `crates/mx-cli/tests/infra_link.rs` runs all three against one scratch project (§5).
 4. **Closed 2026-09-25** (same change). Was: `cloudflare.mk` had no global-credential fallback, including the project file only. Now it reads global then project, so the project wins per scope and a global-only workstation deploys (§5).
 5. Terraform: gitignored, documented in the appendix, never scaffolded; no `make terraform-*` targets exist.
 6. `appendix-build-deploy-recipe.md` prescribes `infra/dockerfiles/` + `containers-worker/` layout; shipped reality is `docker/dockerfiles/<app>/app` + `infra/cloudflare/apps/<app>/` — treat the appendix as aspirational, this doc as ground truth.

@@ -34,7 +34,6 @@ a fix landed without bookkeeping — surfaced, not silently green.
 
 | bd id | Test | Where | Asserts (once fixed) | Tier |
 |---|---|---|---|---|
-| mech-crate-066 | `kb_infra_link_writes_marker_and_inspect_resolves_global` | `crates/mx-cli/tests/known_broken.rs` | `mx infra link cloudflare` creates the resolver's `.env.linked` marker, after which `mx infra inspect` resolves to the global credentials | integration |
 | mech-crate-9be | `kb_recipes_apply_fix_changes_behavior` | `crates/mx-cli/tests/known_broken.rs` | `mx recipes apply <r> --fix` output differs from a plain apply — i.e. `--fix` performs the advertised dependency-drift comparison (wiremock Unyform stub) | integration |
 | mech-crate-rnj | `kb_both_unyform_clients_use_the_same_org_path_segment` | `crates/mx-mcp-server/tests/known_broken_unyform.rs` | The CLI client (`mx_lib::unyform`) and the MCP client request the same `/v1/orgs/<seg>/recipes` path against a recording wiremock (today: org **id** vs org **slug**) | integration |
 | mech-crate-dpi | `kb_build_platform_reaches_the_build_script` | `crates/mx-cli/tests/known_broken.rs` | `mx build svc --platform linux/arm64` reaches `scripts/build.sh` through the real `make _build` (recording build.sh stub) | integration |
@@ -45,13 +44,13 @@ a fix landed without bookkeeping — surfaced, not silently green.
 | mech-crate-dqw | `kb_doctor_reports_router_status` | `crates/mx-cli/tests/known_broken.rs` | `mx doctor` reports on the router (network / container / port 80) alongside its structure and docker checks | integration |
 | mech-crate-4jw | `corpus::store::tests::kb_lexical_arm_separates_relevant_from_irrelevant` | `crates/mx-lib/src/corpus/store.rs` | With the vector arm held equal (identical embeddings, orthogonal to the query), the lexical arm separates a relevant from an irrelevant ~1.2KB chunk by ≥5× and ≥0.05 of final score. Measured today: **2.18× / 0.0062** | integration (DB) |
 
-10 lane tests, all named `kb_*` (the exceptions, `z5i`, `wd9` and `vxq`, left
-the lane when their fixes landed).
+9 lane tests, all named `kb_*` (the exceptions, `z5i`, `wd9`, `vxq` and `066`,
+left the lane when their fixes landed).
 
-**Scoreboard** (`make test-known-broken`): `10 tests run: 0 passed, 10 failed,
-458 skipped`: 10 rows above, 10 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `458 passed, 10 skipped`. Those two numbers
-partition the workspace; if they stop summing to 468, either a lane test lost
+**Scoreboard** (`make test-known-broken`): `9 tests run: 0 passed, 9 failed,
+485 skipped`: 9 rows above, 9 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `485 passed, 9 skipped`. Those two numbers
+partition the workspace; if they stop summing to 494, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -156,6 +155,21 @@ subcommand-to-target mapping), workspace total 452 → 468.
 |---|---|
 | `cf_wrapper.rs` | `mx cf vars` / `config` / `check-credentials` reach the real shipped `cloudflare.mk` through the wrapper against scratch `HOME` and project scopes; app arguments and `--type` are validated by clap; a project without `make/cloudflare.mk` gets an error naming it (bd:mech-crate-vxq) |
 | `docs_drift.rs` | every `mx ...` invocation `INFRA_CONFIG.md`, `mx-cloudflare-deploy.md` and the MCP `mx://docs/commands` resource teach parses as a real top-level or nested subcommand (`mx <a> [<b>] --help` exits 0), so a documented command cannot outlive its implementation again (bd:mech-crate-vxq) |
+
+**bd:mech-crate-066** (`mx infra link/unlink` stubs, two link mechanisms) is the
+fifth lane row retired, and the second retired by *replacing* its test. The lane
+test asserted that `link` creates the Rust resolver's `.env.linked` marker, but
+the fix chose the other mechanism: `MX_INFRA_USE_GLOBAL=true` inside the project
+file, the one the bash scripts, the old bash `mx` and `INFRA_CONFIG.md` already
+used and the only one a `-include` makes visible to `cloudflare.mk`. A test
+pinning the losing marker would have failed against a correct fix, so it was
+deleted and its subject moved to a suite of its own. Lane 10 → 9, gate
+458 → 485 (15 in `infra_link.rs`, 10 unit tests on the resolver and the flag
+writer in `mx-lib`, 2 on the inspect renderer), workspace total 468 → 494.
+
+| Suite | Holds |
+|---|---|
+| `infra_link.rs` | `mx infra link/unlink` write and remove the in-file flag persistently and idempotently, restoring the project file exactly, with honest errors outside a project, for an unknown provider, and without a global config; `mx infra inspect` prints the resolved set with each key's source (environment / project / global, deprecated alias tagged), secrets masked, and reflects the link; a stray `.env.linked` marker is warned about and ignored; and the Rust resolver, `make cf-vars` and `cf-init-app.sh` agree on the account id and its scope before link, after link and after unlink (bd:mech-crate-066) |
 
 ## Notes on placement deviations
 
