@@ -77,7 +77,24 @@ aliases `inspect`, and `remove` aliases `uninstall`. Detail on
 mx infra setup [PROVIDER] | list | inspect | link | unlink | remove
 ```
 
-`ls` aliases `list`. See [Infra credentials](/docs/framework/infra-credentials/).
+`ls` aliases `list`. `inspect` prints each resolved key with the scope that
+supplied it; `link` / `unlink` add and remove the project's
+`MX_INFRA_USE_GLOBAL=true` line. See
+[Infra credentials](/docs/framework/infra-credentials/).
+
+### Cloudflare
+
+```
+mx cf <COMMAND> [APP]
+```
+
+A thin wrapper over the project's `make cf-*` targets: `mx cf deploy myapp` runs
+`make cf-deploy a=myapp`. Commands: `setup`, `vars` (alias `config`),
+`check-credentials`, `login`, `whoami`, `status`, `list`, `init` (`--type
+worker|cron|container`), `install`, `dev`, `build`, `push`, `publish`, `images`,
+`sync-image`, `deploy`, `deploy-preview`, `deploy-all`, `logs`, `logs-preview`,
+`restart`, `container-status`. Only projects created with `--infra cloudflare`
+have the targets. See [Cloudflare deploy](/docs/framework/cloudflare-deploy/).
 
 ### AI layer
 
@@ -178,7 +195,8 @@ Release targets (`make release`, `release-patch`, `release-minor`,
 per-app version/tag flow.
 
 Cloudflare targets (`cf-setup`, `cf-deploy`, `cf-logs`, …) exist **only** in
-projects created with `--infra cloudflare`; they are listed on
+projects created with `--infra cloudflare`, and each is also reachable as
+`mx cf <cmd>`; they are listed on
 [Cloudflare deploy](/docs/framework/cloudflare-deploy/).
 
 ## Developing mx itself

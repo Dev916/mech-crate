@@ -43,18 +43,23 @@ optional, also inert if you skip it.
 
 ## Honest state
 
-Two defects on this path are open in the
+One defect on this path is open in the
 [known-broken lane](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md),
-each with a red test asserting the fixed behaviour:
+with a red test asserting the fixed behaviour:
 
-- **`mech-crate-rnj`**: the CLI client and the MCP server client request
-  different `/v1/orgs/<segment>/recipes` paths (organization **id** versus
-  **slug**) against the same API.
 - **`mech-crate-9be`**: `mx recipes apply <r> --fix` produces output identical to
   a plain apply, i.e. the advertised dependency-drift comparison is not happening.
 
-Neither affects local recipes. See [Testing](/docs/framework/testing/) for what
-that lane is and why these are published rather than hidden.
+It does not affect local recipes. See [Testing](/docs/framework/testing/) for what
+that lane is and why defects are published rather than hidden.
+
+`mech-crate-rnj` used to sit beside it: the CLI client and the MCP server client
+requested different `/v1/orgs/<segment>/recipes` paths (organization id versus
+slug) against the same API. Both now address every org-scoped route by the
+organization **slug**, the segment the Unyform gateway matches a signed-in
+caller's memberships against, through one shared path helper. `mx login` records
+the slug, and a credentials file written before that recovers it once from the
+account endpoint.
 
 ## Related
 
