@@ -207,7 +207,7 @@ Recipes are pre-packaged stack components that include:
 
 Available recipes typically include:
 - laravel: PHP Laravel with Nginx, PHP-FPM, queues
-- nuxt: Nuxt 3 SSR/SSG with Tailwind + DaisyUI
+- nuxt: Nuxt app scaffolded by nuxi init (recipe adds infra + health endpoint)
 - astro: Astro static sites with Vue components
 - rust-api: Rust Axum API with hexagonal architecture
 - rust-leptos: Rust Leptos full-stack SSR

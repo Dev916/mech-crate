@@ -788,24 +788,15 @@ fn every_compose_build_target_names_a_real_dockerfile_stage() {
 /// owns infra plus a dependency-free health endpoint — so astro's payload is
 /// gone and astro must never appear in this list again.
 ///
+/// nuxt carried the same shape (11 files: a Nuxt 3 starter app with its own
+/// `package.json`, lockfile, Tailwind config and pages) until bd:mech-crate-whj
+/// applied the same call: `nuxi init` owns the app, the recipe owns infra plus
+/// `server/api/health.get.ts`. The list is now empty.
+///
 /// This list may only shrink. A new entry means a recipe grew dead payload; a
 /// stale entry (listed but no longer present) fails too, so deleting the files
 /// forces the allowance out with them.
-const UNMAPPED_PAYLOAD_ALLOWED: &[&str] = &[
-    // bd:mech-crate-874 follow-up — nuxt carries the same shape of dead app
-    // payload astro did: a full starter app nothing maps.
-    "nuxt/app/app.vue",
-    "nuxt/app/assets/css/main.css",
-    "nuxt/app/gitignore.template",
-    "nuxt/app/layouts/default.vue",
-    "nuxt/app/nuxt.config.ts",
-    "nuxt/app/package-lock.json",
-    "nuxt/app/package.json",
-    "nuxt/app/pages/about.vue",
-    "nuxt/app/pages/index.vue",
-    "nuxt/app/tailwind.config.ts",
-    "nuxt/app/tsconfig.json",
-];
+const UNMAPPED_PAYLOAD_ALLOWED: &[&str] = &[];
 
 /// Every file a recipe ships must either be mapped by `recipe.json` (directly or
 /// under a mapped directory) or be `recipe.json` itself. Anything else never
@@ -879,6 +870,55 @@ fn no_recipe_ships_payload_files_that_nothing_maps() {
             .map(|s| format!("  {s}"))
             .collect::<Vec<_>>()
             .join("\n")
+    );
+}
+
+/// A recipe whose app comes from a framework scaffolder ships no lockfile: the
+/// scaffolder owns `package.json`, and every shipped `init_cmd` runs with
+/// `--no-install`, so a fresh app has no `package-lock.json` until someone runs
+/// `npm install`. A bare `RUN npm ci` refuses to run without one, which made
+/// nuxt's non-dev build fail on every freshly scaffolded app (bd:mech-crate-whj).
+/// `npm ci` is fine behind a lockfile check (astro's
+/// `elif [ -f package-lock.json ]; then npm ci; else npm install`).
+#[test]
+fn no_scaffolder_recipe_runs_a_bare_npm_ci() {
+    let names = recipes_with_a_scaffolder();
+    assert!(
+        names.iter().any(|n| n == "nuxt"),
+        "setup: expected nuxt among the scaffolder recipes, found {names:?}"
+    );
+
+    let mut offenders: Vec<String> = Vec::new();
+    for name in &names {
+        let dir = recipes_root().join(name).join("docker/dockerfiles");
+        if !dir.is_dir() {
+            continue;
+        }
+        for file in walk_files(&dir) {
+            let body = std::fs::read_to_string(&file)
+                .unwrap_or_else(|e| panic!("setup: read {}: {e}", file.display()));
+            for (i, line) in body.lines().enumerate() {
+                let t = line.trim();
+                if t.starts_with("RUN ")
+                    && t.split_whitespace().nth(1) == Some("npm")
+                    && t.split_whitespace().nth(2) == Some("ci")
+                {
+                    offenders.push(format!(
+                        "  {name}/{}:{}: {t}",
+                        file.strip_prefix(recipes_root().join(name))
+                            .unwrap()
+                            .display(),
+                        i + 1
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "these scaffolder recipes run `npm ci` unconditionally, but a fresh \
+         scaffold has no package-lock.json, so the build fails:\n{}",
+        offenders.join("\n")
     );
 }
 
@@ -1214,11 +1254,15 @@ fn kb_nuxt_recipe_ships_the_release_scripts_make_invokes() {
         "setup: release.mk invokes no `yarn release*` scripts at all"
     );
 
+    // Since bd:mech-crate-whj the recipe ships no package.json at all: `nuxi init`
+    // owns it (the bd:mech-crate-874 call). A missing file declares no scripts,
+    // so this stays red for the same reason until bd:mech-crate-ten decides
+    // where release scripts come from.
     let pkg_path = repo_root.join("templates/recipes/nuxt/app/package.json");
-    let pkg: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(&pkg_path).expect("setup: read nuxt app package.json"),
-    )
-    .expect("setup: parse nuxt app package.json");
+    let pkg: serde_json::Value = match std::fs::read_to_string(&pkg_path) {
+        Ok(body) => serde_json::from_str(&body).expect("setup: parse nuxt app package.json"),
+        Err(_) => serde_json::json!({ "scripts": {} }),
+    };
     let scripts = pkg["scripts"]
         .as_object()
         .expect("setup: nuxt app package.json must declare a scripts object");
