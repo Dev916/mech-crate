@@ -339,7 +339,16 @@
   }
 }
 
-[data-theme="dark"] .theme-toggle,
+[data-theme="dark"] .theme-toggle {
+  .icon-sun {
+    display: none;
+  }
+
+  .icon-moon {
+    display: block;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .theme-toggle {
     .icon-sun {

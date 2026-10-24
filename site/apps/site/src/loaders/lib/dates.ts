@@ -346,13 +346,37 @@ export function listFilesRelative(dir: string): string[] {
  * `git log -1 -- <path>` calls cost seconds of process spawn. `--no-renames`
  * keeps a renamed file's current name in the commit that introduced it, so a
  * path is always dated under the name it ships as.
+ *
+ * "Last modified" has ONE definition here, the same one `git log -1 -- <path>`
+ * answers (and the one the dates test checks against): the newest commit whose
+ * tree changed the file's bytes relative to EVERY parent. For ordinary commits
+ * that is just "the commit touched it". For merges it means only a merge whose
+ * result differs from all parents counts, i.e. a conflict resolution or an evil
+ * merge. That is what `--diff-merges=combined` lists under `--name-only`.
+ *
+ * Without it `--name-only` lists nothing for merges, so a file whose newest
+ * bytes were written by a conflict resolution kept the older pre-merge date
+ * (bd mech-crate-w0p: install.md resolved in merge e9f40b3 on 2026-09-13 read
+ * as 2026-09-05). `--diff-merges=first-parent` and `-m` were rejected: they
+ * also re-date every file that merely came across cleanly from the other side
+ * (on e9f40b3, `.github/workflows/site.yml` would jump from its real 2026-09-10
+ * edit to the merge's 2026-09-13), which is a lastmod claiming a change the
+ * page's content never had.
  */
 export function readGitDates(repoRoot: string): Map<string, string> {
   let stdout: string;
   try {
     stdout = execFileSync(
       'git',
-      ['-c', 'core.quotePath=false', 'log', '--no-renames', '--format=%x00%cI', '--name-only'],
+      [
+        '-c',
+        'core.quotePath=false',
+        'log',
+        '--no-renames',
+        '--diff-merges=combined',
+        '--format=%x00%cI',
+        '--name-only',
+      ],
       { cwd: repoRoot, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }
     );
   } catch (error) {

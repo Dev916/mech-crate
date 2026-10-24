@@ -233,6 +233,17 @@ Add an overridable option and placeholder:
 - Keep `templates/app/...` as an **overlay**, not a full app replacement:
   - Prefer copying a small set of files (e.g. health endpoint) instead of `app/` wholesale.
   - This ensures the official scaffold remains the canonical baseline.
+- The scaffolder owns the app; the recipe owns the infra plus a small,
+  dependency-free overlay (astro and nuxt ship only a health endpoint).
+  Concretely:
+  - Do not ship `package.json`, a lockfile, the framework config, or starter
+    pages. The scaffolder writes its own, and anything the recipe ships beside
+    them either never lands or fights the generated app. A payload file that
+    `recipe.json` does not map fails the conformance suite.
+  - An overlay file must not import a package the scaffold does not install.
+  - A fresh scaffold has no lockfile, so a Dockerfile must never run a bare
+    `npm ci`. Guard it: `if [ -f package-lock.json ]; then npm ci; else npm install; fi`
+    (`no_scaffolder_recipe_runs_a_bare_npm_ci` enforces this).
 
 ---
 
@@ -1354,7 +1365,8 @@ labels:
 ## Checklist for New Recipes
 
 - [ ] `recipe.json` with all placeholders
-- [ ] `app/` with complete application code
+- [ ] `app/` with complete application code, or, for a recipe with `init_app`,
+      only the overlay files `recipe.json` maps (no `package.json` or lockfile)
 - [ ] `docker/dockerfiles/app.Dockerfile` with multi-stage build
 - [ ] `docker/system/app/` with filesystem mirror:
   - [ ] `etc/supervisor/supervisord.conf`

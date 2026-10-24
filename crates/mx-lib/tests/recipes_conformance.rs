@@ -788,28 +788,15 @@ fn every_compose_build_target_names_a_real_dockerfile_stage() {
 /// owns infra plus a dependency-free health endpoint — so astro's payload is
 /// gone and astro must never appear in this list again.
 ///
+/// nuxt carried the same shape (11 files: a Nuxt 3 starter app with its own
+/// `package.json`, lockfile, Tailwind config and pages) until bd:mech-crate-whj
+/// applied the same call: `nuxi init` owns the app, the recipe owns infra plus
+/// `server/api/health.get.ts`. The list is now empty.
+///
 /// This list may only shrink. A new entry means a recipe grew dead payload; a
 /// stale entry (listed but no longer present) fails too, so deleting the files
 /// forces the allowance out with them.
-const UNMAPPED_PAYLOAD_ALLOWED: &[&str] = &[
-    // bd:mech-crate-874 follow-up — nuxt carries the same shape of dead app
-    // payload astro did: a full starter app nothing maps.
-    "nuxt/app/app.vue",
-    "nuxt/app/assets/css/main.css",
-    "nuxt/app/gitignore.template",
-    "nuxt/app/layouts/default.vue",
-    "nuxt/app/nuxt.config.ts",
-    "nuxt/app/package-lock.json",
-    "nuxt/app/package.json",
-    "nuxt/app/pages/about.vue",
-    "nuxt/app/pages/index.vue",
-    "nuxt/app/tailwind.config.ts",
-    "nuxt/app/tsconfig.json",
-    // zola maps app/{config.toml,content,sass,static,templates} but not this,
-    // so its `post_install.rename` of apps/<svc>/gitignore.template is a no-op
-    // and the scaffolded site ships no .gitignore.
-    "zola/app/gitignore.template",
-];
+const UNMAPPED_PAYLOAD_ALLOWED: &[&str] = &[];
 
 /// Every file a recipe ships must either be mapped by `recipe.json` (directly or
 /// under a mapped directory) or be `recipe.json` itself. Anything else never
@@ -883,6 +870,55 @@ fn no_recipe_ships_payload_files_that_nothing_maps() {
             .map(|s| format!("  {s}"))
             .collect::<Vec<_>>()
             .join("\n")
+    );
+}
+
+/// A recipe whose app comes from a framework scaffolder ships no lockfile: the
+/// scaffolder owns `package.json`, and every shipped `init_cmd` runs with
+/// `--no-install`, so a fresh app has no `package-lock.json` until someone runs
+/// `npm install`. A bare `RUN npm ci` refuses to run without one, which made
+/// nuxt's non-dev build fail on every freshly scaffolded app (bd:mech-crate-whj).
+/// `npm ci` is fine behind a lockfile check (astro's
+/// `elif [ -f package-lock.json ]; then npm ci; else npm install`).
+#[test]
+fn no_scaffolder_recipe_runs_a_bare_npm_ci() {
+    let names = recipes_with_a_scaffolder();
+    assert!(
+        names.iter().any(|n| n == "nuxt"),
+        "setup: expected nuxt among the scaffolder recipes, found {names:?}"
+    );
+
+    let mut offenders: Vec<String> = Vec::new();
+    for name in &names {
+        let dir = recipes_root().join(name).join("docker/dockerfiles");
+        if !dir.is_dir() {
+            continue;
+        }
+        for file in walk_files(&dir) {
+            let body = std::fs::read_to_string(&file)
+                .unwrap_or_else(|e| panic!("setup: read {}: {e}", file.display()));
+            for (i, line) in body.lines().enumerate() {
+                let t = line.trim();
+                if t.starts_with("RUN ")
+                    && t.split_whitespace().nth(1) == Some("npm")
+                    && t.split_whitespace().nth(2) == Some("ci")
+                {
+                    offenders.push(format!(
+                        "  {name}/{}:{}: {t}",
+                        file.strip_prefix(recipes_root().join(name))
+                            .unwrap()
+                            .display(),
+                        i + 1
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "these scaffolder recipes run `npm ci` unconditionally, but a fresh \
+         scaffold has no package-lock.json, so the build fails:\n{}",
+        offenders.join("\n")
     );
 }
 
@@ -1100,6 +1136,90 @@ fn no_shipped_recipe_leaves_a_placeholder_token_unsubstituted() {
     );
 }
 
+// ── No infra template ships a {{PLACEHOLDER}} nothing substitutes ────────────
+
+/// The placeholder names `mx new --infra <provider>` substitutes into the copied
+/// `templates/infra/<provider>/` tree. Mirrors `setup_cloudflare_infra` in
+/// `crates/mx-cli/src/commands/new.rs`, which expands exactly one name.
+const INFRA_SUBSTITUTED_PLACEHOLDERS: &[&str] = &["PROJECT_NAME"];
+
+/// File extensions that substitution pass rewrites. A token in any other file
+/// is copied through literally.
+const INFRA_SUBSTITUTED_EXTENSIONS: &[&str] = &["ts", "toml", "json", "md"];
+
+/// The `templates/infra/<provider>/` trees `mx new --infra` actually installs.
+const INFRA_INSTALLED_PROVIDERS: &[&str] = &["cloudflare"];
+
+/// bd:mech-crate-pdr: `templates/infra/` sits outside `templates/recipes/`, so
+/// the recipe net above never looked at its `{{PROJECT_NAME}}` tokens. This is
+/// the static half of the same net for infra templates: every SCREAMING_SNAKE
+/// token must be one `mx new` substitutes, in a file the substitution pass
+/// rewrites, under a provider `mx new` installs. The behavioral half
+/// (`mx new --no-prompt --infra cloudflare` leaves zero tokens) lives in
+/// `crates/mx-cli/tests/new_infra_placeholders.rs`, since it needs the binary.
+#[test]
+fn no_shipped_infra_template_leaves_a_placeholder_token_unsubstituted() {
+    let infra = templates_root().join("infra");
+    let mut files = walk_files(&infra);
+    files.sort();
+
+    let mut offenders: Vec<String> = Vec::new();
+    let mut seen = 0usize;
+    for file in files {
+        let Ok(body) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let mut tokens = placeholder_tokens(&body);
+        tokens.sort();
+        tokens.dedup();
+        if tokens.is_empty() {
+            continue;
+        }
+        let rel = file.strip_prefix(&infra).unwrap();
+        let rel_s = rel.display().to_string();
+        let provider = rel
+            .components()
+            .next()
+            .map(|c| c.as_os_str().to_string_lossy().to_string())
+            .unwrap_or_default();
+        let ext = file
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or_default();
+        for token in tokens {
+            seen += 1;
+            if !INFRA_INSTALLED_PROVIDERS.contains(&provider.as_str()) {
+                offenders.push(format!(
+                    "  infra/{rel_s}: {{{{{token}}}}} sits under provider `{provider}`, \
+                     which `mx new --infra` does not install or substitute"
+                ));
+            } else if !INFRA_SUBSTITUTED_PLACEHOLDERS.contains(&token.as_str()) {
+                offenders.push(format!(
+                    "  infra/{rel_s}: {{{{{token}}}}} is not a name `mx new --infra` \
+                     substitutes (only {INFRA_SUBSTITUTED_PLACEHOLDERS:?})"
+                ));
+            } else if !INFRA_SUBSTITUTED_EXTENSIONS.contains(&ext.as_str()) {
+                offenders.push(format!(
+                    "  infra/{rel_s}: {{{{{token}}}}} is in a file the substitution \
+                     pass skips (extension `{ext}`, rewritten: \
+                     {INFRA_SUBSTITUTED_EXTENSIONS:?})"
+                ));
+            }
+        }
+    }
+
+    assert!(
+        seen > 0,
+        "setup: expected templates/infra to still use {{{{PLACEHOLDER}}}} tokens"
+    );
+    assert!(
+        offenders.is_empty(),
+        "these shipped infra template files carry a {{{{PLACEHOLDER}}}} token that \
+         `mx new --infra` does not substitute, so it reaches the project literally:\n{}",
+        offenders.join("\n")
+    );
+}
+
 // ── Known-broken lane (bd:mech-crate-ten) ────────────────────────────────────
 
 /// `make release app=<app>` shells into `apps/<app>` and runs `yarn release*`,
@@ -1134,11 +1254,15 @@ fn kb_nuxt_recipe_ships_the_release_scripts_make_invokes() {
         "setup: release.mk invokes no `yarn release*` scripts at all"
     );
 
+    // Since bd:mech-crate-whj the recipe ships no package.json at all: `nuxi init`
+    // owns it (the bd:mech-crate-874 call). A missing file declares no scripts,
+    // so this stays red for the same reason until bd:mech-crate-ten decides
+    // where release scripts come from.
     let pkg_path = repo_root.join("templates/recipes/nuxt/app/package.json");
-    let pkg: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(&pkg_path).expect("setup: read nuxt app package.json"),
-    )
-    .expect("setup: parse nuxt app package.json");
+    let pkg: serde_json::Value = match std::fs::read_to_string(&pkg_path) {
+        Ok(body) => serde_json::from_str(&body).expect("setup: parse nuxt app package.json"),
+        Err(_) => serde_json::json!({ "scripts": {} }),
+    };
     let scripts = pkg["scripts"]
         .as_object()
         .expect("setup: nuxt app package.json must declare a scripts object");
@@ -1152,5 +1276,239 @@ fn kb_nuxt_recipe_ships_the_release_scripts_make_invokes() {
         "{} must declare the release scripts `make release` invokes; missing {:?}",
         pkg_path.display(),
         missing
+    );
+}
+
+// ── zola builds on every host arch (bd:mech-crate-b15) ───────────────────────
+
+/// `FROM` base and body of each Dockerfile stage, in file order.
+fn dockerfile_stage_bodies(body: &str) -> Vec<(String, String)> {
+    let mut stages: Vec<(String, String)> = Vec::new();
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.to_ascii_uppercase().starts_with("FROM ") {
+            let base = trimmed[5..]
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            stages.push((base, String::new()));
+        } else if let Some((_, stage_body)) = stages.last_mut() {
+            stage_body.push_str(line);
+            stage_body.push('\n');
+        }
+    }
+    stages
+}
+
+/// `(major, minor, patch)` of a plain `x.y.z` version string.
+fn semver(v: &str) -> (u64, u64, u64) {
+    let parts: Vec<u64> = v
+        .split('.')
+        .map(|p| {
+            p.parse()
+                .unwrap_or_else(|e| panic!("setup: `{v}` is not x.y.z: {e}"))
+        })
+        .collect();
+    assert_eq!(parts.len(), 3, "setup: `{v}` is not x.y.z");
+    (parts[0], parts[1], parts[2])
+}
+
+/// Zola publishes Linux binaries only as glibc (`*-unknown-linux-gnu`) builds,
+/// and none for aarch64 before v0.20.0. The recipe used to fetch the gnu
+/// tarball into Alpine (musl, where a glibc binary cannot run) at v0.19.2 (no
+/// aarch64 asset at all), so `docker compose build` died at `tar xz` on Apple
+/// Silicon. Every stage that downloads zola must be glibc-based, map both host
+/// arches to a published triple, fail loudly on a missing asset, and the default
+/// version must be one that ships an aarch64 Linux build.
+#[test]
+fn zola_dockerfile_fetches_a_zola_build_that_exists_and_runs_on_both_arches() {
+    let (project, _) = install_into_tempdir("zola", "blog", &HashMap::new());
+    let dockerfile = std::fs::read_to_string(project.path().join("docker/dockerfiles/blog/app"))
+        .expect("setup: zola installs docker/dockerfiles/blog/app");
+
+    let downloads: Vec<(String, String)> = dockerfile_stage_bodies(&dockerfile)
+        .into_iter()
+        .filter(|(_, body)| body.contains("getzola/zola/releases/download"))
+        .collect();
+    assert!(
+        !downloads.is_empty(),
+        "setup: the zola Dockerfile downloads zola in no stage:\n{dockerfile}"
+    );
+    for (base, body) in &downloads {
+        assert!(
+            !base.starts_with("alpine"),
+            "zola: stage FROM {base} installs a glibc zola build on musl, where it cannot run"
+        );
+        for triple in ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"] {
+            assert!(
+                body.contains(triple),
+                "zola: stage FROM {base} never maps a host arch to `{triple}`:\n{body}"
+            );
+        }
+        assert!(
+            !body.contains("linux-musl"),
+            "zola: stage FROM {base} names a musl triple zola does not publish for every arch"
+        );
+        assert!(
+            body.contains("curl -fsSL"),
+            "zola: stage FROM {base} lets a missing release asset reach `tar` as an HTML body"
+        );
+    }
+
+    let raw: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(recipes_root().join("zola/recipe.json")).unwrap(),
+    )
+    .unwrap();
+    let default = raw["options"]["zola_version"]["default"]
+        .as_str()
+        .expect("setup: zola declares a zola_version default");
+    assert!(
+        semver(default) >= (0, 20, 0),
+        "zola: default zola_version {default} has no aarch64 Linux release asset (first in 0.20.0)"
+    );
+
+    // The build context is the project root: the site is apps/<svc>, and
+    // `zola build` over the whole project finds no config.toml.
+    assert!(
+        dockerfile.contains("COPY apps/blog/ ."),
+        "zola: the builder stage does not copy the site from apps/blog:\n{dockerfile}"
+    );
+}
+
+/// The site payload itself must be one `zola build` accepts: a `taxonomies`
+/// key written after `[slugify]` lands inside that table (zola rejects the
+/// duplicate key), a selector list that runs into `@media` is a Sass syntax
+/// error, and `current_path` is undefined while 404.html renders.
+#[test]
+fn zola_site_payload_is_one_zola_build_accepts() {
+    let (project, _) = install_into_tempdir("zola", "blog", &HashMap::new());
+    let site = project.path().join("apps/blog");
+
+    let config: toml::Value = toml::from_str(
+        &std::fs::read_to_string(site.join("config.toml")).expect("setup: read config.toml"),
+    )
+    .unwrap_or_else(|e| panic!("zola: config.toml is not valid TOML: {e}"));
+    assert!(
+        config.get("taxonomies").is_some_and(|t| t.is_array()),
+        "zola: config.toml declares no top-level `taxonomies` array"
+    );
+
+    let components = std::fs::read_to_string(site.join("sass/_components.scss"))
+        .expect("setup: read sass/_components.scss");
+    let squashed: String = components.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        !squashed.contains(", @media"),
+        "zola: _components.scss continues a selector list into an @media rule"
+    );
+
+    let header = std::fs::read_to_string(site.join("templates/partials/header.html"))
+        .expect("setup: read templates/partials/header.html");
+    for (i, line) in header.lines().enumerate() {
+        if line.contains("current_path") && !line.trim_start().starts_with("{#") {
+            assert!(
+                line.contains("current_path | default("),
+                "zola: header.html:{} reads current_path with no default, which 404.html \
+                 does not define:\n{line}",
+                i + 1
+            );
+        }
+    }
+}
+
+// ── Declared post_install steps take effect (bd:mech-crate-99b) ──────────────
+
+/// zola declared `post_install.rename` of `apps/<svc>/gitignore.template` to
+/// `.gitignore`, but no template mapped the file, so the rename found nothing
+/// to move and every scaffolded zola site shipped without a `.gitignore`.
+#[test]
+fn zola_scaffold_ships_its_gitignore() {
+    let (project, _) = install_into_tempdir("zola", "blog", &HashMap::new());
+    let app = project.path().join("apps/blog");
+
+    let shipped = std::fs::read_to_string(recipes_root().join("zola/app/gitignore.template"))
+        .expect("setup: zola ships app/gitignore.template");
+    let installed = std::fs::read_to_string(app.join(".gitignore"))
+        .unwrap_or_else(|e| panic!("zola: apps/blog/.gitignore was not installed: {e}"));
+    assert_eq!(
+        installed, shipped,
+        "zola: apps/blog/.gitignore does not carry the recipe's gitignore.template"
+    );
+    assert!(
+        installed.lines().any(|l| l.trim() == "public/"),
+        "zola: the installed .gitignore does not ignore zola's build output"
+    );
+    assert!(
+        !app.join("gitignore.template").exists(),
+        "zola: gitignore.template was left behind instead of renamed"
+    );
+}
+
+/// The class net: the installer skips a `rename` or `chmod` whose path does not
+/// exist, so a step whose source nothing installs is a silent no-op. Every
+/// declared step of every shipped recipe must take effect on a clean install.
+#[test]
+fn every_declared_post_install_step_takes_effect() {
+    let mut failures: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for name in &shipped_recipe_names() {
+        let raw: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(recipes_root().join(name).join("recipe.json")).unwrap(),
+        )
+        .unwrap();
+        let post = &raw["post_install"];
+        let renames = post["rename"].as_array().cloned().unwrap_or_default();
+        let chmods = post["chmod"].as_array().cloned().unwrap_or_default();
+        if renames.is_empty() && chmods.is_empty() {
+            continue;
+        }
+
+        let (project, _) = install_into_tempdir(name, "svc", &HashMap::new());
+        let at = |p: &str| project.path().join(p);
+
+        for r in &renames {
+            checked += 1;
+            let (from, to) = (r["from"].as_str().unwrap(), r["to"].as_str().unwrap());
+            let (from, to) = (
+                &from.replace("{{SERVICE_NAME}}", "svc"),
+                &to.replace("{{SERVICE_NAME}}", "svc"),
+            );
+            if !at(to).is_file() {
+                failures.push(format!("{name}: rename {from} -> {to} left no {to}"));
+            }
+            if at(from).exists() {
+                failures.push(format!("{name}: rename {from} -> {to} left {from} behind"));
+            }
+        }
+        for c in &chmods {
+            checked += 1;
+            let path = &c["path"]
+                .as_str()
+                .unwrap()
+                .replace("{{SERVICE_NAME}}", "svc");
+            match std::fs::metadata(at(path)) {
+                Err(_) => failures.push(format!("{name}: chmod of {path}, which nothing installs")),
+                #[cfg(unix)]
+                Ok(meta) => {
+                    use std::os::unix::fs::PermissionsExt;
+                    if meta.permissions().mode() & 0o111 == 0 {
+                        failures.push(format!("{name}: chmod left {path} non-executable"));
+                    }
+                }
+                #[cfg(not(unix))]
+                Ok(_) => {}
+            }
+        }
+    }
+
+    assert!(
+        checked >= 4,
+        "setup: expected the laravel and zola rename/chmod steps, checked {checked}"
+    );
+    assert!(
+        failures.is_empty(),
+        "declared post_install steps that silently did nothing:\n{}",
+        failures.join("\n")
     );
 }

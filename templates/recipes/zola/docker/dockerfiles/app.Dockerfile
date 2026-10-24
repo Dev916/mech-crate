@@ -6,33 +6,43 @@
 ARG ZOLA_VERSION={{ZOLA_VERSION}}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Builder Stage - Download Zola binary and build the site
+# Zola Stage - glibc base carrying the zola binary for the build platform
 # ─────────────────────────────────────────────────────────────────────────────
-FROM alpine:3.19 AS builder
+# Zola publishes its Linux binaries as glibc (`*-unknown-linux-gnu`) builds:
+# there is no aarch64 musl tarball, and no aarch64 Linux build at all before
+# v0.20.0. A glibc binary does not run on Alpine (musl), so this base is Debian,
+# and the triple follows the build platform so Apple Silicon and x86_64 hosts
+# both fetch a tarball that exists (bd:mech-crate-b15).
+FROM debian:bookworm-slim AS zola
 
 ARG ZOLA_VERSION
 
-WORKDIR /site
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install dependencies for downloading and extracting
-RUN apk add --no-cache \
-    curl \
-    tar \
-    gzip \
-    ca-certificates
-
-# Download and install Zola binary
+# Download and install Zola binary. `curl -f` turns a missing asset into a
+# failed step, and `zola --version` proves the binary runs on this base.
 RUN ARCH=$(uname -m) && \
     case "$ARCH" in \
-        x86_64) ZOLA_ARCH="x86_64-unknown-linux-gnu" ;; \
-        aarch64) ZOLA_ARCH="aarch64-unknown-linux-gnu" ;; \
+        x86_64|amd64) ZOLA_ARCH="x86_64-unknown-linux-gnu" ;; \
+        aarch64|arm64) ZOLA_ARCH="aarch64-unknown-linux-gnu" ;; \
         *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
     esac && \
-    curl -sL "https://github.com/getzola/zola/releases/download/v${ZOLA_VERSION}/zola-v${ZOLA_VERSION}-${ZOLA_ARCH}.tar.gz" | \
-    tar xz -C /usr/local/bin
+    curl -fsSL "https://github.com/getzola/zola/releases/download/v${ZOLA_VERSION}/zola-v${ZOLA_VERSION}-${ZOLA_ARCH}.tar.gz" | \
+    tar xz -C /usr/local/bin && \
+    zola --version
 
-# Copy source files
-COPY . .
+# ─────────────────────────────────────────────────────────────────────────────
+# Builder Stage - Build the site
+# ─────────────────────────────────────────────────────────────────────────────
+FROM zola AS builder
+
+WORKDIR /site
+
+# Copy the site source. The build context is the project root, so the site is
+# apps/{{SERVICE_NAME}}, not the context itself.
+COPY apps/{{SERVICE_NAME}}/ .
 
 # Build the static site
 RUN zola build
@@ -40,32 +50,17 @@ RUN zola build
 # ─────────────────────────────────────────────────────────────────────────────
 # Development Stage - Live reload with zola serve
 # ─────────────────────────────────────────────────────────────────────────────
-FROM alpine:3.19 AS development
-
-ARG ZOLA_VERSION
+FROM zola AS development
 
 WORKDIR /site
 
-# Install dependencies
-RUN apk add --no-cache \
-    curl \
-    tar \
-    gzip \
-    ca-certificates \
-    inotify-tools
-
-# Download and install Zola binary
-RUN ARCH=$(uname -m) && \
-    case "$ARCH" in \
-        x86_64) ZOLA_ARCH="x86_64-unknown-linux-gnu" ;; \
-        aarch64) ZOLA_ARCH="aarch64-unknown-linux-gnu" ;; \
-        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
-    esac && \
-    curl -sL "https://github.com/getzola/zola/releases/download/v${ZOLA_VERSION}/zola-v${ZOLA_VERSION}-${ZOLA_ARCH}.tar.gz" | \
-    tar xz -C /usr/local/bin
+# wget backs the compose healthcheck; inotify-tools is for file watching.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget inotify-tools && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -S zola && adduser -S zola -G zola
+RUN groupadd --system zola && useradd --system --gid zola zola
 RUN chown -R zola:zola /site
 
 USER zola

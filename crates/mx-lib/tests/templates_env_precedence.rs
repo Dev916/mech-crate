@@ -37,7 +37,10 @@
 //!   5. no `environment:` value interpolates a variable that lives in an env file,
 //!      and
 //!   6. no shipped env config file hardcodes a database password, which is how
-//!      `:secret@` outlived the credentials it was standing in for.
+//!      `:secret@` outlived the credentials it was standing in for, and
+//!   7. no app-level env template (the framework's own `.env` seed under
+//!      `apps/<name>/`) assigns the database identity at all: the container env
+//!      the generator resolved is the one source (bd:mech-crate-tyu).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -406,7 +409,8 @@ fn the_sweep_reads_every_env_file_key_shipped_in_the_swept_roots() {
 /// `docker/.config/.env.*`. `env.secrets.template` counts — it is the seed
 /// `scripts/init.sh` copies to `.env.secrets`. An app-level `.env` template
 /// (`recipes/laravel/app/env.template`) does not: it lands in `apps/<name>/` and
-/// is the framework's own config, not a compose `env_file` layer.
+/// is the framework's own config, not a compose `env_file` layer. Those are
+/// swept separately by [`app_env_templates`] (bd:mech-crate-tyu).
 fn env_config_files() -> Vec<PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
@@ -676,6 +680,119 @@ fn no_shipped_env_config_hardcodes_a_database_password() {
     assert!(
         offenders.is_empty(),
         "{} shipped env value(s) hardcode a database credential:\n{}",
+        offenders.len(),
+        offenders.join("\n")
+    );
+}
+
+// ── App-level env templates (bd:mech-crate-tyu) ──────────────────────────────
+
+/// File names a recipe ships as the seed of a framework's own `.env` under
+/// `apps/<name>/` (laravel's `env.template` is renamed to `.env.example` at
+/// install, and its next steps copy that to `.env`). A real `.env` is not a
+/// template and is deliberately not matched: it is gitignored inside the recipe
+/// app, so matching it would make this net depend on a local checkout's state.
+const APP_ENV_TEMPLATE_NAMES: [&str; 4] = [
+    "env.template",
+    ".env.template",
+    "env.example",
+    ".env.example",
+];
+
+/// Every app-level env template shipped by a recipe: a file named in
+/// [`APP_ENV_TEMPLATE_NAMES`] anywhere under `templates/recipes/` outside a
+/// `config/` directory (those are the compose `env_file` layers above).
+fn app_env_templates() -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path
+                    .file_name()
+                    .is_some_and(|n| n == "config" || n == "node_modules" || n == "vendor")
+                {
+                    continue;
+                }
+                walk(&path, out);
+            } else if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| APP_ENV_TEMPLATE_NAMES.contains(&n))
+            {
+                out.push(path);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(&templates_root().join("recipes"), &mut out);
+    out.sort();
+    assert!(
+        out.iter()
+            .any(|p| p.ends_with("recipes/laravel/app/env.template")),
+        "setup: the sweep must see recipes/laravel/app/env.template, saw {:?}",
+        out.iter().map(|p| rel(p)).collect::<Vec<_>>()
+    );
+    out
+}
+
+/// bd:mech-crate-tyu: laravel's app-level env template shipped
+/// `DB_PASSWORD=secret` and `DB_USERNAME={{SERVICE_SLUG}}` into
+/// `apps/<name>/.env.example`, which the recipe's next steps copy to `.env`.
+///
+/// Laravel 12's `LoadEnvironmentVariables` loads `.env` through an
+/// **immutable** phpdotenv repository (`Illuminate\Support\Env`), so a variable
+/// the container already carries is never overwritten: in the container, the
+/// generated `docker/.config/.env.<name>` value wins. Verified against
+/// laravel/framework v12.47.0 (the recipe's lock). But `.env` fills every gap,
+/// so any process without the container env (host `php artisan`, IDE tooling, a
+/// config cache built outside the container) authenticated with `secret`, a
+/// value that matches no per-project database.
+///
+/// The generator never touches `apps/`, and `.env.example` is committed in the
+/// app's own repo, so it cannot carry generated literals. The design call is to
+/// defer: an app-level env template does not assign the database identity at
+/// all, and the container env (generated, resolved, one source) supplies it.
+#[test]
+fn no_app_env_template_assigns_the_database_identity() {
+    // The credential and the identity it authenticates (user + database). A
+    // value here must come from the generated container env, never the seed.
+    const DB_IDENTITY_KEYS: [&str; 7] = [
+        "DB_PASSWORD",
+        "DB_USERNAME",
+        "DB_USER",
+        "DB_DATABASE",
+        "DATABASE_URL",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_USER",
+    ];
+
+    let mut offenders: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for file in app_env_templates() {
+        checked += 1;
+        for (key, value) in env_config_pairs(&file) {
+            let stem = neutralize_placeholders(&key);
+            let is_identity_key = DB_IDENTITY_KEYS
+                .iter()
+                .any(|k| stem == *k || stem.ends_with(&format!("_{k}")));
+            if is_identity_key {
+                offenders.push(format!(
+                    "{} {key}={value}: an app-level env template must not assign the database identity; the container env (generated docker/.config/.env.<name>) supplies it",
+                    rel(&file)
+                ));
+            }
+        }
+    }
+
+    assert!(
+        checked >= 1,
+        "setup: expected at least one app-level env template, saw {checked}"
+    );
+    assert!(
+        offenders.is_empty(),
+        "{} app-level env template value(s) assign the database identity:\n{}",
         offenders.len(),
         offenders.join("\n")
     );

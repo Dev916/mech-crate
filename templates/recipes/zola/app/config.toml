@@ -28,6 +28,13 @@ compile_sass = true
 # Build search index for static search functionality
 build_search_index = true
 
+# Taxonomies (tags, categories, etc.). Top-level keys must come before the
+# first [table] header, or TOML files them under that table.
+taxonomies = [
+    { name = "tags", feed = true },
+    { name = "categories", feed = true },
+]
+
 # Enable syntax highlighting
 [markdown]
 highlight_code = true
@@ -58,12 +65,6 @@ skip_anchor_prefixes = ["#"]
 paths = "on"
 taxonomies = "on"
 anchors = "on"
-
-# Taxonomies (tags, categories, etc.)
-taxonomies = [
-    { name = "tags", feed = true },
-    { name = "categories", feed = true },
-]
 
 # Extra variables accessible in templates via `config.extra`
 [extra]

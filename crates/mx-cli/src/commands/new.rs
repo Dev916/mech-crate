@@ -409,7 +409,9 @@ make down
         // Copy cloudflare templates recursively
         self.copy_dir_recursive(&cf_template_dir, &cf_project_dir)?;
 
-        // Replace placeholders
+        // Replace placeholders. The name and extension sets here are mirrored by
+        // the infra placeholder net in crates/mx-lib/tests/recipes_conformance.rs
+        // (bd:mech-crate-pdr); change both together.
         let project_slug = self
             .name
             .to_lowercase()

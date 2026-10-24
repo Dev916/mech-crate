@@ -286,7 +286,7 @@ Docker setup, and Traefik routing.
 | Recipe | Description |
 |--------|-------------|
 | laravel | PHP Laravel with Nginx, PHP-FPM, queues, Vite |
-| nuxt | Nuxt 3 SSR/SSG with Tailwind + DaisyUI |
+| nuxt | Nuxt app scaffolded by nuxi init, Nitro server |
 | astro | Astro static site with Vue components |
 | rust-api | Rust Axum API with hexagonal architecture |
 | rust-leptos | Rust Leptos full-stack SSR app |

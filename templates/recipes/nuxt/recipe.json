@@ -1,15 +1,15 @@
 {
   "name": "nuxt",
-  "title": "Nuxt 3",
-  "description": "Nuxt 3 SSR/SSG application with Nitro server, Tailwind CSS",
-  "version": "3.15",
-  
+  "title": "Nuxt",
+  "description": "Nuxt app scaffolded by nuxi init, wired into the mx stack with Traefik routing and dev/prod Docker builds",
+  "version": "4.0",
+
   "features": [
-    "Nuxt 3 with SSR/SSG",
-    "Nitro server",
-    "Tailwind CSS + DaisyUI",
-    "TypeScript",
-    "Traefik reverse proxy routing"
+    "App scaffolded by `nuxi init` itself: the framework owns package.json and the app tree",
+    "Dependency-free /api/health endpoint (works on a fresh scaffold)",
+    "Nitro server (node-server output) in the production stage",
+    "Traefik reverse proxy routing on a .localhost domain",
+    "Dev/Prod Docker builds (hot-reload dev stage)"
   ],
   
   "services": [
@@ -32,11 +32,6 @@
       "default": "false",
       "description": "Re-run init_cmd by deleting apps/{{SERVICE_NAME}} first (DANGEROUS)"
     },
-    "mode": {
-      "flag": "--mode",
-      "default": "ssr",
-      "description": "Rendering mode: ssr, spa, or static"
-    },
     "node": {
       "flag": "--node",
       "default": "24",
@@ -50,8 +45,7 @@
     "SERVICE_UPPER": { "source": "name", "transform": "upper" },
     "DOMAIN": { "source": "option:domain" },
     "INIT_CMD": { "source": "option:init_cmd" },
-    "NODE_VERSION": { "source": "option:node" },
-    "SSR_ENABLED": { "source": "option:mode", "transform": "ssr_bool" }
+    "NODE_VERSION": { "source": "option:node" }
   },
 
   "init_app": {
@@ -62,14 +56,7 @@
   },
   
   "directories": [
-    "apps/{{SERVICE_NAME}}/components",
-    "apps/{{SERVICE_NAME}}/composables",
-    "apps/{{SERVICE_NAME}}/layouts",
-    "apps/{{SERVICE_NAME}}/pages",
-    "apps/{{SERVICE_NAME}}/public",
     "apps/{{SERVICE_NAME}}/server/api",
-    "apps/{{SERVICE_NAME}}/server/middleware",
-    "apps/{{SERVICE_NAME}}/assets/css",
     "docker/compose",
     "docker/dockerfiles/{{SERVICE_NAME}}",
     "docker/.config"
@@ -98,5 +85,13 @@
     "cd apps/{{SERVICE_NAME}} && npm install",
     "make build s={{SERVICE_NAME}}",
     "make dev s={{SERVICE_NAME}}"
+  ],
+
+  "notes": [
+    "`nuxi init` owns the app: package.json, nuxt.config.ts, tsconfig.json, app/app.vue and the starter tree are the scaffolder's, not this recipe's (bd:mech-crate-whj, the bd:mech-crate-874 call)",
+    "This recipe installs infra (compose, Dockerfiles, env) plus one app file: a dependency-free server/api/health.get.ts",
+    "Styling, modules and rendering mode are the app's call: add them to the scaffolded nuxt.config.ts (for example `npx nuxi module add tailwindcss`)",
+    "No lockfile ships: the Docker builds run `npm ci` when apps/<name>/package-lock.json exists and `npm install` otherwise",
+    "Re-scaffold an app from scratch with `mx add <name> --recipe nuxt --opt force_init=true` (deletes apps/<name> first)"
   ]
 }
