@@ -1154,3 +1154,140 @@ fn kb_nuxt_recipe_ships_the_release_scripts_make_invokes() {
         missing
     );
 }
+
+// ── zola builds on every host arch (bd:mech-crate-b15) ───────────────────────
+
+/// `FROM` base and body of each Dockerfile stage, in file order.
+fn dockerfile_stage_bodies(body: &str) -> Vec<(String, String)> {
+    let mut stages: Vec<(String, String)> = Vec::new();
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.to_ascii_uppercase().starts_with("FROM ") {
+            let base = trimmed[5..]
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            stages.push((base, String::new()));
+        } else if let Some((_, stage_body)) = stages.last_mut() {
+            stage_body.push_str(line);
+            stage_body.push('\n');
+        }
+    }
+    stages
+}
+
+/// `(major, minor, patch)` of a plain `x.y.z` version string.
+fn semver(v: &str) -> (u64, u64, u64) {
+    let parts: Vec<u64> = v
+        .split('.')
+        .map(|p| {
+            p.parse()
+                .unwrap_or_else(|e| panic!("setup: `{v}` is not x.y.z: {e}"))
+        })
+        .collect();
+    assert_eq!(parts.len(), 3, "setup: `{v}` is not x.y.z");
+    (parts[0], parts[1], parts[2])
+}
+
+/// Zola publishes Linux binaries only as glibc (`*-unknown-linux-gnu`) builds,
+/// and none for aarch64 before v0.20.0. The recipe used to fetch the gnu
+/// tarball into Alpine (musl, where a glibc binary cannot run) at v0.19.2 (no
+/// aarch64 asset at all), so `docker compose build` died at `tar xz` on Apple
+/// Silicon. Every stage that downloads zola must be glibc-based, map both host
+/// arches to a published triple, fail loudly on a missing asset, and the default
+/// version must be one that ships an aarch64 Linux build.
+#[test]
+fn zola_dockerfile_fetches_a_zola_build_that_exists_and_runs_on_both_arches() {
+    let (project, _) = install_into_tempdir("zola", "blog", &HashMap::new());
+    let dockerfile = std::fs::read_to_string(project.path().join("docker/dockerfiles/blog/app"))
+        .expect("setup: zola installs docker/dockerfiles/blog/app");
+
+    let downloads: Vec<(String, String)> = dockerfile_stage_bodies(&dockerfile)
+        .into_iter()
+        .filter(|(_, body)| body.contains("getzola/zola/releases/download"))
+        .collect();
+    assert!(
+        !downloads.is_empty(),
+        "setup: the zola Dockerfile downloads zola in no stage:\n{dockerfile}"
+    );
+    for (base, body) in &downloads {
+        assert!(
+            !base.starts_with("alpine"),
+            "zola: stage FROM {base} installs a glibc zola build on musl, where it cannot run"
+        );
+        for triple in ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"] {
+            assert!(
+                body.contains(triple),
+                "zola: stage FROM {base} never maps a host arch to `{triple}`:\n{body}"
+            );
+        }
+        assert!(
+            !body.contains("linux-musl"),
+            "zola: stage FROM {base} names a musl triple zola does not publish for every arch"
+        );
+        assert!(
+            body.contains("curl -fsSL"),
+            "zola: stage FROM {base} lets a missing release asset reach `tar` as an HTML body"
+        );
+    }
+
+    let raw: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(recipes_root().join("zola/recipe.json")).unwrap(),
+    )
+    .unwrap();
+    let default = raw["options"]["zola_version"]["default"]
+        .as_str()
+        .expect("setup: zola declares a zola_version default");
+    assert!(
+        semver(default) >= (0, 20, 0),
+        "zola: default zola_version {default} has no aarch64 Linux release asset (first in 0.20.0)"
+    );
+
+    // The build context is the project root: the site is apps/<svc>, and
+    // `zola build` over the whole project finds no config.toml.
+    assert!(
+        dockerfile.contains("COPY apps/blog/ ."),
+        "zola: the builder stage does not copy the site from apps/blog:\n{dockerfile}"
+    );
+}
+
+/// The site payload itself must be one `zola build` accepts: a `taxonomies`
+/// key written after `[slugify]` lands inside that table (zola rejects the
+/// duplicate key), a selector list that runs into `@media` is a Sass syntax
+/// error, and `current_path` is undefined while 404.html renders.
+#[test]
+fn zola_site_payload_is_one_zola_build_accepts() {
+    let (project, _) = install_into_tempdir("zola", "blog", &HashMap::new());
+    let site = project.path().join("apps/blog");
+
+    let config: toml::Value = toml::from_str(
+        &std::fs::read_to_string(site.join("config.toml")).expect("setup: read config.toml"),
+    )
+    .unwrap_or_else(|e| panic!("zola: config.toml is not valid TOML: {e}"));
+    assert!(
+        config.get("taxonomies").is_some_and(|t| t.is_array()),
+        "zola: config.toml declares no top-level `taxonomies` array"
+    );
+
+    let components = std::fs::read_to_string(site.join("sass/_components.scss"))
+        .expect("setup: read sass/_components.scss");
+    let squashed: String = components.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        !squashed.contains(", @media"),
+        "zola: _components.scss continues a selector list into an @media rule"
+    );
+
+    let header = std::fs::read_to_string(site.join("templates/partials/header.html"))
+        .expect("setup: read templates/partials/header.html");
+    for (i, line) in header.lines().enumerate() {
+        if line.contains("current_path") && !line.trim_start().starts_with("{#") {
+            assert!(
+                line.contains("current_path | default("),
+                "zola: header.html:{} reads current_path with no default, which 404.html \
+                 does not define:\n{line}",
+                i + 1
+            );
+        }
+    }
+}

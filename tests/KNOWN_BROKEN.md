@@ -48,9 +48,9 @@ left the lane when their fixes landed; `rnj` kept its `kb_` name when it
 graduated).
 
 **Scoreboard** (`make test-known-broken`): `8 tests run: 0 passed, 8 failed,
-492 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `492 passed, 8 skipped`. Those two numbers
-partition the workspace; if they stop summing to 500, either a lane test lost
+494 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `494 passed, 8 skipped`. Those two numbers
+partition the workspace; if they stop summing to 502, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -187,6 +187,13 @@ resolve the slug with `mx_lib::unyform::resolve_org_slug`; `login` records
 `org_slug` so its arrange half still succeeds. Lane 9 → 8, gate 485 → 492 (the
 graduated test, `cli_client_recovers_the_org_slug_for_id_only_credentials`
 beside it, and 5 unit tests on the two helpers), workspace total 494 → 500.
+
+**bd:mech-crate-b15** (the zola recipe could not build on Apple Silicon) had no
+lane row, so it landed against two fresh red tests that joined the gate
+directly: one pins the Dockerfile to a zola build that exists and runs on both
+arches (glibc base, gnu triple per arch, a default version with an aarch64
+Linux asset), the other pins the site payload to one `zola build` accepts.
+Lane 8, gate 492 → 494, workspace total 500 → 502.
 
 ## Notes on placement deviations
 

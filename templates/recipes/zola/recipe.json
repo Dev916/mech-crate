@@ -46,7 +46,7 @@
     },
     "zola_version": {
       "flag": "--zola-version",
-      "default": "0.19.2",
+      "default": "0.21.0",
       "description": "Zola version"
     },
     "theme": {
