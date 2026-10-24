@@ -22,7 +22,7 @@ mx add api --recipe rust-api --domain api.localhost  # apply it
 |---|---|---|---|
 | `astro` | 2.0 | ✅ | Astro 5 with Vue 3 islands, SSR, shadcn-vue, PrimeVue, global state, Cloudflare deployment. Brings `db` and `redis`. |
 | `laravel` | 12.0 | ✅ | Laravel 12 + Octane (Swoole), Filament admin, Inertia.js SSR. Brings a worker, a scheduler, `db` and `redis`. |
-| `nuxt` | 3.15 | ✅ | Nuxt 3 SSR/SSG with the Nitro server and Tailwind CSS. Standalone. |
+| `nuxt` | 4.0 | ✅ | A Nuxt app scaffolded by `nuxi init`, with the Nitro server and a dependency-free `/api/health`. Standalone. |
 | `rust-api` | 1.0 | ✅ | Actix-web + SQLx, hexagonal architecture. Brings `db` and `redis`. |
 | `rust-leptos` | 1.0 | ✅ | Leptos SSR on Actix-web with shadcn-ui, actor model, Postgres and Redis. |
 | `rust-worker` | 1.0 | ✅ | Job worker on Redis pub/sub with Postgres and local LLM evaluation. |
@@ -107,6 +107,11 @@ the app built one, and otherwise serves the static build. Adding the adapter is
 the app's call (`astro add node`), because the scaffolder owns
 `astro.config.mjs`. Both shapes answer `/api/health`: with static output the
 route is prerendered to `dist/api/health`.
+
+`nuxt` follows the same division: `nuxi init` owns `package.json`, the
+framework config and the app tree, and the recipe ships only
+`server/api/health.get.ts`. A fresh scaffold has no lockfile, so the dockerfiles
+run `npm ci` only when one exists and `npm install` otherwise.
 :::
 
 ## What `mx add` actually does

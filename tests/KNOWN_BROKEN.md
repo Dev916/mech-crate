@@ -48,9 +48,9 @@ left the lane when their fixes landed; `rnj` kept its `kb_` name when it
 graduated).
 
 **Scoreboard** (`make test-known-broken`): `8 tests run: 0 passed, 8 failed,
-496 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `496 passed, 8 skipped`. Those two numbers
-partition the workspace; if they stop summing to 504, either a lane test lost
+510 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `510 passed, 8 skipped`. Those two numbers
+partition the workspace; if they stop summing to 518, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -203,6 +203,21 @@ template as `.gitignore`, and a class net requires every declared `rename` and
 `chmod` of every shipped recipe to take effect on a clean install (the
 installer now also warns when one finds nothing to act on). Lane 8, gate
 494 → 496, workspace total 502 → 504.
+
+The rest of the P2 sweep had no lane rows either, so each fix landed against
+fresh red tests that joined the gate directly. The lane held at 8 throughout:
+bd:mech-crate-8xc (infra credential files written owner-only) 496 → 500,
+bd:mech-crate-tyu (the laravel app env template no longer assigns the database
+identity) 500 → 501, bd:mech-crate-pdr (placeholder net over `templates/infra`,
+static and behavioral) 501 → 504, bd:mech-crate-pz6 (`make build` passing
+`build.sh` its full five-arg contract) 504 → 509, and bd:mech-crate-whj (nuxt
+drops its dead app payload; no scaffolder recipe runs a bare `npm ci`)
+509 → 510. bd:mech-crate-w0p (sitemap `lastmod` for conflict-bearing merges)
+is covered by the site's own `npm test`, outside this workspace. Gate
+496 → 510, workspace total 504 → 518. `kb_nuxt_recipe_ships_the_release_scripts_make_invokes`
+lost the `package.json` it read in setup when nuxt dropped its payload; a
+missing file now counts as declaring no scripts, so it stays red on its real
+assertion until bd:mech-crate-ten decides where the release scripts come from.
 
 ## Notes on placement deviations
 

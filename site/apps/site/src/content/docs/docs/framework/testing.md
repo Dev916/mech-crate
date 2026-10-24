@@ -72,8 +72,8 @@ Two house rules keep the lane honest:
   file. The test is the first thing whoever fixes it should read.
 
 The two numbers partition the workspace: the lane reports 8 tests, 8 red; the
-gate suite in the same tree reports 492 passed, 8 skipped. If they stop summing
-to 500, either a lane test lost its `#[ignore]` or a gate test grew one.
+gate suite in the same tree reports 510 passed, 8 skipped. If they stop summing
+to 518, either a lane test lost its `#[ignore]` or a gate test grew one.
 
 `mech-crate-z5i`, the `mx upgrade` discovery defect, is the first row retired the
 intended way. Its test lost the `#[ignore]`, joined the gate, and its row left the

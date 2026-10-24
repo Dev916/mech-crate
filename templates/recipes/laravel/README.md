@@ -257,9 +257,9 @@ APP_URL=https://{{DOMAIN}}
 DB_CONNECTION=pgsql
 DB_HOST=db
 DB_PORT=5432
-DB_DATABASE={{SERVICE_NAME}}
-DB_USERNAME={{SERVICE_NAME}}
-DB_PASSWORD=secret
+DB_DATABASE={{SERVICE_SLUG}}
+DB_USERNAME={{SERVICE_SLUG}}
+DB_PASSWORD=${ {{- SERVICE_UPPER }}_DB_PASSWORD}
 
 # Redis
 REDIS_HOST=redis
@@ -274,6 +274,23 @@ OCTANE_SERVER=swoole
 # Inertia SSR
 INERTIA_SSR_ENABLED=true
 ```
+
+### Database Credentials
+
+The container env is the one source of the database identity.
+`{{SERVICE_UPPER}}_DB_PASSWORD` lives in `docker/.config/.env.secrets`, which
+`scripts/generate-secrets.sh` fills with a generated password the first time
+`make dev` runs. Never commit that file.
+
+`apps/{{SERVICE_NAME}}/.env.example` (and the `.env` you copy from it) sets
+`DB_CONNECTION`, `DB_HOST` and `DB_PORT` but deliberately leaves
+`DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` unset. Laravel never lets `.env`
+override a variable the container already has, but `.env` fills any gap, so a
+value there would only be used outside the container, where it matches no
+database. Run artisan against the database inside the container
+(`mx sh {{SERVICE_NAME}} -- php artisan migrate`). A host-side artisan run needs
+those three exported from `docker/.config/.env.{{SERVICE_NAME}}` and
+`docker/.config/.env.secrets` first.
 
 ### Traefik Routing
 
