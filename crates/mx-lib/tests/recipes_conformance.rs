@@ -1096,6 +1096,90 @@ fn no_shipped_recipe_leaves_a_placeholder_token_unsubstituted() {
     );
 }
 
+// ── No infra template ships a {{PLACEHOLDER}} nothing substitutes ────────────
+
+/// The placeholder names `mx new --infra <provider>` substitutes into the copied
+/// `templates/infra/<provider>/` tree. Mirrors `setup_cloudflare_infra` in
+/// `crates/mx-cli/src/commands/new.rs`, which expands exactly one name.
+const INFRA_SUBSTITUTED_PLACEHOLDERS: &[&str] = &["PROJECT_NAME"];
+
+/// File extensions that substitution pass rewrites. A token in any other file
+/// is copied through literally.
+const INFRA_SUBSTITUTED_EXTENSIONS: &[&str] = &["ts", "toml", "json", "md"];
+
+/// The `templates/infra/<provider>/` trees `mx new --infra` actually installs.
+const INFRA_INSTALLED_PROVIDERS: &[&str] = &["cloudflare"];
+
+/// bd:mech-crate-pdr: `templates/infra/` sits outside `templates/recipes/`, so
+/// the recipe net above never looked at its `{{PROJECT_NAME}}` tokens. This is
+/// the static half of the same net for infra templates: every SCREAMING_SNAKE
+/// token must be one `mx new` substitutes, in a file the substitution pass
+/// rewrites, under a provider `mx new` installs. The behavioral half
+/// (`mx new --no-prompt --infra cloudflare` leaves zero tokens) lives in
+/// `crates/mx-cli/tests/new_infra_placeholders.rs`, since it needs the binary.
+#[test]
+fn no_shipped_infra_template_leaves_a_placeholder_token_unsubstituted() {
+    let infra = templates_root().join("infra");
+    let mut files = walk_files(&infra);
+    files.sort();
+
+    let mut offenders: Vec<String> = Vec::new();
+    let mut seen = 0usize;
+    for file in files {
+        let Ok(body) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let mut tokens = placeholder_tokens(&body);
+        tokens.sort();
+        tokens.dedup();
+        if tokens.is_empty() {
+            continue;
+        }
+        let rel = file.strip_prefix(&infra).unwrap();
+        let rel_s = rel.display().to_string();
+        let provider = rel
+            .components()
+            .next()
+            .map(|c| c.as_os_str().to_string_lossy().to_string())
+            .unwrap_or_default();
+        let ext = file
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or_default();
+        for token in tokens {
+            seen += 1;
+            if !INFRA_INSTALLED_PROVIDERS.contains(&provider.as_str()) {
+                offenders.push(format!(
+                    "  infra/{rel_s}: {{{{{token}}}}} sits under provider `{provider}`, \
+                     which `mx new --infra` does not install or substitute"
+                ));
+            } else if !INFRA_SUBSTITUTED_PLACEHOLDERS.contains(&token.as_str()) {
+                offenders.push(format!(
+                    "  infra/{rel_s}: {{{{{token}}}}} is not a name `mx new --infra` \
+                     substitutes (only {INFRA_SUBSTITUTED_PLACEHOLDERS:?})"
+                ));
+            } else if !INFRA_SUBSTITUTED_EXTENSIONS.contains(&ext.as_str()) {
+                offenders.push(format!(
+                    "  infra/{rel_s}: {{{{{token}}}}} is in a file the substitution \
+                     pass skips (extension `{ext}`, rewritten: \
+                     {INFRA_SUBSTITUTED_EXTENSIONS:?})"
+                ));
+            }
+        }
+    }
+
+    assert!(
+        seen > 0,
+        "setup: expected templates/infra to still use {{{{PLACEHOLDER}}}} tokens"
+    );
+    assert!(
+        offenders.is_empty(),
+        "these shipped infra template files carry a {{{{PLACEHOLDER}}}} token that \
+         `mx new --infra` does not substitute, so it reaches the project literally:\n{}",
+        offenders.join("\n")
+    );
+}
+
 // ── Known-broken lane (bd:mech-crate-ten) ────────────────────────────────────
 
 /// `make release app=<app>` shells into `apps/<app>` and runs `yarn release*`,
