@@ -422,6 +422,13 @@ impl RecipeInstaller {
 
             if from.exists() {
                 std::fs::rename(&from, &to)?;
+            } else if !to.exists() {
+                // A re-run finds the file already renamed; neither path existing
+                // means the recipe declared a rename of a file it never installs.
+                tracing::warn!(
+                    "post_install rename source {} does not exist; nothing renamed",
+                    from.display()
+                );
             }
         }
 
@@ -435,6 +442,11 @@ impl RecipeInstaller {
                 let mut perms = meta.permissions();
                 perms.set_mode(perms.mode() | 0o111);
                 std::fs::set_permissions(&path, perms)?;
+            } else {
+                tracing::warn!(
+                    "post_install chmod target {} does not exist; nothing made executable",
+                    path.display()
+                );
             }
         }
 

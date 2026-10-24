@@ -805,10 +805,6 @@ const UNMAPPED_PAYLOAD_ALLOWED: &[&str] = &[
     "nuxt/app/pages/index.vue",
     "nuxt/app/tailwind.config.ts",
     "nuxt/app/tsconfig.json",
-    // zola maps app/{config.toml,content,sass,static,templates} but not this,
-    // so its `post_install.rename` of apps/<svc>/gitignore.template is a no-op
-    // and the scaffolded site ships no .gitignore.
-    "zola/app/gitignore.template",
 ];
 
 /// Every file a recipe ships must either be mapped by `recipe.json` (directly or
@@ -1290,4 +1286,101 @@ fn zola_site_payload_is_one_zola_build_accepts() {
             );
         }
     }
+}
+
+// ── Declared post_install steps take effect (bd:mech-crate-99b) ──────────────
+
+/// zola declared `post_install.rename` of `apps/<svc>/gitignore.template` to
+/// `.gitignore`, but no template mapped the file, so the rename found nothing
+/// to move and every scaffolded zola site shipped without a `.gitignore`.
+#[test]
+fn zola_scaffold_ships_its_gitignore() {
+    let (project, _) = install_into_tempdir("zola", "blog", &HashMap::new());
+    let app = project.path().join("apps/blog");
+
+    let shipped = std::fs::read_to_string(recipes_root().join("zola/app/gitignore.template"))
+        .expect("setup: zola ships app/gitignore.template");
+    let installed = std::fs::read_to_string(app.join(".gitignore"))
+        .unwrap_or_else(|e| panic!("zola: apps/blog/.gitignore was not installed: {e}"));
+    assert_eq!(
+        installed, shipped,
+        "zola: apps/blog/.gitignore does not carry the recipe's gitignore.template"
+    );
+    assert!(
+        installed.lines().any(|l| l.trim() == "public/"),
+        "zola: the installed .gitignore does not ignore zola's build output"
+    );
+    assert!(
+        !app.join("gitignore.template").exists(),
+        "zola: gitignore.template was left behind instead of renamed"
+    );
+}
+
+/// The class net: the installer skips a `rename` or `chmod` whose path does not
+/// exist, so a step whose source nothing installs is a silent no-op. Every
+/// declared step of every shipped recipe must take effect on a clean install.
+#[test]
+fn every_declared_post_install_step_takes_effect() {
+    let mut failures: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for name in &shipped_recipe_names() {
+        let raw: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(recipes_root().join(name).join("recipe.json")).unwrap(),
+        )
+        .unwrap();
+        let post = &raw["post_install"];
+        let renames = post["rename"].as_array().cloned().unwrap_or_default();
+        let chmods = post["chmod"].as_array().cloned().unwrap_or_default();
+        if renames.is_empty() && chmods.is_empty() {
+            continue;
+        }
+
+        let (project, _) = install_into_tempdir(name, "svc", &HashMap::new());
+        let at = |p: &str| project.path().join(p);
+
+        for r in &renames {
+            checked += 1;
+            let (from, to) = (r["from"].as_str().unwrap(), r["to"].as_str().unwrap());
+            let (from, to) = (
+                &from.replace("{{SERVICE_NAME}}", "svc"),
+                &to.replace("{{SERVICE_NAME}}", "svc"),
+            );
+            if !at(to).is_file() {
+                failures.push(format!("{name}: rename {from} -> {to} left no {to}"));
+            }
+            if at(from).exists() {
+                failures.push(format!("{name}: rename {from} -> {to} left {from} behind"));
+            }
+        }
+        for c in &chmods {
+            checked += 1;
+            let path = &c["path"]
+                .as_str()
+                .unwrap()
+                .replace("{{SERVICE_NAME}}", "svc");
+            match std::fs::metadata(at(path)) {
+                Err(_) => failures.push(format!("{name}: chmod of {path}, which nothing installs")),
+                #[cfg(unix)]
+                Ok(meta) => {
+                    use std::os::unix::fs::PermissionsExt;
+                    if meta.permissions().mode() & 0o111 == 0 {
+                        failures.push(format!("{name}: chmod left {path} non-executable"));
+                    }
+                }
+                #[cfg(not(unix))]
+                Ok(_) => {}
+            }
+        }
+    }
+
+    assert!(
+        checked >= 4,
+        "setup: expected the laravel and zola rename/chmod steps, checked {checked}"
+    );
+    assert!(
+        failures.is_empty(),
+        "declared post_install steps that silently did nothing:\n{}",
+        failures.join("\n")
+    );
 }

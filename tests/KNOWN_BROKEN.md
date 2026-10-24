@@ -48,9 +48,9 @@ left the lane when their fixes landed; `rnj` kept its `kb_` name when it
 graduated).
 
 **Scoreboard** (`make test-known-broken`): `8 tests run: 0 passed, 8 failed,
-494 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
-(`make test`) in the same tree: `494 passed, 8 skipped`. Those two numbers
-partition the workspace; if they stop summing to 502, either a lane test lost
+496 skipped`: 8 rows above, 8 red, zero bookkeeping debt. The gate suite
+(`make test`) in the same tree: `496 passed, 8 skipped`. Those two numbers
+partition the workspace; if they stop summing to 504, either a lane test lost
 its `#[ignore]` or a gate test grew one.
 
 The lane held at 14 across the first-touch-killer fixes (bd:mech-crate-bj4,
@@ -194,6 +194,15 @@ directly: one pins the Dockerfile to a zola build that exists and runs on both
 arches (glibc base, gnu triple per arch, a default version with an aarch64
 Linux asset), the other pins the site payload to one `zola build` accepts.
 Lane 8, gate 492 → 494, workspace total 500 → 502.
+
+**bd:mech-crate-99b** (zola's `post_install.rename` of `gitignore.template`
+silently doing nothing) is fixed the same way: the recipe now maps the file, so
+the declared rename takes effect, and `zola/app/gitignore.template` left
+`UNMAPPED_PAYLOAD_ALLOWED`. Two fresh gate tests: the zola install carries the
+template as `.gitignore`, and a class net requires every declared `rename` and
+`chmod` of every shipped recipe to take effect on a clean install (the
+installer now also warns when one finds nothing to act on). Lane 8, gate
+494 → 496, workspace total 502 → 504.
 
 ## Notes on placement deviations
 
