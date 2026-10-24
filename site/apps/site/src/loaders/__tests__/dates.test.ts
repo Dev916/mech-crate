@@ -8,9 +8,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import {
   CORPUS_CATEGORY_PAGE,
@@ -257,6 +258,100 @@ describe('auditSitemapXml', () => {
   it('reports nothing for an empty sitemap', () => {
     expect(auditSitemapXml('<urlset></urlset>')).toEqual({ total: 0, missing: [] });
   });
+});
+
+/**
+ * A throwaway repository whose newest change to `resolved.md` lives inside a
+ * conflict-bearing merge commit (bd mech-crate-w0p, hit live on e9f40b3).
+ *
+ *   2026-01-01  base      resolved.md, side-only.md, untouched.md
+ *   2026-01-02  side      resolved.md -> "side", side-only.md -> "side"
+ *   2026-01-03  main      resolved.md -> "main"
+ *   2026-01-05  merge     resolved.md -> "resolved" (differs from BOTH parents);
+ *                         side-only.md comes over cleanly from the side branch
+ *
+ * Built in a temp dir with pinned committer dates so it does not depend on the
+ * real repository's history (or on how deep a CI clone is).
+ */
+function buildMergeFixtureRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dates-merge-'));
+  const git = (args: string[], date?: string): string =>
+    execFileSync(
+      'git',
+      [
+        '-c', 'user.name=fixture',
+        '-c', 'user.email=fixture@example.invalid',
+        '-c', 'commit.gpgsign=false',
+        '-c', 'core.hooksPath=/dev/null',
+        ...args,
+      ],
+      {
+        cwd: dir,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          ...(date === undefined ? {} : { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }),
+        },
+      }
+    );
+  const write = (path: string, body: string): void => writeFileSync(join(dir, path), `${body}\n`);
+
+  git(['init', '-q', '-b', 'main']);
+  write('resolved.md', 'base');
+  write('side-only.md', 'base');
+  write('untouched.md', 'base');
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'base'], '2026-01-01T12:00:00+00:00');
+
+  git(['checkout', '-q', '-b', 'side']);
+  write('resolved.md', 'side');
+  write('side-only.md', 'side');
+  git(['commit', '-q', '-am', 'side'], '2026-01-02T12:00:00+00:00');
+
+  git(['checkout', '-q', 'main']);
+  write('resolved.md', 'main');
+  git(['commit', '-q', '-am', 'main'], '2026-01-03T12:00:00+00:00');
+
+  try {
+    git(['merge', '-q', '--no-edit', 'side'], '2026-01-05T12:00:00+00:00');
+    throw new Error('fixture merge was expected to conflict on resolved.md');
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('fixture merge')) throw error;
+  }
+  write('resolved.md', 'resolved');
+  git(['add', 'resolved.md']);
+  git(['commit', '-q', '--no-edit'], '2026-01-05T12:00:00+00:00');
+
+  return dir;
+}
+
+describe('readGitDates across a conflict-bearing merge (mech-crate-w0p)', () => {
+  const repo = buildMergeFixtureRepo();
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+  const gitDates = readGitDates(repo);
+  const gitLogOne = (repoPath: string): string =>
+    execFileSync('git', ['log', '-1', '--format=%cI', '--', repoPath], {
+      cwd: repo,
+      encoding: 'utf8',
+    }).trim();
+
+  it('dates a file whose last change is a conflict resolution to the merge commit', () => {
+    expect(toIsoTimestamp(gitDates.get('resolved.md') ?? '')).toBe('2026-01-05T12:00:00.000Z');
+  });
+
+  it('dates a cleanly merged side-branch file to the commit that wrote it, not the merge', () => {
+    expect(toIsoTimestamp(gitDates.get('side-only.md') ?? '')).toBe('2026-01-02T12:00:00.000Z');
+    expect(toIsoTimestamp(gitDates.get('untouched.md') ?? '')).toBe('2026-01-01T12:00:00.000Z');
+  });
+
+  it.each(['resolved.md', 'side-only.md', 'untouched.md'])(
+    'agrees with `git log -1` for %s (one definition of last-modified)',
+    (repoPath) => {
+      expect(gitDates.get(repoPath)).toBe(gitLogOne(repoPath));
+    }
+  );
 });
 
 describe('the real repository', () => {
