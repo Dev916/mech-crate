@@ -32,57 +32,51 @@ mx infra link cloudflare
 mx cf setup
 ```
 
+`mx cf <cmd>` is a thin wrapper over the project's `make cf-<cmd>` targets
+(`make/cloudflare.mk`, present when the project was created with
+`--infra cloudflare`): `mx cf deploy myapp` runs exactly
+`make cf-deploy a=myapp`. `mx cf --help` lists every wrapped target.
+
 ## Hierarchical Config Resolution
 
-When MechCrate needs infrastructure credentials, it looks in this order:
+Every credential resolves on its own, highest precedence first:
 
-1. **Project-local config** (`./infra/<provider>/.env.<provider>`)
-   - Used if it exists AND is not linked to global
-   - Takes precedence over global config
+1. **The environment** (or the `make` command line)
+2. **Project-local config** (`./infra/<provider>/.env.<provider>`), unless the
+   project is linked to global
+3. **Global config** (`~/.mech-crate/config/infra/<provider>.env`), shared by
+   every project on the workstation
 
-2. **Global config** (`~/.mech-crate/config/infra/<provider>.env`)
-   - Used if project has no local config, or if project is linked to global
-   - Shared across all projects on the workstation
+Within a scope the canonical name is read before a deprecated alias
+(`CLOUDFLARE_ACCOUNT_ID` before `CF_ACCOUNT_ID`), but precedence is by scope,
+never by spelling: a project file carrying only the alias still beats a global
+file carrying the canonical name. This is the order `make/cloudflare.mk`
+implements, and `mx infra inspect <provider>` prints the resolved set with the
+scope that supplied each key, so the two cannot disagree.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Config Resolution Flow                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Project needs credentials                                       │
-│           │                                                      │
-│           ▼                                                      │
-│  ┌─────────────────────┐                                        │
-│  │ Project config      │                                        │
-│  │ exists?             │──── No ────┐                           │
-│  └─────────────────────┘            │                           │
-│           │ Yes                     │                           │
-│           ▼                         ▼                           │
-│  ┌─────────────────────┐   ┌─────────────────────┐             │
-│  │ Is it linked to     │   │ Use global config   │             │
-│  │ global?             │   │ if available        │             │
-│  └─────────────────────┘   └─────────────────────┘             │
-│           │                         │                           │
-│    Yes    │    No                   │                           │
-│           │                         │                           │
-│           ▼                         │                           │
-│  ┌─────────────────────┐           │                           │
-│  │ Use global config   │           │                           │
-│  └─────────────────────┘           │                           │
-│                                     │                           │
-│           ▼                         │                           │
-│  ┌─────────────────────┐           │                           │
-│  │ Use project-local   │           │                           │
-│  │ config              │           │                           │
-│  └─────────────────────┘           │                           │
-│                                     ▼                           │
-│                          ┌─────────────────────┐               │
-│                          │ Error: Not          │               │
-│                          │ configured          │               │
-│                          └─────────────────────┘               │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Linking
+
+A project is **linked** when its `.env.<provider>` contains the exact line
+`MX_INFRA_USE_GLOBAL=true`. A linked project's file is not read for values, so
+its credentials resolve from the environment, then the global config. That one
+line is the whole mechanism, and every reader honors it: `mx infra inspect`,
+`make cf-vars` / `mx cf vars` (which print `CF_PROJECT_LINKED=true`), every
+`make cf-*` target, and `scripts/cf-init-app.sh`.
+
+- `mx infra link <provider>` adds the line (creating the file if needed) and
+  keeps everything else in the file. It needs a project (run it from the root
+  or below) and an existing global config, and is idempotent.
+- `mx infra unlink <provider>` removes the line, so the project's own values
+  apply again. A file that held nothing but the link is deleted. Unlinking an
+  unlinked project is a no-op.
+
+Linking is only needed to make a project with its own `.env.<provider>` defer
+to the global config without deleting that file: a project with no project
+file already falls through to global.
+
+The older `.env.linked` marker file is **deprecated and ignored**. It was only
+ever read by the Rust resolver and written by nothing. `mx infra inspect` warns
+about a stray one, and `mx infra link` / `unlink` delete it.
 
 ## Supported Providers
 
@@ -110,7 +104,9 @@ mx infra setup hetzner
 # List all configured providers
 mx infra list
 
-# Show detailed config for a provider
+# Show the resolved config for a provider: each key with the scope that
+# supplied it (environment / project / global, deprecated aliases tagged),
+# the link state, and both file paths. Secrets are masked.
 mx infra inspect cloudflare
 
 # Remove a global config
@@ -125,10 +121,10 @@ From within a MechCrate project:
 # Link project to global config
 mx infra link cloudflare
 
-# Remove link (stop using global config)
+# Remove link (the project's own values apply again)
 mx infra unlink cloudflare
 
-# Check current config status
+# Check current config status (alias of mx cf vars)
 mx cf config
 ```
 
@@ -153,13 +149,14 @@ mx cf config
 
 ### Link Marker
 
-When a project is linked to global config, the project config file contains:
+A linked project's config file contains the line `mx infra link` writes:
 
 ```bash
+# Linked to the global config by `mx infra link`; `mx infra unlink` removes this.
 MX_INFRA_USE_GLOBAL=true
-MX_INFRA_PROVIDER=cloudflare
-MX_INFRA_LINKED_AT=2026-01-11T12:00:00-08:00
 ```
+
+Any other lines in the file are kept, and ignored while the link is in place.
 
 ## Provider-Specific Configuration
 
@@ -172,8 +169,15 @@ mx infra setup cloudflare
 # Project-local setup (if needed)
 mx cf setup
 
-# Check current config source
-mx cf config
+# Show the resolved credentials and which scope supplied them (make cf-vars)
+mx cf vars
+
+# Fail early if no account id resolves (make cf-check-credentials)
+mx cf check-credentials
+
+# Initialize and deploy an app (make cf-init / make cf-deploy)
+mx cf init api.example.com --type=container
+mx cf deploy api.example.com
 ```
 
 **Config Variables:**
@@ -186,9 +190,9 @@ reaches the deploy untranslated. `CF_ACCOUNT_ID` / `CF_API_TOKEN` are deprecated
 aliases: still read at their own scope's precedence so an older config keeps
 working, never written. For Cloudflare specifically, both scopes are read with no
 linking required, the project file winning over the global one; `make cf-vars`
-prints which scope supplied the account id and `make cf-check-credentials` fails
-loudly when none did. See `mx-cloudflare-deploy.md` §5 for the as-implemented
-detail.
+(`mx cf vars`) prints which scope supplied the account id and
+`make cf-check-credentials` (`mx cf check-credentials`) fails loudly when none
+did. See `mx-cloudflare-deploy.md` §5 for the as-implemented detail.
 
 ### DigitalOcean
 
@@ -280,8 +284,8 @@ myproject/
 # Deploy to staging (uses default .env.cloudflare)
 mx cf deploy myapp
 
-# Deploy to production (override with prod config)
-source infra/cloudflare/.env.cloudflare.prod
+# Deploy to production (export the prod config; the environment wins)
+set -a; source infra/cloudflare/.env.cloudflare.prod; set +a
 mx cf deploy myapp
 ```
 
@@ -311,7 +315,7 @@ mx cf config
 
 ```bash
 # Check which config is active
-mx cf config
+mx cf vars
 
 # If linked but want local
 mx infra unlink cloudflare
@@ -326,8 +330,8 @@ mx infra link cloudflare
 # Remove global config
 mx infra remove cloudflare
 
-# Remove project link
-rm ./infra/cloudflare/.env.cloudflare
+# Remove project link (or delete the project file to drop its values too)
+mx infra unlink cloudflare
 
 # Start fresh
 mx infra setup cloudflare

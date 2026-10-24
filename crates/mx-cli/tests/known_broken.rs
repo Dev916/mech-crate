@@ -78,98 +78,6 @@ fn template_project(root: &Path) -> PathBuf {
     recording
 }
 
-// ── 3. bd:mech-crate-066 — infra link/unlink are stubs ───────────────────────
-
-/// `mx infra link <provider>` must actually link: write the marker the Rust
-/// resolver looks for, so the project resolves to the global credentials.
-#[test]
-#[ignore = "bd:mech-crate-066 mx infra link/unlink only print a message"]
-fn kb_infra_link_writes_marker_and_inspect_resolves_global() {
-    let home = tempfile::tempdir().expect("setup: home tempdir");
-    let proj = tempfile::tempdir().expect("setup: project tempdir");
-    scaffold_project(proj.path());
-
-    let global_dir = home.path().join(".mech-crate/config/infra");
-    std::fs::create_dir_all(&global_dir).expect("setup: global infra dir");
-    std::fs::write(
-        global_dir.join("cloudflare.env"),
-        "CLOUDFLARE_ACCOUNT_ID=global-account\n",
-    )
-    .expect("setup: write global cloudflare.env");
-
-    let project_cfg = proj.path().join("infra/cloudflare");
-    std::fs::create_dir_all(&project_cfg).expect("setup: project infra dir");
-    std::fs::write(
-        project_cfg.join(".env.cloudflare"),
-        "CLOUDFLARE_ACCOUNT_ID=project-account\n",
-    )
-    .expect("setup: write project .env.cloudflare");
-
-    let inspect = || {
-        mx().current_dir(proj.path())
-            .env("HOME", home.path())
-            .env_remove("MECH_CRATE_ROOT")
-            .args(["infra", "inspect", "cloudflare"])
-            .output()
-            .expect("setup: run mx infra inspect")
-    };
-
-    let before = inspect();
-    assert!(
-        before.status.success() && stdout_of(&before).contains("project-account"),
-        "setup: unlinked project must resolve to its own credentials, got: {}{}",
-        stdout_of(&before),
-        stderr_of(&before)
-    );
-
-    let link = mx()
-        .current_dir(proj.path())
-        .env("HOME", home.path())
-        .env_remove("MECH_CRATE_ROOT")
-        .args(["infra", "link", "cloudflare"])
-        .output()
-        .expect("setup: run mx infra link");
-    assert!(
-        link.status.success(),
-        "setup: mx infra link must exit 0, got: {}",
-        stderr_of(&link)
-    );
-
-    let marker = project_cfg.join(".env.linked");
-    assert!(
-        marker.exists(),
-        "mx infra link must create the resolver's marker at {}",
-        marker.display()
-    );
-
-    let after = inspect();
-    assert!(
-        after.status.success() && stdout_of(&after).contains("global-account"),
-        "after linking, mx infra inspect must resolve to the global config, got: {}{}",
-        stdout_of(&after),
-        stderr_of(&after)
-    );
-}
-
-// ── 4. bd:mech-crate-vxq — phantom `mx cf` command ───────────────────────────
-
-/// `INFRA_CONFIG.md` and the MCP server's resource text both document `mx cf`.
-/// If we keep the docs, the command has to exist (retire this test instead if
-/// the issue is closed by purging the doc references).
-#[test]
-#[ignore = "bd:mech-crate-vxq documented `mx cf` subcommand does not exist"]
-fn kb_mx_cf_subcommand_exists() {
-    let out = mx()
-        .args(["cf", "--help"])
-        .output()
-        .expect("setup: run mx cf");
-    assert!(
-        out.status.success(),
-        "documented `mx cf` must answer --help, got: {}",
-        stderr_of(&out)
-    );
-}
-
 // ── 5. bd:mech-crate-9be — `recipes apply --fix` is a dead flag ──────────────
 
 /// `--fix` is bound as `_fix` and ignored, so `apply` and `apply --fix` do the
@@ -211,7 +119,8 @@ async fn kb_recipes_apply_fix_changes_behavior() {
         serde_json::json!({
             "api_key": "test-key",
             "url": server.uri(),
-            "org_id": "org_test"
+            "org_id": "org_test",
+            "org_slug": "test"
         })
         .to_string(),
     )

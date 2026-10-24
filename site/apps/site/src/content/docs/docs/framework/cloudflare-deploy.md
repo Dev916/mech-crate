@@ -1,6 +1,6 @@
 ---
 title: Cloudflare deploy
-description: The cf-* make targets, the three worker types, and how this site is meant to ship.
+description: The mx cf commands and the cf-* make targets behind them, the three worker types, and how this site is meant to ship.
 sidebar:
   order: 8
 ---
@@ -15,9 +15,10 @@ mx infra setup cloudflare          # credentials, once per workstation
 ```
 
 :::caution[The `cf-*` targets are not in every project]
-Without `--infra cloudflare`, `make/cloudflare.mk` is simply not in `make/`, and
-`make cf-setup` fails with "no rule to make target". Check `make help`. If you
-see the `cf-*` block, you have it. `mx upgrade` treats these files as conditional
+Without `--infra cloudflare`, `make/cloudflare.mk` is simply not in `make/`:
+`make cf-setup` fails with "no rule to make target", and `mx cf setup` refuses
+up front, saying the project has no Cloudflare make module. Check `make help`.
+If you see the `cf-*` block, you have it. `mx upgrade` treats these files as conditional
 on `infra/cloudflare/` existing, so a project that opted in stays current and one
 that did not is never offered them.
 :::
@@ -25,10 +26,17 @@ that did not is never offered them.
 ## The flow
 
 ```bash
-make cf-setup                    # interactive wizard: auth, account id, optional API token
-make cf-init a=myapp type=worker # scaffold an app (worker | cron | container)
-make cf-deploy a=myapp           # deploy to production
+mx cf setup                    # interactive wizard: auth, account id, optional API token
+mx cf init myapp --type worker # scaffold an app (worker | cron | container)
+mx cf deploy myapp             # deploy to production
 ```
+
+`mx cf <cmd>` is a thin wrapper over the project's `make cf-<cmd>` targets:
+it finds the project root the way `mx dev` does, turns an app argument into
+`a=<app>`, and exits with make's code. `mx cf deploy myapp` runs exactly
+`make cf-deploy a=myapp`, so either spelling works and the output is identical.
+`mx cf --help` lists every wrapped target, and `-v` prints the make invocation
+before running it.
 
 Three worker types, chosen at `cf-init`:
 
@@ -39,6 +47,10 @@ Three worker types, chosen at `cf-init`:
 | `container` | a container image behind a worker: port, sleep timeout, max instances, custom domain |
 
 ## Target reference
+
+Every row is also `mx cf <name>` with the `cf-` prefix dropped and `a=<app>`
+passed as a plain argument (`mx cf logs myapp`). `mx cf config` is an alias of
+`mx cf vars`.
 
 | Target | Purpose |
 |---|---|
@@ -66,11 +78,11 @@ Per-app configuration lives in that app's `wrangler.toml`. Credentials come from
 [`mx infra`](/docs/framework/infra-credentials/) or from `make cf-setup`, and both
 are read: the environment first, then the project's
 `infra/cloudflare/.env.cloudflare`, then the global
-`~/.mech-crate/config/infra/cloudflare.env`. One
-`mx infra setup cloudflare` per workstation is enough, and `make cf-setup` is the
-override for a project that deploys to a different account. `make cf-vars` prints
-which scope answered; `make cf-check-credentials` fails loudly, naming both paths,
-when none did.
+`~/.mech-crate/config/infra/cloudflare.env`. A project linked with
+`mx infra link cloudflare` skips its own file. One `mx infra setup cloudflare`
+per workstation is enough, and `mx cf setup` is the override for a project that
+deploys to a different account. `mx cf vars` prints which scope answered;
+`mx cf check-credentials` fails loudly, naming both paths, when none did.
 
 ## The full guides
 

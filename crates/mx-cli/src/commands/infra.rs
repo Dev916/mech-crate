@@ -6,7 +6,7 @@ use console::style;
 use dialoguer::{Input, Password};
 
 use mx_lib::config::MechCrateConfig;
-use mx_lib::infra::{InfraConfig, InfraProvider};
+use mx_lib::infra::{InfraConfig, InfraProvider, Resolution, DEPRECATED_LINK_MARKER, LINK_FLAG};
 use mx_lib::project::ProjectDetector;
 
 /// Body of the global Cloudflare credentials file
@@ -278,7 +278,9 @@ impl InfraCommand {
         println!("{}", style("─".repeat(40)).dim());
 
         for (provider, global, project) in &providers {
-            let status = if *project {
+            let status = if infra.is_linked(*provider) {
+                style("global (project linked)").cyan()
+            } else if *project {
                 style("project").green()
             } else if *global {
                 style("global").cyan()
@@ -298,10 +300,12 @@ impl InfraCommand {
     }
 
     async fn inspect(&self, infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        let provider = InfraProvider::parse_name(provider_name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
+        let provider = parse_provider(provider_name)?;
+        let resolution = infra.resolve(provider)?;
 
-        let config = infra.load_config(provider)?;
+        if let Some(marker) = &resolution.deprecated_marker {
+            eprintln!("{}", deprecated_marker_warning(marker, provider));
+        }
 
         println!(
             "{} {}",
@@ -309,52 +313,104 @@ impl InfraCommand {
             style(provider.name()).green()
         );
         println!("{}", style("─".repeat(40)).dim());
+        println!("{}", render_header(&resolution));
+        println!();
+        println!("{}", render_keys(&resolution));
 
-        for (key, value) in &config {
-            // Mask sensitive values
-            let display_value =
-                if key.contains("SECRET") || key.contains("TOKEN") || key.contains("KEY") {
-                    "********".to_string()
-                } else {
-                    value.clone()
-                };
-            println!("  {} = {}", style(key).cyan(), display_value);
+        if !resolution.is_configured() {
+            let why = if resolution.linked && !resolution.global_exists {
+                "the project is linked to global, but there is no global config"
+            } else {
+                "no scope supplies a value"
+            };
+            anyhow::bail!(
+                "{} is not configured ({}): run `mx infra setup {}`",
+                provider.name(),
+                why,
+                provider.name()
+            );
         }
 
         Ok(())
     }
 
-    async fn link(&self, _infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        let _provider = InfraProvider::parse_name(provider_name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
+    async fn link(&self, infra: &InfraConfig, provider_name: &str) -> Result<()> {
+        let provider = parse_provider(provider_name)?;
+        require_project(infra, provider)?;
 
-        // Linking requires being in a project
-        let detector = ProjectDetector::new();
-        let _project_root = detector.find_root_from_cwd()?;
-
-        println!(
-            "{} Linking {} (use bash version for now: mx infra link {})",
-            style("!").yellow(),
-            provider_name,
-            provider_name
-        );
-
+        let outcome = infra.link(provider)?;
+        if outcome.already_linked {
+            println!(
+                "{} {} is already linked to the global config ({})",
+                style("✓").green().bold(),
+                provider.name(),
+                outcome.project_path.display()
+            );
+        } else {
+            println!(
+                "{} Linked {} to the global config: {}=true in {}",
+                style("✓").green().bold(),
+                provider.name(),
+                LINK_FLAG,
+                outcome.project_path.display()
+            );
+            println!(
+                "  Credentials now resolve from the environment, then {}; this project's own \
+                 values are ignored (kept, and back in effect after `mx infra unlink {}`).",
+                infra.global_config_path(provider).display(),
+                provider.name()
+            );
+        }
+        if let Some(marker) = &outcome.removed_deprecated_marker {
+            println!(
+                "  Removed the deprecated {} marker {}; the link is now the {} line.",
+                DEPRECATED_LINK_MARKER,
+                marker.display(),
+                LINK_FLAG
+            );
+        }
         Ok(())
     }
 
-    async fn unlink(&self, _infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        println!(
-            "{} Unlinking {} (use bash version for now: mx infra unlink {})",
-            style("!").yellow(),
-            provider_name,
-            provider_name
-        );
+    async fn unlink(&self, infra: &InfraConfig, provider_name: &str) -> Result<()> {
+        let provider = parse_provider(provider_name)?;
+        require_project(infra, provider)?;
+
+        let outcome = infra.unlink(provider)?;
+        if !outcome.was_linked {
+            println!(
+                "{} {} is not linked; nothing to do",
+                style("✓").green().bold(),
+                provider.name()
+            );
+        } else if outcome.removed_file {
+            println!(
+                "{} Unlinked {}: removed {} (it held only the link)",
+                style("✓").green().bold(),
+                provider.name(),
+                outcome.project_path.display()
+            );
+        } else {
+            println!(
+                "{} Unlinked {}: removed {} from {}; its own values apply again",
+                style("✓").green().bold(),
+                provider.name(),
+                LINK_FLAG,
+                outcome.project_path.display()
+            );
+        }
+        if let Some(marker) = &outcome.removed_deprecated_marker {
+            println!(
+                "  Removed the deprecated {} marker {}.",
+                DEPRECATED_LINK_MARKER,
+                marker.display()
+            );
+        }
         Ok(())
     }
 
     async fn remove(&self, infra: &InfraConfig, provider_name: &str) -> Result<()> {
-        let provider = InfraProvider::parse_name(provider_name)
-            .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
+        let provider = parse_provider(provider_name)?;
 
         let path = infra.global_config_path(provider);
         if path.exists() {
@@ -372,9 +428,168 @@ impl InfraCommand {
     }
 }
 
+fn parse_provider(name: &str) -> Result<InfraProvider> {
+    InfraProvider::parse_name(name).ok_or_else(|| {
+        let known: Vec<&str> = InfraProvider::all().iter().map(|p| p.name()).collect();
+        anyhow::anyhow!("Unknown provider: {} (known: {})", name, known.join(", "))
+    })
+}
+
+/// Link state lives in a project file, so link/unlink need a project root.
+fn require_project(infra: &InfraConfig, provider: InfraProvider) -> Result<()> {
+    if infra.project_config_path(provider).is_none() {
+        anyhow::bail!(
+            "not inside an mx project: `mx infra link`/`unlink` record the link in the \
+             project's infra/{}/.env.{}; run it from the project root or below",
+            provider.name(),
+            provider.name()
+        );
+    }
+    Ok(())
+}
+
+fn deprecated_marker_warning(marker: &std::path::Path, provider: InfraProvider) -> String {
+    format!(
+        "warning: {} is a deprecated link marker and is ignored. The link is now the line \
+         {}=true in the project's .env.{}; run `mx infra link {}` to migrate (it removes the \
+         marker) or delete the marker.",
+        marker.display(),
+        LINK_FLAG,
+        provider.name(),
+        provider.name()
+    )
+}
+
+fn is_secret(key: &str) -> bool {
+    key.contains("SECRET") || key.contains("TOKEN") || key.contains("KEY")
+}
+
+/// Link state and the two scope paths (plain text, no styling).
+fn render_header(r: &Resolution) -> String {
+    let presence = |exists: bool| if exists { "present" } else { "missing" };
+    let mut out = Vec::new();
+    let link = match (&r.project_path, r.linked) {
+        (None, _) => "no project (outside an mx project: global config only)".to_string(),
+        (Some(p), true) => format!(
+            "linked to global ({}=true in {}): project values ignored",
+            LINK_FLAG,
+            p.display()
+        ),
+        (Some(_), false) => "not linked (project values win over global)".to_string(),
+    };
+    out.push(format!("  link:    {}", link));
+    out.push(format!(
+        "  global:  {} ({})",
+        r.global_path.display(),
+        presence(r.global_exists)
+    ));
+    if let Some(p) = &r.project_path {
+        out.push(format!(
+            "  project: {} ({})",
+            p.display(),
+            presence(r.project_exists)
+        ));
+    }
+    out.join("\n")
+}
+
+/// One line per resolved key: `KEY = value  [source]`, secrets masked.
+fn render_keys(r: &Resolution) -> String {
+    let width = r.keys.iter().map(|k| k.key.len()).max().unwrap_or(0);
+    r.keys
+        .iter()
+        .map(|k| {
+            let (value, source) = match (&k.value, k.scope) {
+                (Some(v), Some(scope)) => {
+                    let shown = if is_secret(&k.key) {
+                        "********".to_string()
+                    } else {
+                        v.clone()
+                    };
+                    let source = match k.deprecated_alias() {
+                        Some(alias) => format!("[{}, deprecated alias {}]", scope.as_str(), alias),
+                        None => format!("[{}]", scope.as_str()),
+                    };
+                    (shown, source)
+                }
+                _ => ("(not set)".to_string(), String::new()),
+            };
+            format!("  {:width$} = {}  {}", k.key, value, source, width = width)
+                .trim_end()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::cloudflare_config_body;
+    use super::{render_header, render_keys};
+    use mx_lib::infra::{CredentialScope, InfraProvider, Resolution, ResolvedKey};
+
+    fn key(k: &str, v: Option<&str>, scope: Option<CredentialScope>, read_as: &str) -> ResolvedKey {
+        ResolvedKey {
+            key: k.to_string(),
+            value: v.map(str::to_string),
+            scope,
+            read_as: v.map(|_| read_as.to_string()),
+        }
+    }
+
+    fn resolution(linked: bool, keys: Vec<ResolvedKey>) -> Resolution {
+        Resolution {
+            provider: InfraProvider::Cloudflare,
+            global_path: "/h/.mech-crate/config/infra/cloudflare.env".into(),
+            global_exists: true,
+            project_path: Some("/p/infra/cloudflare/.env.cloudflare".into()),
+            project_exists: true,
+            linked,
+            deprecated_marker: None,
+            keys,
+        }
+    }
+
+    /// bd:mech-crate-066: inspect names each key's source, tags a deprecated
+    /// alias, masks secrets, and shows an unresolved key rather than hiding it.
+    #[test]
+    fn inspect_rendering_names_sources_and_masks_secrets() {
+        let r = resolution(
+            false,
+            vec![
+                key(
+                    "CLOUDFLARE_ACCOUNT_ID",
+                    Some("acct"),
+                    Some(CredentialScope::Project),
+                    "CF_ACCOUNT_ID",
+                ),
+                key(
+                    "CLOUDFLARE_API_TOKEN",
+                    Some("tok-secret"),
+                    Some(CredentialScope::Global),
+                    "CLOUDFLARE_API_TOKEN",
+                ),
+                key("CF_DOCKER_PLATFORM", None, None, ""),
+            ],
+        );
+        let out = render_keys(&r);
+        assert!(
+            out.contains("CLOUDFLARE_ACCOUNT_ID = acct  [project, deprecated alias CF_ACCOUNT_ID]"),
+            "{out}"
+        );
+        assert!(
+            out.contains("CLOUDFLARE_API_TOKEN  = ********  [global]"),
+            "{out}"
+        );
+        assert!(!out.contains("tok-secret"));
+        assert!(out.contains("CF_DOCKER_PLATFORM    = (not set)"), "{out}");
+    }
+
+    #[test]
+    fn inspect_header_shows_the_link_state() {
+        assert!(render_header(&resolution(true, vec![])).contains("linked to global"));
+        assert!(render_header(&resolution(false, vec![])).contains("not linked"));
+    }
 
     /// `KEY=VALUE` assignments of a credentials file body, comments skipped.
     fn assignments(body: &str) -> Vec<(String, String)> {

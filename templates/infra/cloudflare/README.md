@@ -24,6 +24,11 @@ infra/cloudflare/
 
 ## Quick Start
 
+Every `make cf-<cmd>` target below is also `mx cf <cmd>`, with an app passed as
+a plain argument: `mx cf deploy myapp` runs exactly `make cf-deploy a=myapp`,
+and `mx cf init myapp --type worker` runs `make cf-init a=myapp type=worker`.
+`mx cf --help` lists them all.
+
 ### 1. Setup Credentials
 
 ```bash
@@ -160,6 +165,12 @@ CF_DOCKER_PLATFORM=linux/amd64
 A global config alone is a complete setup: `make cf-init` and the deploy targets
 resolve from it, and a project file is only needed when this project deploys to a
 different account than the rest of the workstation.
+
+`mx infra link cloudflare` adds the line `MX_INFRA_USE_GLOBAL=true` to
+`.env.cloudflare`; while it is there the file's other values are ignored and the
+global config applies (`cf-vars` prints `CF_PROJECT_LINKED=true`).
+`mx infra unlink cloudflare` removes it. `mx infra inspect cloudflare` shows each
+resolved key with the scope that supplied it.
 
 `CF_ACCOUNT_ID` and `CF_API_TOKEN` are **deprecated aliases**. They are still
 read, at their own scope's precedence, so a file written by an older `cf-setup`

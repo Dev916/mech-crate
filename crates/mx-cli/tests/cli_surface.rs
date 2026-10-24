@@ -34,6 +34,7 @@ const SUBCOMMANDS: &[&str] = &[
     "docs",
     "router",
     "infra",
+    "cf",
     "mcp",
     "rag",
     "doctor",
@@ -54,6 +55,11 @@ const NESTED_SUBCOMMANDS: &[&[&str]] = &[
     &["rag", "gaps"],
     &["recipes", "list"],
     &["recipes", "info"],
+    &["cf", "vars"],
+    &["cf", "check-credentials"],
+    &["cf", "setup"],
+    &["cf", "init"],
+    &["cf", "deploy"],
 ];
 
 fn mx() -> Command {

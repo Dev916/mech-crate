@@ -117,8 +117,11 @@ cf_account_id_from() {
     )
 }
 
+# A project file containing the exact line MX_INFRA_USE_GLOBAL=true is linked
+# to the global config (`mx infra link cloudflare`): it is not read at all. The
+# same exact-line match is used by make/cloudflare.mk and `mx infra inspect`.
 CF_LINKED_TO_GLOBAL=false
-if [[ -f "$CF_ENV_FILE" ]] && grep -q "^MX_INFRA_USE_GLOBAL=true" "$CF_ENV_FILE" 2>/dev/null; then
+if [[ -f "$CF_ENV_FILE" ]] && grep -Eq "^[[:space:]]*MX_INFRA_USE_GLOBAL=true[[:space:]]*$" "$CF_ENV_FILE" 2>/dev/null; then
     CF_LINKED_TO_GLOBAL=true
     if [[ ! -f "$MX_GLOBAL_CF_CONFIG" ]]; then
         error "Project is linked to global config, but no global config found at $MX_GLOBAL_CF_CONFIG. Run 'mx infra setup cloudflare' first."

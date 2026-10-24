@@ -71,9 +71,9 @@ Two house rules keep the lane honest:
 - Lane tests live beside the suite that owns their subject, not in one central
   file. The test is the first thing whoever fixes it should read.
 
-The two numbers partition the workspace: the lane reports 11 tests, 11 red; the
-gate suite in the same tree reports 441 passed, 11 skipped. If they stop summing
-to 452, either a lane test lost its `#[ignore]` or a gate test grew one.
+The two numbers partition the workspace: the lane reports 8 tests, 8 red; the
+gate suite in the same tree reports 492 passed, 8 skipped. If they stop summing
+to 500, either a lane test lost its `#[ignore]` or a gate test grew one.
 
 `mech-crate-z5i`, the `mx upgrade` discovery defect, is the first row retired the
 intended way. Its test lost the `#[ignore]`, joined the gate, and its row left the
@@ -97,10 +97,19 @@ of its own, which holds the same contract behaviourally: real `make` runs agains
 scratch project and `HOME` scopes. When a row's test turns out to be the wrong
 shape, the contract is the thing that has to survive, not the assertion.
 
-Several pages in these docs still point at this lane, because pointing at it is
-the alternative to quietly writing around a defect: `mech-crate-vxq` and
-`mech-crate-066` for the
-[infra credential path](/docs/framework/infra-credentials/).
+Three more retired together: `mech-crate-vxq` (`mx cf` was documented but not
+implemented; it now wraps the `cf-*` make targets, and a drift test fails if a
+doc names an mx command the CLI lacks), `mech-crate-066` (`mx infra link` and
+`unlink` were stubs; they now write and remove the one link flag every reader
+honors), and `mech-crate-rnj` (the two Unyform clients disagreed on the org path
+segment; both now send the slug). Each took a different route out. `rnj`
+graduated the usual way, its test joining the gate. `vxq`'s test was deleted
+because two stronger gate suites now pin the same contract. `066`, like `wd9`,
+was replaced: its lane test asserted the link marker the fix chose against.
+
+Pages in these docs still point at this lane where a defect is open, because
+pointing at it is the alternative to quietly writing around one:
+`mech-crate-9be` on [Remote blueprints](/docs/framework/unyform/).
 
 **→ [The lane index on GitHub](https://github.com/Dev916/mech-crate/blob/main/tests/KNOWN_BROKEN.md)**
 · **→ [Project notes](/docs/project/)** for the research log and backlog

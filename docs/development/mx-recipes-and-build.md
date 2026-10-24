@@ -71,7 +71,7 @@ Companion to `mx-app-playbook.md`. That doc covers *using* mx; this one covers t
 
 **Known defects in this surface** (verified; candidates for issues):
 - `apply --fix` is a dead flag (`_fix` unused) and the advertised dependency-drift/infrastructure comparison is unimplemented [recipes.rs:206; tools/mod.rs:1325-1333, 2358].
-- The two Unyform clients disagree on the org path segment: CLI sends the org **id**, MCP sends the org **slug** [mx-lib/unyform/mod.rs:206-211 vs mx-mcp-server/unyform/mod.rs:258-267].
+- Fixed (bd:mech-crate-rnj): both Unyform clients address `/v1/orgs/{org}` by the org **slug**, built by one shared helper (`mx_lib::unyform::org_url` + `resolve_org_slug`); the CLI used to send the org id. The gateway's org routes match `{org}` against the caller's org slugs.
 - No update checking or pinning: nothing compares cached vs remote versions.
 - `mx init` records `~/.mech-crate/config/source-root` but `mx self-update`'s fallback reads `~/.mech-crate/source` — mismatched marker files [paths.rs:17-21 vs self_update.rs:315].
 
@@ -121,7 +121,7 @@ Filed or worth filing as mx issues; treat these as "known, don't rediscover":
 1. Local recipe `version` is dead metadata; no changelog/version discipline for scaffolding recipes.
 2. No consumer provenance (no lockfile) → no update detection or propagation for recipe-generated code (§4 standard approach compensates).
 3. `mx recipes apply --fix` dead flag; advertised dependency/infrastructure comparison unimplemented.
-4. Unyform org id-vs-slug mismatch between CLI and MCP clients.
+4. ~~Unyform org id-vs-slug mismatch between CLI and MCP clients.~~ Fixed (bd:mech-crate-rnj): both send the slug.
 5. `mx upgrade` broken (`templates/project/` missing — also flagged in mx-app-playbook).
 6. `mx build --platform` is accepted but dropped by the make layer (`_build` doesn't forward it); only `build-multiplatform` wires platforms through.
 7. No `make rebuild`; compose never passes `--build`.
