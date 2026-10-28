@@ -9,7 +9,7 @@ use_cases:
   - "hardening a tRPC server: CSRF with cookie auth, body and batch limits, error-message leakage, the two 2025 CVEs, rate limiting"
   - choosing links (batch, batch-stream, SSE subscription, FormData) and cache headers without mixing private data into cached batches
   - diagnosing slow tsc and editor autocomplete on a large AppRouter
-summary: "State of practice as of 2026-10 for tRPC 11 (npm latest 11.19.0). tRPC is the right tool for a TypeScript monorepo whose clients you ship yourself, and the wrong tool for a public or polyglot API. Its defaults are tuned for developer experience, not for a hostile network: raw error messages from non-TRPCError exceptions reach the client even with isDev false, request bodies and batch sizes are unlimited, and multipart or octet-stream POSTs (both CORS-simple) are routed to any mutation, so cookie-authenticated apps need SameSite plus an Origin or Sec-Fetch-Site check. The doc gives a verified hardening config, the output-validator-as-whitelist pattern, SSE subscription rules (signal, tracked(), subscribe-before-replay), the cache-only-all-public-batches rule, and the type-performance ladder (lean context, sub-router inference, lazy routers, built .d.ts, TypeScript 7)."
+summary: "State of practice as of 2026-10 for tRPC 11 (npm latest 11.19.0). tRPC is the right tool for a TypeScript monorepo whose clients you ship yourself, and the wrong tool for a public or polyglot API. Its defaults are tuned for developer experience, not for a hostile network: raw error messages from non-TRPCError exceptions reach the client even with isDev false, request bodies and batch sizes are unlimited, and multipart POSTs (CORS-simple, so a plain HTML form can send them cross-site) are routed to any mutation that has no input parser or whose parser accepts a FormData, so cookie-authenticated apps need SameSite plus an Origin or Sec-Fetch-Site check. The doc gives a verified hardening config, the output-validator-as-whitelist pattern, SSE subscription rules (signal, tracked(), subscribe-before-replay), the cache-only-all-public-batches rule, and the type-performance ladder (lean context, sub-router inference, lazy routers, built .d.ts, TypeScript 7)."
 provenance: researched
 researched: 2026-10-26
 sources:
@@ -61,15 +61,17 @@ sources:
   - https://github.com/mcampa/trpc-to-openapi
   - https://trpc.io/docs/server/websockets
   - https://trpc.io/docs/client/cors
+  - https://github.com/trpc/trpc/pull/7591
+  - https://api.npmjs.org/downloads/point/2026-10-19:2026-10-25/@trpc/server
 ---
 
 # tRPC in Production
 
-State of practice as of 2026-10-26. Inline `[n]` cites key to the `sources` list in the frontmatter. Every code block in this doc was type-checked as one project with `@trpc/server` / `@trpc/client` / `@trpc/tanstack-react-query` 11.19.0, `@tanstack/react-query` 5.105, `zod` 4.6, `superjson` 2.2 and TypeScript 7.0.2 under `strict`; the server-side caller and the content-type and error-leak experiments in sections 4, 5 and 10 were run, not just compiled. Where a claim rests only on that run it is marked "verified here". Hacker News comment claims are marked as such and are not stated as fact.
+State of practice as of 2026-10-26. Inline `[n]` cites key to the `sources` list in the frontmatter. Every code block in this doc was type-checked as one project with `@trpc/server` / `@trpc/client` / `@trpc/tanstack-react-query` 11.19.0, `@tanstack/react-query` 5.105, `zod` 4.6, `superjson` 2.2 and TypeScript 7.0.2 under `strict`; the server-side caller (section 2), output stripping (section 3), the error leak (section 4), the 405 on a mutation path (section 5) and the content-type experiments (section 9) were run, not just compiled. Where a claim rests only on that run it is marked "verified here". Hacker News comment claims are marked as such and are not stated as fact.
 
 ## 1. Fit: when tRPC is the right tool
 
-tRPC gives a TypeScript client the server's procedure types without a schema or codegen step: the client imports `type AppRouter` and every call, input and output is checked at compile time. The FAQ calls it "designed for TypeScript monorepos"; the maintainer's answer to "Monorepo mandatory?" is that you either share the repo or share the types some other way, such as publishing the server's types as a private npm package [18][27]. Adoption is large and still growing: v11 shipped on 2025-03-21 with 35k+ GitHub stars and 700k+ weekly downloads [19]; on 2026-10-26 the npm registry reports about 3.9M weekly downloads for `@trpc/server`, versus 1.3M for `@orpc/server`, 0.5M for `@ts-rest/core` and 50M for `hono` (which is a web framework, not only an RPC layer) [33].
+tRPC gives a TypeScript client the server's procedure types without a schema or codegen step: the client imports `type AppRouter` and every call, input and output is checked at compile time. The FAQ calls it "designed for TypeScript monorepos"; the maintainer's answer to "Monorepo mandatory?" is that you either share the repo or share the types some other way, such as publishing the server's types as a private npm package [18][27]. Adoption is large and still growing: v11 shipped on 2025-03-21 with 35k+ GitHub stars and 700k+ weekly downloads [19]; for the week 2026-10-19 to 2026-10-25 the npm downloads API reports about 3.9M downloads for `@trpc/server`, 1.3M for `@orpc/server`, 0.5M for `@ts-rest/core` and 50M for `hono` (a web framework, not only an RPC layer) [50].
 
 | Situation | Verdict | Why |
 |---|---|---|
@@ -80,7 +82,7 @@ tRPC gives a TypeScript client the server's procedure types without a schema or 
 | Clients need to shape responses per screen, many teams share one graph | GraphQL | The one argument that survives for GraphQL over tRPC is client-defined data requirements; the 2025 metaduck essay concedes tRPC wins on iteration speed and learning curve [36] |
 | Edge runtime (Workers, Deno, Bun) | Fine via the fetch adapter | Only streaming needs platform flags (Cloudflare `streams_enable_constructors`, Lambda response streaming) [12] |
 
-**Versions you should be on.** npm `latest` is 11.19.0 (published 2026-09-16); git tags v11.20.0 and v11.21.0 exist but are not published, so features merged after 11.19 (per-procedure `.errors()`, PR #7591) are not installable yet [33][44]. v11 requires TypeScript `>=5.7.2` as a peer dependency, Node 18+ and, for the React packages, React `>=18.2` and TanStack Query v5 [17]. The v10 line still receives security fixes (`v10` dist-tag 10.45.4) [23][33]. tRPC follows strict semver where exported-type changes count as major; `unstable_` APIs are production-used and only change in minors, `experimental_` APIs "might change during any bump" [18].
+**Versions you should be on.** npm `latest` is 11.19.0 (published 2026-09-16); git tags v11.20.0 and v11.21.0 exist but are not published, so features merged after 11.19 (per-procedure `.errors()`, PR #7591) are not installable yet [33][44]. v11 requires TypeScript `>=5.7.2` as a peer dependency, Node 18+ and, for the React packages, React `>=18.2` and TanStack Query v5 [17]. The v10 line still receives security fixes (`v10` dist-tag 10.45.4) [23][33]. tRPC follows strict semver where exported-type changes count as major; `unstable_` APIs are production-used and only change in minors; `experimental_` APIs are "very likely to change during any bump" and may be dropped entirely [18].
 
 ## 2. Architecture that stays cheap at scale
 
@@ -89,7 +91,7 @@ tRPC gives a TypeScript client the server's procedure types without a schema or 
 ```ts
 // trpc.ts — one initTRPC per app; export only the pieces routers need.
 import { initTRPC, TRPCError } from '@trpc/server';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import superjson from 'superjson';
 
 // Inner context: request-independent, always present (also in tests and server-side callers).
@@ -106,12 +108,12 @@ export const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error }) {
     return {
       ...shape,
-      // Non-TRPCError exceptions inherit cause.message; never forward that in production (section 5).
+      // Non-TRPCError exceptions inherit cause.message; never forward that in production (section 4).
       message: !isDev && error.code === 'INTERNAL_SERVER_ERROR' ? 'Internal server error' : shape.message,
       data: {
         ...shape.data,
         zodError:
-          error.code === 'BAD_REQUEST' && error.cause instanceof ZodError ? error.cause.flatten() : null,
+          error.code === 'BAD_REQUEST' && error.cause instanceof ZodError ? z.flattenError(error.cause) : null,
       },
     };
   },
@@ -161,7 +163,7 @@ export const appRouter = router({
 export type AppRouter = typeof appRouter; // clients: `import type` only
 ```
 
-**Server-side calls.** `createCallerFactory(appRouter)` is built once; each test or request creates a caller with its own context, and errors arrive as thrown `TRPCError`s rather than HTTP responses [7]. The docs warn against calling a caller from inside another procedure because it rebuilds context, reruns middleware and revalidates input; share plain functions instead [7]. In Next.js the server caller is deliberately detached from the React Query cache (section 9) [15].
+**Server-side calls.** `createCallerFactory(appRouter)` is built once; each test or request creates a caller with its own context, and errors arrive as thrown `TRPCError`s rather than HTTP responses [7]. The docs warn against calling a caller from inside another procedure because it rebuilds context, reruns middleware and revalidates input; share plain functions instead [7]. In Next.js the server caller is deliberately detached from the React Query cache (section 8) [15].
 
 ```ts
 // caller.ts (verified here: anonymous create -> UNAUTHORIZED, missing id -> NOT_FOUND, '' -> BAD_REQUEST)
@@ -183,7 +185,7 @@ export async function test() {
 
 tRPC infers validators through the Standard Schema interface when the library implements it and through custom adapters otherwise; Zod, Valibot, ArkType, Effect, Yup, Superstruct, TypeBox, Typia and Sury are first-class, and a plain function works too [1]. Chained `.input()` calls merge object schemas, later keys winning; non-object inputs cannot be chained [1].
 
-The docs give two reasons for `.output()`: "Checking that data returned from untrusted sources is correct" and "Ensure that you are not returning more data to the client than necessary"; a failed output parse answers `INTERNAL_SERVER_ERROR` [1]. The output middleware replaces the resolver's return value with the parser's result, so with a schema that strips unknown keys (Zod's default `z.object`) an ORM row that later gains a `passwordHash` or `internalScore` column never leaves the server. Verified here: a resolver returning `{ id, title, body, authorId, internalScore }` through `.output(z.object({ id, title, authorId }))` produced `{"id":"p1","title":"hello","authorId":"u1"}` on the wire.
+The docs give two reasons for `.output()`: "Checking that data returned from untrusted sources is correct" and "Ensure that you are not returning more data to the client than necessary"; a failed output parse answers `INTERNAL_SERVER_ERROR` [1]. The output middleware replaces the resolver's return value with the parser's result, so with a schema that strips unknown keys (Zod's default `z.object`) an ORM row that later gains a `passwordHash` or `internalScore` column never leaves the server. Verified here: a resolver returning `{ id, seq, title, body, authorId, internalScore }` through `.output(z.object({ id, title, authorId }))` produced `{"id":"p1","title":"hello","authorId":"u1"}` on the wire.
 
 ```ts
 // routers/post.ts
@@ -192,8 +194,9 @@ import { TRPCError, tracked } from '@trpc/server';
 import { on, EventEmitter } from 'node:events';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 
-type Post = { id: string; title: string; body: string; authorId: string; internalScore: number };
-const db = { posts: [{ id: 'p1', title: 'hello', body: '…', authorId: 'u1', internalScore: 42 }] as Post[] };
+type Post = { id: string; seq: number; title: string; body: string; authorId: string; internalScore: number };
+const db = { posts: [{ id: 'p1', seq: 1, title: 'hello', body: '…', authorId: 'u1', internalScore: 42 }] as Post[] };
+let lastSeq = 1; // monotonic: event ids must be ordered for lastEventId replay to work
 const ee = new EventEmitter<{ add: [Post] }>();
 
 // Output schema: a whitelist, so a widened DB row can never leak new columns.
@@ -206,13 +209,13 @@ export const postRouter = router({
     .query(({ input }) => {
       const post = db.posts.find((p) => p.id === input.id);
       if (!post) throw new TRPCError({ code: 'NOT_FOUND' });
-      return post; // extra fields (body, internalScore) are stripped by .output()
+      return post; // extra fields (seq, body, internalScore) are stripped by .output()
     }),
 
   create: protectedProcedure
     .input(z.object({ title: z.string().min(1).max(200), body: z.string().max(20_000) }))
     .mutation(({ ctx, input }) => {
-      const post: Post = { id: crypto.randomUUID(), ...input, authorId: ctx.user.id, internalScore: 0 };
+      const post: Post = { id: crypto.randomUUID(), seq: ++lastSeq, ...input, authorId: ctx.user.id, internalScore: 0 };
       db.posts.push(post);
       ee.emit('add', post);
       return { id: post.id };
@@ -222,28 +225,39 @@ export const postRouter = router({
   onAdd: protectedProcedure
     .input(z.object({ lastEventId: z.string().nullish() }))
     .subscription(async function* ({ input, signal }) {
-      const live = on(ee, 'add', { signal }); // subscribe BEFORE replaying so nothing is missed
+      const live = on(ee, 'add', { signal }); // listen BEFORE replaying so nothing emitted meanwhile is missed
+      let cursor = input.lastEventId ? Number(input.lastEventId) : Number.POSITIVE_INFINITY;
       if (input.lastEventId) {
-        for (const p of db.posts.filter((p) => p.id > input.lastEventId!)) yield tracked(p.id, p);
+        for (const p of db.posts.filter((p) => p.seq > cursor)) {
+          cursor = p.seq;
+          yield tracked(String(p.seq), p);
+        }
+      } else {
+        cursor = lastSeq; // fresh subscriber: live events only
       }
-      for await (const [post] of live) yield tracked(post.id, post);
+      for await (const [post] of live) {
+        if (post.seq <= cursor) continue; // already replayed: de-duplicate
+        cursor = post.seq;
+        yield tracked(String(post.seq), post);
+      }
     }),
 });
 ```
+```
 
-Put size bounds in every string and array schema: tRPC itself imposes no body limit by default (section 10), so the validator is the first place an oversized payload is rejected, and it runs after the whole body has been read.
+Put size bounds in every string and array schema: the node-http adapters impose no body limit by default (section 9) and the Fastify and fetch adapters defer to the host runtime's limit, so the validator is often the first place an oversized payload is rejected, and it runs after the whole body has been read.
 
 ## 4. Errors: codes, formatting, and what leaks by default
 
-`TRPCError` codes map to HTTP statuses (BAD_REQUEST 400, UNAUTHORIZED 401, FORBIDDEN 403, NOT_FOUND 404, CONFLICT 409, PAYLOAD_TOO_LARGE 413, UNSUPPORTED_MEDIA_TYPE 415, UNPROCESSABLE_CONTENT 422, TOO_MANY_REQUESTS 429, CLIENT_CLOSED_REQUEST 499, INTERNAL_SERVER_ERROR 500) and `getHTTPStatusCodeFromError()` converts; a batch whose calls end with different statuses returns `207 Multi-Status` [2][16]. `error.data.stack` is sent only when `isDev` is true, and `isDev` defaults to `process.env.NODE_ENV !== 'production'`; the docs recommend setting it explicitly so behaviour does not depend on the runtime's environment handling [2].
+`TRPCError` codes map to HTTP statuses, including BAD_REQUEST 400, UNAUTHORIZED 401, FORBIDDEN 403, NOT_FOUND 404, METHOD_NOT_SUPPORTED 405, CONFLICT 409, PAYLOAD_TOO_LARGE 413, UNSUPPORTED_MEDIA_TYPE 415, UNPROCESSABLE_CONTENT 422, TOO_MANY_REQUESTS 429, CLIENT_CLOSED_REQUEST 499 and INTERNAL_SERVER_ERROR 500 (21 codes in 11.19.0; an unknown code maps to 500), and `getHTTPStatusCodeFromError()` converts; a batch whose calls end with different statuses returns `207 Multi-Status` [2][16]. `error.data.stack` is sent only when `isDev` is true, and `isDev` defaults to `process.env.NODE_ENV !== 'production'`; the docs recommend setting it explicitly so behaviour does not depend on the runtime's environment handling [2].
 
 **The default leaks messages, not just stacks.** `TRPCError`'s constructor sets `message = opts.message ?? cause.message ?? code`, and any non-`TRPCError` thrown in a resolver is wrapped as `INTERNAL_SERVER_ERROR` with that inherited message [29]. Verified here with `isDev: false`: a resolver throwing `new Error('connect ECONNREFUSED db.internal:5432 password=hunter2')` returned exactly that string in `error.message` to the client. The fix is the `errorFormatter` above: keep `shape` (so `data.code`, `httpStatus` and `path` stay typed on the client), replace the message for 500s in production, and expose only what you choose (the docs' own example adds `error.cause.flatten()` for Zod errors so forms get field-level messages with full type inference on `mutation.error.data.zodError`) [3]. `onError` sees every error with `type`, `path`, `input`, `ctx` and `req` and is the hook for reporting; the docs say it is for observability only and that the wire shape is set by the formatter [2].
 
-Per-procedure typed errors (`.errors()`, chainable into a union of shapes) were merged on 2026-09-27 and are in the v11.20.0 tag but not on npm as of this writing [3][44]. Until then oRPC's "tRPC has one global error shape" row is accurate [37].
+Per-procedure typed errors (`.errors()`, chainable into a union of shapes) were merged on 2026-09-27 in PR #7591 and are in the v11.20.0 git tag, but npm `latest` is still 11.19.0 as of this writing [49][44][33]. Until then oRPC's "tRPC has one global error shape" row is accurate [37].
 
 ## 5. Transport, batching and links
 
-**Wire format.** Queries are `GET` with the input JSON-stringified in `?input=`; mutations are `POST`; subscriptions are `GET` over SSE or a WebSocket. A batch joins procedure paths with commas in the pathname and sends `?batch=1&input={"0":…,"1":…}`; a procedure called `GET` on a mutation path answers 405 (verified here) [16][31]. Because queries are plain GETs they must be side-effect free: the OWASP CSRF cheat sheet's rule "Do not use GET requests for state changing operations" applies verbatim, and `SameSite=Lax` cookies ride along on top-level cross-site GET navigations [41].
+**Wire format.** Queries are `GET` with the input JSON-stringified in `?input=`; mutations are `POST`; subscriptions are `GET` over SSE or a WebSocket. A batch joins procedure paths with commas in the pathname and sends `?batch=1&input={"0":…,"1":…}`; a `GET` to a mutation path answers 405 METHOD_NOT_SUPPORTED (verified here) [16][31]. Because queries are plain GETs they must be side-effect free: the OWASP CSRF cheat sheet's rule "Do not use GET requests for state changing operations" applies verbatim, and `SameSite=Lax` cookies ride along on top-level cross-site GET navigations [41].
 
 **Batching defaults.** The server allows batching by default (`allowBatching ?? true`), has no `maxBatchSize` unless you set one (oversized batches then get 400, and the type doc says to set the client's `maxItems` to the same or a lower value), and the client's `maxURLLength` and `maxItems` default to `Infinity` [11][31]. The docs suggest `maxURLLength: 2083` to avoid `413`, `414` and proxy `404`s on long GET batches [11]. `allowMethodOverride` (default false) lets a client send queries as POST [31].
 
@@ -275,7 +289,8 @@ export const client = createTRPCClient<AppRouter>({
           transformer: superjson, // v11: the transformer lives on the link
           maxURLLength: 2083,     // split batches before proxies answer 414
           maxItems: 20,           // <= server maxBatchSize
-          headers: () => ({ authorization: `Bearer ${'token'}` }),
+          // Auth is the session cookie: sent automatically same-origin; cross-origin needs
+          // fetch: (u, o) => fetch(u, { ...o, credentials: 'include' }) plus a CORS allow-list [48].
         }),
       }),
     }),
@@ -295,41 +310,42 @@ Security note for WebSocket deployments: CVE-2025-43855 (GHSA-pj3v-9cm8-gvj8, hi
 
 ## 7. Caching: only all-public, error-free query batches
 
-Queries are GETs, so CDN and browser caching work through standard `Cache-Control` headers set in `responseMeta`, which receives the batch's `paths`, `errors` and `type` [9]. The documented rule, and the only safe one with batching on by default, is to emit a cache header only when every path in the batch is public, no procedure errored and the type is `query`; the docs also say to omit cache headers entirely when an auth token or cookie is present and to keep public and private calls in separate batches with `splitLink` [9]. `httpBatchStreamLink` cannot set headers after the first chunk, so cached responses need the non-streaming link [12].
+Queries are GETs, so CDN and browser caching work through standard `Cache-Control` headers set in `responseMeta`, which receives the batch's `paths`, `errors` and `type` [9]. The documented rule is to emit a cache header only when every path in the batch is public, no procedure errored and the type is `query`; the docs also say to omit cache headers entirely when an auth token or cookie is present and to keep public and private calls in separate batches with `splitLink` [9]. With `httpBatchStreamLink`, `responseMeta` runs before any result exists: its `data` is removed and `errors` is always empty (verified in the 11.19.0 source), so the error-free check cannot work; route cacheable public queries through `httpBatchLink` via `splitLink` [12].
 
 ```ts
 // server.ts — standalone adapter; the same options exist on the fetch/Next/Express adapters.
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { appRouter } from './routers/app.js';
-import { createContextInner } from './trpc.js';
+import { createContextInner, type Context } from './trpc.js';
+
+// Your session store: resolve the session cookie to a user, null when absent, expired or forged.
+declare function getUserFromSession(cookieHeader: string | undefined): Promise<Context['user']>;
 
 createHTTPServer({
   router: appRouter,
-  createContext: async ({ req }) => {
-    const token = req.headers.authorization;
-    const user = token ? { id: 'u1', role: 'user' as const } : null; // verify the token for real
-    return createContextInner({ user });
-  },
+  createContext: async ({ req }) => createContextInner({ user: await getUserFromSession(req.headers.cookie) }),
   allowBatching: true,
   maxBatchSize: 20,        // no default: unbounded batches otherwise
   maxBodySize: 1_000_000,  // bytes, no default on node adapters: unbounded bodies otherwise
   onError({ error, type, path }) {
     if (error.code === 'INTERNAL_SERVER_ERROR') console.error('report', type, path, error.cause);
   },
-  responseMeta({ paths, errors, type }) {
-    // Only cache when EVERY procedure in the batch is public, succeeded, and is a query.
+  responseMeta({ ctx, paths, errors, type }) {
+    // Cache only when the caller is anonymous and EVERY procedure in the batch is public, succeeded, and is a query.
+    const anonymous = ctx?.user == null;
     const allPublic = paths?.every((p) => p.startsWith('publicStats.')) ?? false;
-    if (allPublic && errors.length === 0 && type === 'query') {
+    if (anonymous && allPublic && errors.length === 0 && type === 'query') {
       return { headers: new Headers([['cache-control', 's-maxage=60, stale-while-revalidate=86400']]) };
     }
     return {};
   },
 }).listen(3000);
 ```
+```
 
 ## 8. Client integration: the TanStack-native client and server components
 
-`@trpc/tanstack-react-query` (`createTRPCContext` for apps with a provider, `createTRPCOptionsProxy` for SPAs) exposes `queryOptions()`, `mutationOptions()`, `queryKey()`, `queryFilter()` and `pathFilter()` factories that plug into the plain TanStack hooks; the docs call it "simpler and more TanStack Query-native" and say "we think it's the future and recommend using this over the classic client" [14]. The announcement gives the reasons: the classic client's hook wrappers conflict with React hook rules and the React Compiler, and it is harder to keep in step with TanStack releases; the classic `@trpc/react-query` is not deprecated and will be maintained "for a long time", and the two share query keys so migration can be gradual [20].
+`@trpc/tanstack-react-query` (`createTRPCContext` for apps with a provider, `createTRPCOptionsProxy` for SPAs) exposes `queryOptions()`, `mutationOptions()`, `queryKey()`, `queryFilter()` and `pathFilter()` factories that plug into the plain TanStack hooks; the docs call it "simpler and more TanStack Query-native" and say "we think it's the future and recommend using this over the classic client" [14]. The announcement gives the reasons: the classic client's hook wrappers conflict with React hook rules and the React Compiler, and it is harder to keep in step with TanStack releases; the classic `@trpc/react-query` is not deprecated and will be maintained "for a long time", and the two clients can coexist in one application so migration can be gradual [20].
 
 ```tsx
 // react.tsx
@@ -360,43 +376,43 @@ For the Next.js App Router the documented shape is a `server-only` module that b
 
 **CSRF with cookie auth.** v11 added explicit content-type checks after issue #5522 described forged form posts: a POST body is accepted only as `application/json`, `multipart/form-data` or `application/octet-stream`; anything else gets 415 [24][28]. Verified here against 11.19.0 with a public no-input mutation:
 
-| Cross-site POST to `/noInput` | Status | CORS-simple content type? [42] |
+| Cross-site POST to `/noInput` | Status | CORS-simple content type (one a cross-origin request may send without a preflight, and one an HTML form can produce) [42] |
 |---|---|---|
 | `text/plain` body `{}` | 415 UNSUPPORTED_MEDIA_TYPE | yes |
 | `application/x-www-form-urlencoded` | 415 | yes |
 | `application/json` | 200, mutation ran | no (preflighted cross-origin) |
 | `multipart/form-data` (`curl -F`) | 200, mutation ran | **yes** |
-| `application/octet-stream` | 200, mutation ran | no in the fetch spec list, but any script can send it with `credentials: 'include'` only if CORS allows the origin |
+| `application/octet-stream` | 200, mutation ran | no: a cross-origin `fetch` with it is preflighted, and an HTML form cannot send it, so this row is not a CSRF vector |
 
-So an HTML `<form enctype="multipart/form-data">` on an attacker's page can call any mutation whose input validator tolerates what arrives as form fields (a no-input mutation, or one whose schema is loose) with the victim's cookies if those cookies are sent cross-site. The multipart body is parsed into an object by field name, so a schema requiring `{ n: number }` rejected `-F n=5` (string) with BAD_REQUEST (verified here), which is why strict input schemas are part of the defence, not only a correctness tool. A September 2026 fix in the cal.diy fork is the field case: that app was pinned to a v11 beta that still parsed every content type as JSON, cross-site `text/plain` form posts triggered mutations, and the fix required `application/json` and rejected `Sec-Fetch-Site: cross-site` [43]. Defence in depth, per OWASP: `SameSite=Lax` or `Strict` on the session cookie (Lax still allows top-level GET navigations, so queries must stay side-effect free), an `Origin` or `Sec-Fetch-Site` check on every POST, and a CSRF token if you must run `SameSite=None`; a custom header is a defence only while CORS is not misconfigured for sibling subdomains [41]. If you accept uploads, allow multipart only on the specific upload procedures and keep JSON-only elsewhere (a sketch is under Synthesis).
+Multipart is the row that matters: an HTML `<form enctype="multipart/form-data">` on an attacker's page can submit to any mutation path with the victim's cookies if those cookies are sent cross-site. The body reaches the procedure as a raw `FormData` instance, not as parsed fields (verified here: `z.any()` received a `FormData`; a mutation with no `.input()` received `undefined` and ran). So the vector is open for a mutation with no input parser or one whose parser accepts a `FormData` (`z.instanceof(FormData)`, `z.any()`, `z.unknown()`), and closed as a side effect by any `z.object(...)` input, which rejects every multipart POST with BAD_REQUEST (verified here with `-F n=5`) [10]. A September 2026 fix in the cal.diy fork is the field case: that app's session cookie was `SameSite=None` (needed for embeds) and it was pinned to a v11 beta (`11.0.0-next-beta.222`) that accepted `text/plain` bodies as JSON, so cross-site form posts triggered mutations; the fix required `application/json` and rejected `Sec-Fetch-Site: cross-site` [43]. Defence in depth, per OWASP: `SameSite=Lax` or `Strict` on the session cookie (Lax still allows top-level GET navigations, so queries must stay side-effect free), an `Origin` or `Sec-Fetch-Site` check on every POST, and a CSRF token if you must run `SameSite=None`; a custom header is a defence only while CORS is not misconfigured for sibling subdomains [41]. If you accept uploads, allow multipart only on the specific upload procedures and keep JSON-only elsewhere (a sketch is under Synthesis).
 
 **Resource limits.** The node-http adapters pass `maxBodySize ?? null` to the request converter, and `null` means no limit; an overflow answers `PAYLOAD_TOO_LARGE` [30]. Set it, or set the body-parser limit in the host framework if that parser runs first. Set `maxBatchSize` on the server and `maxItems` on the client; without them one request can fan out into an unbounded number of procedure calls sharing one context [11][31]. Bound every string, array and number in input schemas.
 
-**Rate limiting** is not built in. Write it as middleware keyed by user id or IP, configure per procedure through `meta`, and throw `TOO_MANY_REQUESTS` (429) [2][4]; apply it on `publicProcedure` so every procedure inherits it.
+**Rate limiting** is not part of tRPC's core: `initTRPC` and the adapters expose no option for it, only the `TOO_MANY_REQUESTS` (429) code [2]. Write it as middleware keyed by user id or IP, configure per procedure through `meta` [4], and attach it to the base procedure every router builds on so it is on by default.
 
-**Known vulnerabilities.** Two high-severity advisories exist, both fixed: CVE-2025-43855 (WebSocket DoS via invalid `connectionParams`, `>=11.0.0 <11.1.1`) [22] and CVE-2025-68130 (prototype pollution in `formDataToObject`, used only by `experimental_caller` / `experimental_nextAppDirCaller`, `>=10.27.0 <10.45.3` and `>=11.0.0 <11.8.0`; the advisory's impact section shows `__proto__[isAdmin]=true` turning every `if (user.isAdmin)` check true) [23]. The second one is the reason to keep `experimental_` APIs off authorization-critical paths; the FAQ says they may change or vanish in any release [18].
+**Known vulnerabilities.** Two high-severity advisories exist, both fixed: CVE-2025-43855 (WebSocket DoS via invalid `connectionParams`, `>=11.0.0 <11.1.1`) [22] and CVE-2025-68130 (prototype pollution in `formDataToObject`, used only by `experimental_caller` / `experimental_nextAppDirCaller`, `>=10.27.0 <10.45.3` and `>=11.0.0 <11.8.0`; the advisory's impact section shows `__proto__[isAdmin]=true` turning every `if (user.isAdmin)` check true) [23]. The second advisory affects only the `experimental_` callers, which the FAQ says are very likely to change and may be dropped in any release [23][18].
 
 **Other rules.** Do authorization in middleware or the resolver, never trust `input` for identity (take the user from `ctx`). Keep `isDev` false in production and redact 500 messages (section 4). Configure CORS at the adapter or proxy with an explicit origin allow-list when cookies cross origins; tRPC does not set CORS headers itself [48]. Do not let a procedure's output schema be the ORM type.
 
 ## 10. Performance
 
-**Runtime.** Batching turns a screen's concurrent queries into one request; streaming returns the fast ones first; `lazy()` and per-domain routes shrink serverless cold starts (the Cal.com numbers in section 2) [11][12][6][34]. `createContext` runs once per request, so expensive per-request work (session lookup) is amortised across a batch, and anything per-procedure belongs in middleware [5]. Published throughput comparisons (oRPC's "about 4.2x as many requests as tRPC" [37], LogRocket's "comparable" [45]) give no method and should not drive the decision.
+**Runtime.** Batching turns a screen's concurrent queries into one request; streaming returns the fast ones first; `lazy()` and per-domain routes shrink serverless cold starts (the Cal.com numbers in section 2) [11][12][6][34]. `createContext` runs once per request, so expensive per-request work (session lookup) is amortised across a batch, and anything per-procedure belongs in middleware [5]. Published throughput comparisons (oRPC's "about 4.2x as many requests as tRPC" [37]; LogRocket's claim that oRPC "matches tRPC's performance", backed by a single rough tRPC figure and none for oRPC [45]) give no method and should not drive the decision.
 
-**Type-checking.** This is the cost that surprises teams. tRPC's own benchmark app has 3,500 procedures across 1,000 routers, profiled with `tsc --generateTrace`; a v10 refactor that removed an eager mapped type cut one app's check from 332 ms to 136 ms [21]. Hono's RPC guide states the shared truth for inferred RPC clients: "the more routes you have, the slower your IDE will become", with the same remedies [38]. The ladder, in the order teams report applying it:
+**Type-checking.** This is the cost that surprises teams. tRPC's own benchmark app has 3,500 procedures across 1,000 routers, profiled with `tsc --generateTrace`; a v10 refactor that removed an eager `OmitNeverKeys` mapped type cut the check of one file in a T3 app (`src/pages/index.ts`) from 332 ms to 136 ms [21]. Hono's RPC guide states the shared truth for inferred RPC clients: "the more routes you have, the slower your IDE will become", with the same remedies [38]. The ladder, from cheapest to most invasive:
 
 1. Lean context types: no ORM client in `ctx`; import it where used [5][26].
 2. `import type { AppRouter }` only; infer helper types from a sub-router (`inferRouterOutputs<typeof userRouter>`) rather than from the root [25].
 3. Split by domain into sub-routers and `lazy()` them; keep Zod composition (`.extend/.merge/.pick`) shallow on hot schemas [6][25].
 4. `skipLibCheck`, `incremental`, and the editor in watch mode (one report: 15 s to 3 s) [25].
-5. Build the API package to `.d.ts` so consumers read declarations instead of re-inferring: project references with `composite` and `disableSourceOfProjectReferenceRedirect`, or a separate `tsc --emitDeclarationOnly` build; a 2025 two-million-line monorepo needed that plus a Zod-to-ArkType move before autocomplete became usable, and one reporter went from about 6 s to 0.5 s [25][40]. `declarationMap` keeps go-to-definition landing in source.
-6. TypeScript 7 (the native port): Microsoft's launch post measured the tRPC repository itself at 5.5 s to 0.6 s for a full check, and tRPC builds with it since 11.19; the examples in this doc were checked under 7.0.2 [39][44].
+5. Build the API package to `.d.ts` so consumers read declarations instead of re-inferring: project references with `composite` and `disableSourceOfProjectReferenceRedirect`, or a separate `tsc --emitDeclarationOnly` build [25]; a nearly-two-million-line monorepo (esveo, crisis in 2024, written up in 2025) needed project references with `disableSourceOfProjectReferenceRedirect` plus a Zod-to-ArkType move before autocomplete became usable again [40].
+6. TypeScript 7 (the native port): Microsoft's launch post measured tRPC's server and client packages (18,000 lines) at 5.5 s to 0.6 s for a full build (9.1x), and tRPC builds with it since 11.19; the examples in this doc were checked under 7.0.2 [39][44].
 
 ## 11. What practitioners argue about
 
 The 316-point Hacker News thread of 2023-08 is the clearest record of the objections [35]. These are comment claims, listed with the primary-source answer where one exists:
 
-- **"Tight coupling; Prisma mapped straight through to the component; junior developers stop thinking about interfaces."** The framework does not force this, but its defaults make it easy. `.output()` schemas as whitelists (section 3) and inner-context design (section 2) are the in-framework counter; the coupling complaint is really about skipping a domain layer.
-- **"What about version skew between deployed client and server?"** Static types assume one build; the thread's own answer is the usual field lifecycle (add optional, then required) and tolerant parsers. tRPC has no contract versioning of its own [16].
+- **"Tight coupling; Prisma mapped straight through to the component; junior developers stop thinking about interfaces."** Nothing in the framework requires an ORM row to be a procedure's output; `.output()` schemas (section 3) and the inner-context split (section 2) are the documented tools that keep a domain layer in between [1][5]. (The reading that this complaint is about a missing domain layer rather than about tRPC is this doc's inference; see section 12.)
+- **"What about version skew between deployed client and server?"** Static types assume one build; the thread's own answer is the usual field lifecycle (add optional, then required) and tolerant parsers. The wire format defines no version field, and no tRPC docs page describes contract versioning [16].
 - **"What happens when one side is no longer TypeScript?"** The honest answer from the FAQ and the monorepo discussion: you lose the guarantee and fall back to OpenAPI generation or a published types package [18][27][32].
 - **"RPC IDLs keep being reinvented."** The author of the WunderGraph BFF conceded in-thread that tRPC "pushed TypeScript only stacks to the limit in terms of DX" while noting the hype cycle was fast and REST/GraphQL did not go away; the 2025 GraphQL essay makes the same concession from the other side [35][36].
 
@@ -408,18 +424,26 @@ The following are this doc's own conclusions, drawn from the cited material rath
 
 ```ts
 // Front door for cookie-authenticated deployments (fetch adapter). Illustrative, not from the docs.
-export function rejectCrossSite(req: Request, uploadPaths: Set<string>): Response | null {
+export function rejectCrossSite(req: Request, allowedOrigins: Set<string>, uploadPaths: Set<string>): Response | null {
   if (req.method !== 'POST') return null;
+  const site = req.headers.get('sec-fetch-site');
+  const origin = req.headers.get('origin');
+  // Browsers send Sec-Fetch-Site: 'same-origin' | 'same-site' | 'cross-site' | 'none'. Only same-origin
+  // (and 'none', a user-typed navigation) may mutate; 'same-site' covers sibling subdomains, which OWASP treats as hostile.
+  if (site ? site !== 'same-origin' && site !== 'none' : !(origin && allowedOrigins.has(origin))) {
+    return new Response('cross-site POST rejected', { status: 403 });
+  }
   const path = new URL(req.url).pathname.split('/').pop() ?? '';
   const ct = req.headers.get('content-type')?.split(';')[0]?.trim();
-  const site = req.headers.get('sec-fetch-site');
-  if (site === 'cross-site') return new Response('cross-site POST rejected', { status: 403 });
   if (ct !== 'application/json' && !uploadPaths.has(path)) return new Response('json only', { status: 415 });
   return null;
 }
 ```
+```
 
-`Sec-Fetch-Site` is set by all current browsers; a missing header should be treated as same-origin only for non-browser clients you authenticate another way.
+If `Sec-Fetch-Site` is absent the check falls back to an allow-listed `Origin`; a request with neither header should be accepted only from non-browser clients that authenticate with a bearer token rather than a cookie.
+
+**The coupling complaint is about a missing domain layer, not about tRPC.** The Hacker News objection in section 11 describes ORM rows flowing to components; the same team would hit it with any framework that lets a handler return a row. The remedy is structural (output schemas, inner context, a service layer the procedures call), not a different RPC library.
 
 **Base procedures are your policy layer; name them by what they guarantee.** `protectedProcedure` guarantees a user, `adminProcedure` a role, `rateLimitedProcedure` a budget. Resource-level checks (ownership, tenancy) that need the input belong in a `.concat()` plugin that declares its own `.input()` or in the resolver, never on the client.
 
