@@ -312,7 +312,21 @@ impl RecipeInstaller {
         Ok(recipe_dir.join(source))
     }
 
-    /// Copy a directory recursively
+    /// Copy a directory recursively, skipping whatever the payload's own
+    /// `.gitignore` files exclude (bd:mech-crate-cd5).
+    ///
+    /// A dev checkout accumulates gitignored droppings inside recipe payloads
+    /// (a Laravel `.env` with a real APP_KEY, compiled views, sqlite dbs).
+    /// Walking the git index is not an option: release installs ship
+    /// MECH_CRATE_ROOT without `.git`. So the walk honors gitignore semantics
+    /// directly (the `ignore` crate, `require_git(false)`), scoped to the
+    /// `.gitignore` files *inside* the walked payload. Rules above it (the
+    /// mech-crate repo root's `*.db`, `.cursor/`), global excludes and
+    /// `.git/info/exclude` are deliberately not consulted: tracked payload
+    /// files such as `config/env.db` match them and must keep shipping. Hidden
+    /// files still ship. A payload that must ship a file its own `.gitignore`
+    /// excludes uses the sanctioned rename route instead (zola's
+    /// `gitignore.template` renamed by `post_install`).
     fn copy_directory(
         &mut self,
         from: &Path,
@@ -322,8 +336,16 @@ impl RecipeInstaller {
     ) -> Result<()> {
         std::fs::create_dir_all(to)?;
 
-        for entry in walkdir::WalkDir::new(from) {
-            let entry = entry.map_err(|e| Error::Io(e.into()))?;
+        let walker = ignore::WalkBuilder::new(from)
+            .standard_filters(false)
+            .git_ignore(true)
+            .require_git(false)
+            .parents(false)
+            .follow_links(false)
+            .build();
+
+        for entry in walker {
+            let entry = entry.map_err(|e| Error::Io(std::io::Error::other(e)))?;
             let relative = entry.path().strip_prefix(from).unwrap();
 
             // Interpolate the relative path
@@ -331,9 +353,12 @@ impl RecipeInstaller {
             let interpolated_relative = self.interpolate(&relative_str, placeholders)?;
             let dest = to.join(&interpolated_relative);
 
-            if entry.file_type().is_dir() {
+            let Some(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
                 std::fs::create_dir_all(&dest)?;
-            } else if entry.file_type().is_file() {
+            } else if file_type.is_file() {
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -686,6 +711,80 @@ mod tests {
             InitAppDecision::Run,
             "no target_dir means there is nothing to guard on"
         );
+    }
+
+    // ── payload walk honors the payload's own .gitignore (bd:mech-crate-cd5) ──
+
+    /// A dev checkout accumulates local droppings inside recipe payloads (a
+    /// Laravel `.env` with a real APP_KEY, compiled views, a sqlite db). They
+    /// are gitignored by the payload's own `.gitignore`, so they never reach a
+    /// release tarball, but the directory walk used to copy them into every
+    /// install. The temp dir here is not a git checkout, mirroring a release
+    /// install's MECH_CRATE_ROOT: ignore rules must apply without git.
+    #[test]
+    fn install_skips_files_the_payload_gitignore_excludes() {
+        let temp = TempDir::new().unwrap();
+        let templates = temp.path().join("templates");
+        let project = temp.path().join("project");
+        let app = templates.join("recipes/demo/app");
+        std::fs::create_dir_all(app.join("public/build")).unwrap();
+        std::fs::create_dir_all(app.join("storage/views")).unwrap();
+        std::fs::create_dir_all(app.join(".cursor")).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+
+        // Rules above the walked payload (the repo root's `*.db`, `.cursor/`)
+        // must NOT apply: tracked payload files like env.db match them.
+        std::fs::write(templates.join(".gitignore"), "*.db\n.cursor/\n").unwrap();
+
+        std::fs::write(app.join(".gitignore"), ".env\n/public/build\n").unwrap();
+        std::fs::write(app.join(".env"), "APP_KEY=planted-secret\n").unwrap();
+        std::fs::write(app.join("public/build/app.js"), "built\n").unwrap();
+        std::fs::write(app.join("storage/views/.gitignore"), "*\n!.gitignore\n").unwrap();
+        std::fs::write(app.join("storage/views/compiled.php"), "<?php\n").unwrap();
+        // Intentionally shipped files that must survive the net.
+        std::fs::write(app.join("gitignore.template"), "node_modules\n").unwrap();
+        std::fs::write(app.join(".env.example"), "APP_KEY=\n").unwrap();
+        std::fs::write(app.join("env.db"), "DB=x\n").unwrap();
+        std::fs::write(app.join(".cursor/mcp.json"), "{}\n").unwrap();
+        std::fs::write(app.join("artisan"), "#!/usr/bin/env php\n").unwrap();
+
+        let recipe: Recipe = serde_json::from_value(serde_json::json!({
+            "name": "demo",
+            "placeholders": { "SERVICE_NAME": { "source": "name" } },
+            "templates": [{ "from": "app", "to": "apps/{{SERVICE_NAME}}" }]
+        }))
+        .unwrap();
+
+        let mut installer = RecipeInstaller::new(&templates).unwrap();
+        let result = installer
+            .install(&recipe, &project, "svc", &HashMap::new())
+            .unwrap();
+        let out = project.join("apps/svc");
+
+        for leaked in [".env", "public/build/app.js", "storage/views/compiled.php"] {
+            assert!(
+                !out.join(leaked).exists(),
+                "gitignored payload file {leaked} must not land in the install"
+            );
+            assert!(
+                !result.files_created.iter().any(|f| f.ends_with(leaked)),
+                "{leaked} must not be reported as created"
+            );
+        }
+        for shipped in [
+            ".gitignore",
+            "gitignore.template",
+            ".env.example",
+            "env.db",
+            ".cursor/mcp.json",
+            "artisan",
+            "storage/views/.gitignore",
+        ] {
+            assert!(
+                out.join(shipped).is_file(),
+                "intentionally shipped payload file {shipped} must still land"
+            );
+        }
     }
 
     /// The ordering itself: the scaffolder must observe a target mx has *not*
