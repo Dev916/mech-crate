@@ -22,3 +22,18 @@ if command -v bd >/dev/null 2>&1; then
   if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
 fi
 # --- END BEADS INTEGRATION v1.0.2 ---
+
+# --- BEGIN MECH-CRATE GUARD (bd:mech-crate-egc) ---
+# bd 1.0.2, run from a linked git worktree, stages a second copy of the issue
+# export at the repository ROOT (index path `issues.jsonl`) next to the tracked
+# `.beads/issues.jsonl`. Nothing writes that file to disk; it exists only in the
+# index, so it rides into the commit unseen (PRs #75 and #77 carried it to
+# main). The repo has never tracked a root `issues.jsonl`, so drop it from the
+# index whenever it shows up as a new file. git re-reads the index after this
+# hook, which is also how bd's own staging takes effect.
+if [ -z "$(git ls-tree --name-only HEAD -- issues.jsonl 2>/dev/null)" ] \
+  && [ -n "$(git diff --cached --name-only --diff-filter=A -- issues.jsonl 2>/dev/null)" ]; then
+  git rm --cached --quiet --ignore-unmatch -- issues.jsonl
+  echo >&2 "pre-commit: dropped the stray root issues.jsonl that bd staged from a git worktree"
+fi
+# --- END MECH-CRATE GUARD ---
