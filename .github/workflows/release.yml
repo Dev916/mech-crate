@@ -165,7 +165,7 @@ jobs:
 
   macos:
     needs: [resolve-version, test, create-draft]
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
       TAG: ${{ needs.resolve-version.outputs.tag }}
