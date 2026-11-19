@@ -140,7 +140,7 @@ aws-env: ## Print exports for the emulator lane: eval "$(make aws-env)"
 	@echo "unset AWS_PROFILE AWS_SESSION_TOKEN"
 
 aws-cli: ## Run the AWS CLI against the emulator (c="s3 ls")
-	@$(AWS_EMULATOR_ENV) aws $(call get_cmd)
+	@$(AWS_EMULATOR_ENV) MX_AWS_ARGS="$(call get_cmd)" bash -c 'aws $$MX_AWS_ARGS'
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Sandbox gate
@@ -187,4 +187,4 @@ else
 endif
 
 aws-sandbox: aws-check-sandbox ## Run a command against the sandbox account (c="terraform apply")
-	@$(AWS_SANDBOX_ENV) $(call get_cmd)
+	@$(AWS_SANDBOX_ENV) bash -c "$(call get_cmd)"
