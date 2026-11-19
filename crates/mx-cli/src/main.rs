@@ -17,8 +17,8 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 mod commands;
 
 use commands::{
-    add::AddCommand, build::BuildCommand, cc_plugin::CcPluginCommand, cf::CfCommand,
-    dev::DevCommand, docs::DocsCommand, doctor::DoctorCommand, infra::InfraCommand,
+    add::AddCommand, aws::AwsCommand, build::BuildCommand, cc_plugin::CcPluginCommand,
+    cf::CfCommand, dev::DevCommand, docs::DocsCommand, doctor::DoctorCommand, infra::InfraCommand,
     init::InitCommand, mcp::McpCommand, new::NewCommand, rag::RagCommand, recipes::RecipesCommand,
     router::RouterCommand, self_update::SelfUpdateCommand, unyform::UnyformCommand,
 };
@@ -86,6 +86,9 @@ enum Commands {
 
     /// Cloudflare Workers and Containers (proxied to make cf-*)
     Cf(CfCommand),
+
+    /// Local AWS emulator and sandbox-account gate (proxied to make aws-*)
+    Aws(AwsCommand),
 
     /// MCP server management
     Mcp(McpCommand),
@@ -270,6 +273,7 @@ async fn main() -> Result<()> {
         Commands::Router(cmd) => cmd.run().await,
         Commands::Infra(cmd) => cmd.run().await,
         Commands::Cf(cmd) => cmd.run().await,
+        Commands::Aws(cmd) => cmd.run().await,
         Commands::Mcp(cmd) => cmd.run().await,
         Commands::Rag(cmd) => cmd.run().await,
         Commands::Doctor(cmd) => cmd.run().await,

@@ -371,4 +371,4 @@ The following are this doc's own conclusions, not statements by the sources.
 - [ ] Per-test account for isolation (a reset only for serial suites, and only where the emulator has one); CI image identical to the inner-loop image.
 - [ ] Sandbox accounts vended with budgets, SCPs and TTL cleanup; SST Live or SAM Accelerate for serverless inner loops that need real triggers.
 - [ ] No new work on LocalStack Hobby (non-commercial) or MinIO (archived).
-- [ ] mx: `templates/infra/aws/` lane filed and built as the sibling of the Cloudflare lane; emulator reachable at `aws.<project>.localhost` through the router, never a port.
+- [ ] mx: scaffold the lane with `mx new <name> --infra aws` and drive it with `mx aws up|cli|reset|check-sandbox|sandbox`; emulator reachable at `aws.<project>.localhost` through the router, never a port.

@@ -37,6 +37,12 @@ mx cf setup
 `--infra cloudflare`): `mx cf deploy myapp` runs exactly
 `make cf-deploy a=myapp`. `mx cf --help` lists every wrapped target.
 
+`mx aws <cmd>` is the same wrapper for a project created with `--infra aws`:
+`mx aws up` starts the local emulator, `mx aws cli s3 ls` runs
+`make aws-cli c="s3 ls"` against it, and `mx aws sandbox terraform plan` runs a
+command against the configured sandbox account after `mx aws check-sandbox`
+passes. `mx aws --help` lists every wrapped target.
+
 ## Hierarchical Config Resolution
 
 Every credential resolves on its own, highest precedence first:

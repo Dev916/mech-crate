@@ -321,3 +321,107 @@ fn new_without_aws_ships_no_aws_module() {
     assert!(!project.join("make/aws.mk").exists());
     assert!(!project.join("infra/aws").exists());
 }
+
+/// `mx` inside `project` with the same hermetic environment as [`make_in`].
+fn mx_in(project: &Path, home: &Path) -> Command {
+    let mut cmd = Command::cargo_bin("mx").expect("mx binary built");
+    cmd.current_dir(project)
+        .env("HOME", home)
+        .env_remove("MX_HOME")
+        .env_remove("MAKEFLAGS")
+        .env_remove("AWS_ENDPOINT_URL")
+        .env_remove("AWS_ACCESS_KEY_ID")
+        .env_remove("AWS_SECRET_ACCESS_KEY")
+        .env_remove("AWS_SESSION_TOKEN")
+        .env_remove("AWS_REGION")
+        .env_remove("AWS_DEFAULT_REGION")
+        .env_remove("AWS_PROFILE")
+        .env_remove("AWS_SANDBOX_ACCOUNT_ID")
+        .env_remove("AWS_ROUTER_HOST");
+    cmd
+}
+
+#[test]
+fn mx_aws_vars_runs_the_make_target() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    template_project(project.path());
+    write_global_aws(home.path(), "AWS_SANDBOX_ACCOUNT_ID=111122223333\n");
+
+    for alias in ["vars", "config"] {
+        mx_in(project.path(), home.path())
+            .args(["aws", alias])
+            .assert()
+            .success()
+            .stdout(contains("AWS_SANDBOX_ACCOUNT_ID=111122223333"))
+            .stdout(contains("AWS_SANDBOX_ACCOUNT_ID_SOURCE=global"));
+    }
+}
+
+#[test]
+fn mx_aws_cli_passes_flags_through_to_the_emulator_lane() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    template_project(project.path());
+    let bin = home.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    // A stub `aws` that records its argv and the endpoint it was given.
+    let stub = bin.join("aws");
+    std::fs::write(
+        &stub,
+        format!(
+            "#!/bin/sh\necho \"$AWS_ENDPOINT_URL|$AWS_ACCESS_KEY_ID|$*\" > \"{}/seen\"\n",
+            home.path().display()
+        ),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    let mut cmd = mx_in(project.path(), home.path());
+    with_path(&mut cmd, &bin);
+    cmd.env("AWS_ACCESS_KEY_ID", "AKIAREALKEY")
+        .env("AWS_ROUTER_HOST", "aws.shop.localhost")
+        .args(["aws", "cli", "s3", "ls", "--recursive", "s3://uploads"])
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("seen"))
+            .unwrap()
+            .trim(),
+        "http://aws.shop.localhost|000000000000|s3 ls --recursive s3://uploads"
+    );
+}
+
+#[test]
+fn mx_aws_sandbox_is_refused_with_an_emulator_endpoint_exported() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    template_project(project.path());
+    write_global_aws(home.path(), "AWS_SANDBOX_ACCOUNT_ID=111122223333\n");
+    let stub = stub_aws(home.path(), "111122223333");
+
+    let mut cmd = mx_in(project.path(), home.path());
+    with_path(&mut cmd, &stub);
+    cmd.env("AWS_ENDPOINT_URL", "http://aws.shop.localhost")
+        .args(["aws", "sandbox", "terraform", "apply"])
+        .assert()
+        .failure()
+        .stderr(contains("AWS_ENDPOINT_URL is set"));
+}
+
+#[test]
+fn mx_aws_explains_a_project_without_the_lane() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    scaffold_project(project.path());
+
+    mx_in(project.path(), home.path())
+        .args(["aws", "up"])
+        .assert()
+        .failure()
+        .stderr(contains("mx new <name> --infra aws"));
+}

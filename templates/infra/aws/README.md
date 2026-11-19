@@ -13,14 +13,18 @@ corpus: `docs/development/local-aws-emulation-architecture.md` in mech-crate.
 
 ## Emulator lane
 
+Every `make aws-<cmd>` target is also `mx aws <cmd>`, with the command line
+passed as plain arguments: `mx aws cli s3 ls` runs exactly
+`make aws-cli c="s3 ls"`. `mx aws --help` lists them all.
+
 ```bash
-make aws-up                 # start the emulator in this project's compose project
-make aws-health             # wait until it answers
-eval "$(make aws-env)"      # export the emulator endpoint and fake credentials
+mx aws up                   # start the emulator in this project's compose project
+mx aws health               # wait until it answers
+eval "$(mx aws env)"        # export the emulator endpoint and fake credentials
 aws s3 mb s3://uploads      # talks to the emulator, not to AWS
-make aws-cli c="s3 ls"      # same, without touching your shell
-make aws-reset              # recreate the emulator with empty state
-make aws-down
+mx aws cli s3 ls            # same, without touching your shell
+mx aws reset                # recreate the emulator with empty state
+mx aws down                 # --volumes also drops its state
 ```
 
 - Workstation endpoint: `http://aws.{{PROJECT_NAME}}.localhost` through the mx router
@@ -63,9 +67,9 @@ mx infra link aws           # or: ignore the project file and use the global one
 Set `AWS_SANDBOX_ACCOUNT_ID` in either file. It is the guard:
 
 ```bash
-make aws-vars                         # what resolved, and from which scope (no secrets)
-make aws-check-sandbox                # refuses unless the caller is that account
-make aws-sandbox c="terraform apply"  # run a command against the sandbox account
+mx aws vars                           # what resolved, and from which scope (no secrets)
+mx aws check-sandbox                  # refuses unless the caller is that account
+mx aws sandbox terraform apply        # run a command against the sandbox account
 ```
 
 `aws-check-sandbox` fails when `AWS_ENDPOINT_URL` is set (an emulator endpoint
