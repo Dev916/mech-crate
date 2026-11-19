@@ -332,13 +332,14 @@ The following are this doc's own conclusions, not statements by the sources.
    # templates/infra/aws/compose.yml (illustrative; the labels follow the recipe guide's router section [51])
    services:
      aws:
-       image: ${AWS_EMULATOR_IMAGE:-ministackorg/ministack:1.5.42}   # swap for floci/floci or a pinned fork
+       image: ${AWS_EMULATOR_IMAGE:-floci/floci:2.5.0}   # the lane's default; swap for ministackorg/ministack or a pinned fork
        environment:
-         PERSIST_STATE: "1"               # local dev keeps state across restarts; CI leaves these off [3]
-         S3_PERSIST: "1"
-         STATE_DIR: /state
+         FLOCI_HOSTNAME: ${AWS_ROUTER_HOST:-aws.{{DOMAIN}}}   # see the note below; required behind a hostname
+         MINISTACK_HOST: ${AWS_ROUTER_HOST:-aws.{{DOMAIN}}}   # the same setting under MiniStack's name
+         FLOCI_STORAGE_MODE: hybrid       # local dev keeps state across restarts; CI uses memory
+         FLOCI_STORAGE_PERSISTENT_PATH: /app/data
        volumes:
-         - aws-state:/state
+         - aws-state:/app/data
          # - /var/run/docker.sock:/var/run/docker.sock   # opt in only for the RDS/ElastiCache/ECS sidecars [8]; it grants host-root-equivalent access
        networks: [default, devmesh-traefik]
        labels:
@@ -353,6 +354,8 @@ The following are this doc's own conclusions, not statements by the sources.
      devmesh-traefik:
        external: true
    ```
+
+   The lane as built (bd:mech-crate-7vf) defaults to Floci 2.5.0, the owner's choice between the two port-4566 emulators; MiniStack stays a one-variable swap. Three things only a live run showed, each reproduced on both Floci 2.5.0 and MiniStack 1.5.42. Both emulators read `<label>.<their own host>` as a virtual-hosted S3 bucket and default that host to `localhost`, so behind a router hostname ending in `.localhost` every request was taken for bucket `aws` (`s3 mb` answered `NoSuchBucket`) until the emulator was told its hostname (`FLOCI_HOSTNAME`, `MINISTACK_HOST`). Returned SQS queue URLs carry the internal port (`http://aws.<project>.localhost:4566/...`); the AWS CLI sends to `AWS_ENDPOINT_URL` and ignores that host, so the URL is passed through unchanged. And Floci 2.5.0 has no reset endpoint that was found, so the lane's `make aws-reset` recreates the container with an empty volume, which works for any emulator.
 
 2. **Pull-request CI** reuses the same image tag from the same variable in a service container (section 6), so the inner loop and CI run one emulator version.
 3. **sandbox gate** is where `mx infra link aws` earns its keep: `make aws-deploy` (mirroring `cf-deploy`) reads the linked real credentials, requires `allowed_account_ids` to name the sandbox, and runs the same integration suite with `AWS_ENDPOINT_URL` unset. A `make aws-vars` target like `cf-vars` shows which scope supplied each value, and a guard refuses to run the deploy target while `AWS_ENDPOINT_URL` is set, which is the one-line defence against the "profile leaked into an emulator job" failure that `cdklocal` had to special-case.
