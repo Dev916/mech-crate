@@ -1,0 +1,51 @@
+# Local AWS emulator for the inner loop and for pull-request CI.
+#
+# Run it in the project's own compose project (`make aws-up` does) so app
+# containers reach it as http://aws:4566 over the project's default network,
+# and the workstation reaches it by hostname through the mx router. No host
+# port is published.
+#
+# The default is Floci (MIT). The image is a variable on purpose: Floci,
+# MiniStack and LocalStack-compatible forks all serve the AWS APIs on port
+# 4566 and the LocalStack health endpoint, so swapping the emulator is
+# AWS_EMULATOR_IMAGE in the environment. Pin the tag.
+
+services:
+  aws:
+    image: ${AWS_EMULATOR_IMAGE:-floci/floci:2.5.0}
+    environment:
+      # The emulator must know the hostname it is reached by. Both Floci and
+      # MiniStack read <label>.<their own host> as a virtual-hosted S3 bucket
+      # and default that host to "localhost"; behind the router the hostname
+      # ends in .localhost, so without this every request is taken for S3
+      # bucket "aws". Keep both equal to the router hostname.
+      FLOCI_HOSTNAME: ${AWS_ROUTER_HOST:-aws.{{PROJECT_NAME}}.localhost}
+      MINISTACK_HOST: ${AWS_ROUTER_HOST:-aws.{{PROJECT_NAME}}.localhost}
+      # hybrid: in memory, flushed to the volume every few seconds, so state
+      # survives `make aws-down` / `make aws-up`. CI uses `memory`.
+      FLOCI_STORAGE_MODE: ${AWS_EMULATOR_STORAGE_MODE:-hybrid}
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      # The console sidecar needs the Docker socket; off with the socket.
+      FLOCI_SERVICES_UI_ENABLED: ${AWS_EMULATOR_UI:-false}
+    volumes:
+      - aws_state:/app/data
+      # Opt in only for the Docker-backed services (RDS, ElastiCache, ECS).
+      # Mounting the socket gives the container host-root-equivalent access.
+      # - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - devmesh-traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-aws.rule=Host(`${AWS_ROUTER_HOST:-aws.{{PROJECT_NAME}}.localhost}`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME}-aws.entrypoints=web
+      - traefik.http.services.${COMPOSE_PROJECT_NAME}-aws.loadbalancer.server.port=4566
+      - traefik.docker.network=devmesh-traefik
+    restart: unless-stopped
+
+volumes:
+  aws_state:
+
+networks:
+  devmesh-traefik:
+    external: true

@@ -11,7 +11,7 @@ use_cases:
   - running an emulator in GitHub Actions and Testcontainers with per-test isolation, and adding an aws lane to the mx router
 summary: "State of practice as of 2026-11-18. LocalStack archived its repo and moved to a token-gated commercial image in March 2026, MiniStack (MIT, 60+ services, Docker sidecars for RDS/ElastiCache/ECS) and Floci (MIT, about 32k stars) appeared as drop-in port-4566 replacements, and AWS shipped its own agent-built AWS Emulator on 2026-11-11 (CC0, 355 services scored, 72% of 46k published fidelity tests passing at v1.0.512, no IAM evaluation, one account and region). The recommended architecture for an AWS-hosted organization is three lanes: an emulator in the inner loop and in pull-request CI for data-path logic, and a real sandbox account as the gate for IAM, quotas, networking and anything below about 80% fidelity. Measured here: MiniStack and Floci both reach healthy in about 4 s at 25 to 36 MiB idle and return AWS-shaped errors for S3, SQS and DynamoDB; both accept any credentials as the account root. Against the Cloudflare lane, AWS has no local copy of its production runtime, so the real account carries more of the confidence."
 provenance: researched
-researched: 2026-11-18
+researched: 2026-11-19
 sources:
   - https://ministack.org/
   - https://ministack.org/docs/architecture
@@ -69,7 +69,7 @@ sources:
 
 # Local AWS Emulation as the Developer Lane
 
-State of practice as of 2026-11-18. Inline `[n]` cites key to the `sources` list in the frontmatter. "Verified here" marks measurements made for this doc: MiniStack 1.5.42 and `floci/floci:latest` were run as plain Docker containers (Docker 29.8 under OrbStack on an arm64 Mac) and driven with AWS CLI 2.27.38; the AWS Emulator was not run (on macOS it needs an image built from AWS's Dockerfile) but its published fidelity file for v1.0.512 was downloaded and summed. The Terraform block passed `terraform validate` against `hashicorp/aws` v6.73.0 under Terraform 1.15.5, the compose block passed `docker compose config`, and the Python and bash blocks compile; the Java block is quoted from the Testcontainers module README and was not compiled. Hacker News comments are quoted as practitioner signal and marked as such. The mx-specific proposal at the end sits under Synthesis (inferred).
+State of practice as of 2026-11-18. Inline `[n]` cites key to the `sources` list in the frontmatter. "Verified here" marks measurements made for this doc: MiniStack 1.5.42 and Floci (`latest` on 2026-11-18 for the startup and memory rows, the pinned 2.5.0 on 2026-11-19 for the behaviour rows) were run as plain Docker containers (Docker 29.8 under OrbStack on an arm64 Mac) and driven with AWS CLI 2.27.38; the AWS Emulator was not run (on macOS it needs an image built from AWS's Dockerfile) but its published fidelity file for v1.0.512 was downloaded and summed. The Terraform block passed `terraform validate` against `hashicorp/aws` v6.73.0 under Terraform 1.15.5, the compose block passed `docker compose config`, and the Python and bash blocks compile; the Java block is quoted from the Testcontainers module README and was not compiled. Hacker News comments are quoted as practitioner signal and marked as such. The mx-specific proposal at the end sits under Synthesis (inferred).
 
 ## 1. Why this doc exists now: the 2026 shake-up
 
@@ -108,7 +108,7 @@ The boundary rule: **a test moves from the emulator lanes to the sandbox gate th
 
 Measured here, same machine, same Docker daemon, `docker run -d -p <port>:4566 <image>` then polling the health endpoint every 250 ms:
 
-| | MiniStack 1.5.42 | Floci latest (pulled 2026-11-18) |
+| | MiniStack 1.5.42 | Floci (2.5.0 for behaviour rows) |
 |---|---|---|
 | container start to healthy | 4.55 s | 4.02 s |
 | memory after 3 s idle (`docker stats`) | 36.0 MiB | 24.7 MiB |
@@ -116,19 +116,20 @@ Measured here, same machine, same Docker daemon, `docker run -d -p <port>:4566 <
 | `aws s3 mb` / `cp` / `head-object` | ok, ETag is the MD5 | ok |
 | `aws sqs create-queue` / `send` / `receive` | ok, queue URL carries account `000000000000` | ok |
 | DynamoDB `put-item` with a key of the wrong type | `ValidationException: ... Type mismatch for key pk expected: S actual: N` (AWS wording) | identical wording |
-| DynamoDB conditional put on an existing item | `ConditionalCheckFailedException: The conditional request failed` | not tested |
-| S3 `get-object` on a missing key | `NoSuchKey` | not tested |
-| SQS `send-message` to a FIFO queue without `MessageGroupId` | `MissingParameter: The request must contain the parameter MessageGroupId.` | not tested |
+| DynamoDB conditional put on an existing item | `ConditionalCheckFailedException: The conditional request failed` | identical |
+| S3 `get-object` on a missing key | `NoSuchKey` | identical |
+| SQS `send-message` to a FIFO queue without `MessageGroupId` | `MissingParameter: The request must contain the parameter MessageGroupId.` | identical |
 | `sts get-caller-identity` with access key `test` | `arn:aws:iam::000000000000:root` | identical |
-| a 12-digit access key as a second account | bucket list empty for `111111111111`, present for `test`: accounts are isolated | not tested |
-| `sqs list-queues --region eu-west-1` after creating in `us-east-1` | empty: regions are isolated | not tested |
-| `POST /_ministack/reset` | `{"reset": "ok"}`, bucket list empty afterwards | n/a |
+| a 12-digit access key as a second account | bucket list empty for `111111111111`, present for `test`: accounts are isolated | identical; two 12-digit accounts each created a bucket named `uploads` |
+| `sqs list-queues --region eu-west-1` after creating in `us-east-1` | empty: regions are isolated | identical |
+| state reset | `POST /_ministack/reset` answers `{"reset": "ok"}`, bucket list empty afterwards | no reset endpoint found; recreate the container (memory mode) or drop its volume |
+| health endpoint | `/_ministack/health`, also `/_localstack/health` | `/_floci/health`, also `/_localstack/health` |
 
 The startup numbers include Docker's own container start, which is why they exceed MiniStack's "~2s" claim; both are several times faster than the 15 to 30 s MiniStack attributes to LocalStack, a figure not re-measured here [1]. MiniStack's documented shape: all state is in-memory Python dicts with persistence off by default and three opt-in layers (`PERSIST_STATE=1` JSON snapshots, `S3_PERSIST=1` object bytes, `RDS_PERSIST=1` named volumes), with the docs advising all three on for local dev and all off for CI [3]. A 12-digit `AWS_ACCESS_KEY_ID` becomes the account id; non-numeric keys fall back to `000000000000`; state is per region from the SigV4 scope except S3 buckets (global, home-region redirect) and Aurora DSQL [4][8]. IAM policies are evaluated only under `AUTH=true`, which also turns on SigV4 validation [3][4]. The services page lists "60+ services, 10 fully featured, 45+ partial"; the limitations page lists four classes of gap: events "stored but not dispatched" (CloudWatch alarms to non-SNS targets, EventBridge API-destination retries, Step Functions logging), metadata-only services (EC2 networking, CloudFront caching, EFS, EMR, WAFv2 enforcement, Batch jobs auto-succeed), "impossible locally" (VPC networking, DNS propagation, SMTP delivery, a real Kubernetes control plane), and by-design leniency in validating optional fields [4][7]. What MiniStack lacks relative to LocalStack Pro is the developer-experience layer: no hot reload, IDE plugins, Cloud Pods or extensions API [5]. The official Testcontainers module is `org.ministack:testcontainers-ministack:0.1.5` [9].
 
 **The official AWS Emulator** is a different animal. It "supports the APIs of AWS services that have an API model in the AWS API models repository", aims for "the same results as AWS for valid calls, and the same errors for invalid ones", and returns `HTTP 501 NotImplemented` for anything it has not implemented "so your tests fail right away" [11][13]. It requires SigV4 on every request, generates `EMULATOR`-prefixed keys at each start and rejects any other key, uses the single account `000000000000`, and sends anonymous usage data by default [11][12]. AWS states the limits itself: "The emulator doesn't evaluate AWS Identity and Access Management (IAM) policies and resource-based policies the way AWS does. Don't use it to test security"; it "accepts any Region and account ID in a request, but it doesn't keep resources separate by Region or account"; behaviour is checked against `us-west-2` only, except global services, which are checked in `us-east-1`; everything is in memory and "the emulator deletes all resources when it stops"; and "We haven't tested the emulator for long-running use or load testing" [12]. It is "built and maintained by agents from the AWS API models" with updates "many times a day" [11][12]. Linux gets RPM and Debian packages; macOS and Windows build a Docker image from AWS's Dockerfile because "We don't publish a ready-made image"; Rust tests can embed it in-process [11][12]. "AWS Emulator has no additional service fee" and needs no AWS account [12].
 
-**Decision.** Pick the port-4566 family (MiniStack or Floci) as the default emulator for the two emulator lanes: both are a one-line swap for existing LocalStack configuration, both run as a plain container with no token, and MiniStack adds Docker-backed RDS, ElastiCache, ECS, EKS and Lambda sidecars that nothing else offers free [1][5][25]. Prefer Floci when the team wants a native binary or the larger community; prefer MiniStack when the real-database sidecars matter. Run the AWS Emulator alongside for control-plane and error-shape checks, where its published fidelity is strongest, and watch its scores: it is the only one of the three that publishes a test-by-test conformance file, and that file is the best available proxy for how much any emulator can be trusted per service (section 4). Do not start new pipelines on LocalStack's Hobby plan (non-commercial only) or on frozen Community images (no patches) [18][20].
+**Decision.** Pick the port-4566 family (MiniStack or Floci) as the default emulator for the two emulator lanes: both are a one-line swap for existing LocalStack configuration, both run as a plain container with no token, and MiniStack adds Docker-backed RDS, ElastiCache, ECS, EKS and Lambda sidecars that nothing else offers free [1][5][25]. Prefer Floci when the team wants a native binary or the larger community; prefer MiniStack when the real-database sidecars or a one-call reset endpoint matter. On every behaviour row measured above the two were indistinguishable, so the choice rests on those differences and on maintenance risk, not on fidelity. The mx `aws` lane (section 10) defaults to Floci 2.5.0 and keeps the image a single variable. Run the AWS Emulator alongside for control-plane and error-shape checks, where its published fidelity is strongest, and watch its scores: it is the only one of the three that publishes a test-by-test conformance file, and that file is the best available proxy for how much any emulator can be trusted per service (section 4). Do not start new pipelines on LocalStack's Hobby plan (non-commercial only) or on frozen Community images (no patches) [18][20].
 
 ## 4. What emulation cannot tell you, with numbers
 
@@ -225,7 +226,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       aws:
-        image: ministackorg/ministack:1.5.42   # pin: ten releases in the 24 days before this doc [8]
+        image: floci/floci:2.5.0   # pin the tag; the same image the inner loop runs (MiniStack: ministackorg/ministack:<tag>)
         ports: ["4566:4566"]
     env:
       AWS_ENDPOINT_URL: http://localhost:4566
@@ -238,33 +239,28 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v7
         with: { python-version: "3.13" }
-      - run: pip install boto3 pytest requests
-      - run: curl --retry 20 --retry-connrefused --retry-delay 1 -sf http://localhost:4566/_ministack/health
+      - run: pip install boto3 pytest
+      - run: curl --retry 20 --retry-connrefused --retry-delay 1 -sf http://localhost:4566/_localstack/health   # served by Floci and MiniStack
       - run: pytest tests/integration -q
 ```
 
-Per-test isolation has two mechanisms, and they are alternatives: the reset endpoint wipes all state in one call (`POST /_ministack/reset`, verified here; moto's is `POST /moto-api/reset`; the AWS Emulator has no reset endpoint and documents a restart as the way to a clean state) [8][12][28], which suits a serial suite; namespacing by account lets tests run in parallel against one emulator where the emulator isolates accounts, which MiniStack does (verified here) and the AWS Emulator does not [8][12]. A reset fixture under a parallel runner erases other workers' resources, so a suite picks one.
+Per-test isolation has two mechanisms. Namespacing by account works on both port-4566 emulators and lets tests run in parallel against one instance: a 12-digit access key is its own account in Floci and in MiniStack (verified here on both), which the AWS Emulator does not offer [8][12][25]. A whole-emulator reset suits a serial suite, and it is emulator-specific: MiniStack has `POST /_ministack/reset` (verified here), moto has `POST /moto-api/reset`, and Floci and the AWS Emulator are reset by restarting them [8][12][28]. A reset under a parallel runner erases other workers' resources, so the portable default is the per-test account.
 
 ```python
 # tests/integration/conftest.py — the emulator is started outside pytest (compose or the CI service container)
-import os, uuid, boto3, pytest, requests
+import os, uuid, boto3, pytest
 
 ENDPOINT = os.environ["AWS_ENDPOINT_URL"]
 
 @pytest.fixture
-def clean_emulator():
-    """Serial suites: request this fixture to start from an empty emulator. Do not combine with pytest-xdist."""
-    requests.post(f"{ENDPOINT}/_ministack/reset", timeout=10).raise_for_status()
-
-@pytest.fixture
 def account():
-    """Parallel suites: each test gets its own account; a 12-digit access key is the account id in MiniStack [8]."""
+    """Each test gets its own account: a 12-digit access key is the account id in Floci and MiniStack."""
     acct = f"{uuid.uuid4().int % 10**12:012d}"
     return boto3.Session(aws_access_key_id=acct, aws_secret_access_key="test", region_name="us-east-1")
 
 def test_upload_lands_in_bucket(account):
     s3 = account.client("s3", endpoint_url=ENDPOINT)
-    s3.create_bucket(Bucket="uploads")
+    s3.create_bucket(Bucket="uploads")          # no clash: every test's account has its own namespace
     s3.put_object(Bucket="uploads", Key="a.txt", Body=b"hi")
     assert s3.get_object(Bucket="uploads", Key="a.txt")["Body"].read() == b"hi"
 ```
@@ -332,13 +328,14 @@ The following are this doc's own conclusions, not statements by the sources.
    # templates/infra/aws/compose.yml (illustrative; the labels follow the recipe guide's router section [51])
    services:
      aws:
-       image: ${AWS_EMULATOR_IMAGE:-ministackorg/ministack:1.5.42}   # swap for floci/floci or a pinned fork
+       image: ${AWS_EMULATOR_IMAGE:-floci/floci:2.5.0}   # the lane's default; swap for ministackorg/ministack or a pinned fork
        environment:
-         PERSIST_STATE: "1"               # local dev keeps state across restarts; CI leaves these off [3]
-         S3_PERSIST: "1"
-         STATE_DIR: /state
+         FLOCI_HOSTNAME: ${AWS_ROUTER_HOST:-aws.{{DOMAIN}}}   # see the note below; required behind a hostname
+         MINISTACK_HOST: ${AWS_ROUTER_HOST:-aws.{{DOMAIN}}}   # the same setting under MiniStack's name
+         FLOCI_STORAGE_MODE: hybrid       # local dev keeps state across restarts; CI uses memory
+         FLOCI_STORAGE_PERSISTENT_PATH: /app/data
        volumes:
-         - aws-state:/state
+         - aws-state:/app/data
          # - /var/run/docker.sock:/var/run/docker.sock   # opt in only for the RDS/ElastiCache/ECS sidecars [8]; it grants host-root-equivalent access
        networks: [default, devmesh-traefik]
        labels:
@@ -353,6 +350,8 @@ The following are this doc's own conclusions, not statements by the sources.
      devmesh-traefik:
        external: true
    ```
+
+   The lane as built (bd:mech-crate-7vf) defaults to Floci 2.5.0, the owner's choice between the two port-4566 emulators; MiniStack stays a one-variable swap. Three things only a live run showed, each reproduced on both Floci 2.5.0 and MiniStack 1.5.42. Both emulators read `<label>.<their own host>` as a virtual-hosted S3 bucket and default that host to `localhost`, so behind a router hostname ending in `.localhost` every request was taken for bucket `aws` (`s3 mb` answered `NoSuchBucket`) until the emulator was told its hostname (`FLOCI_HOSTNAME`, `MINISTACK_HOST`). Returned SQS queue URLs carry the internal port (`http://aws.<project>.localhost:4566/...`); the AWS CLI sends to `AWS_ENDPOINT_URL` and ignores that host, so the URL is passed through unchanged. And Floci 2.5.0 has no reset endpoint that was found, so the lane's `make aws-reset` recreates the container with an empty volume, which works for any emulator.
 
 2. **Pull-request CI** reuses the same image tag from the same variable in a service container (section 6), so the inner loop and CI run one emulator version.
 3. **sandbox gate** is where `mx infra link aws` earns its keep: `make aws-deploy` (mirroring `cf-deploy`) reads the linked real credentials, requires `allowed_account_ids` to name the sandbox, and runs the same integration suite with `AWS_ENDPOINT_URL` unset. A `make aws-vars` target like `cf-vars` shows which scope supplied each value, and a guard refuses to run the deploy target while `AWS_ENDPOINT_URL` is set, which is the one-line defence against the "profile leaked into an emulator job" failure that `cdklocal` had to special-case.
@@ -369,7 +368,7 @@ The following are this doc's own conclusions, not statements by the sources.
 - [ ] Endpoint set only through `AWS_ENDPOINT_URL` / `AWS_ENDPOINT_URL_<SERVICE>` or the Terraform `endpoints {}` block; no `cdklocal` or `tflocal` in new pipelines.
 - [ ] Path-style S3 wherever the emulator sits behind a hostname router.
 - [ ] Sandbox provider block carries `allowed_account_ids`; deploy target refuses to run with `AWS_ENDPOINT_URL` set.
-- [ ] Per-test reset fixture plus per-test account where the emulator isolates accounts; CI image identical to the inner-loop image.
+- [ ] Per-test account for isolation (a reset only for serial suites, and only where the emulator has one); CI image identical to the inner-loop image.
 - [ ] Sandbox accounts vended with budgets, SCPs and TTL cleanup; SST Live or SAM Accelerate for serverless inner loops that need real triggers.
 - [ ] No new work on LocalStack Hobby (non-commercial) or MinIO (archived).
 - [ ] mx: `templates/infra/aws/` lane filed and built as the sibling of the Cloudflare lane; emulator reachable at `aws.<project>.localhost` through the router, never a port.

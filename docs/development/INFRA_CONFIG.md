@@ -84,7 +84,7 @@ about a stray one, and `mx infra link` / `unlink` delete it.
 |----------|-------------|-------------|
 | `cloudflare` | Cloudflare Workers & Containers | `cloudflare.env` |
 | `digitalocean` | DigitalOcean Droplets & App Platform | `digitalocean.env` |
-| `aws` | Amazon Web Services | `aws.env` |
+| `aws` | Amazon Web Services: local emulator lane plus sandbox-account gate (`mx new --infra aws`, `make aws-*`; see `local-aws-emulation-architecture.md`) | `aws.env` |
 | `hetzner` | Hetzner Cloud | `hetzner.env` |
 
 ## Commands
