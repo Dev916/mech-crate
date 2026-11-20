@@ -136,3 +136,62 @@ fn mx_new_with_cloudflare_infra_leaves_no_placeholder_token() {
     let index = std::fs::read_to_string(worker.join("src/index.ts")).unwrap();
     assert!(index.contains("'pdr-demo-ssr'"), "{index}");
 }
+
+/// The same net for the `aws` lane (bd:mech-crate-7vf), whose templates carry
+/// `{{PROJECT_NAME}}` in YAML and Markdown.
+#[test]
+fn mx_new_with_aws_infra_leaves_no_placeholder_token() {
+    let home = tempfile::tempdir().expect("setup: home tempdir");
+    std::fs::create_dir_all(home.path().join(".mech-crate/templates/recipes"))
+        .expect("setup: fake mx init marker");
+    let work = tempfile::tempdir().expect("setup: work tempdir");
+
+    let out = Command::cargo_bin("mx")
+        .expect("mx binary built")
+        .current_dir(work.path())
+        .env("HOME", home.path())
+        .env("MECH_CRATE_ROOT", repo_root())
+        .env_remove("MX_HOME")
+        .args(["new", "pdr-demo", "--no-prompt", "--infra", "aws"])
+        .output()
+        .expect("setup: spawn mx new");
+    assert!(
+        out.status.success(),
+        "mx new failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let project = work.path().join("pdr-demo");
+    let compose = project.join("infra/aws/compose.yml");
+    assert!(compose.is_file(), "setup: the aws lane must be installed");
+
+    let mut leftovers: Vec<String> = Vec::new();
+    let mut files = walk_files(&project);
+    files.sort();
+    for file in files {
+        let Ok(body) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let mut tokens = placeholder_tokens(&body);
+        tokens.sort();
+        tokens.dedup();
+        for token in tokens {
+            leftovers.push(format!(
+                "  {} still has {{{{{token}}}}}",
+                file.strip_prefix(&project).unwrap().display()
+            ));
+        }
+    }
+    assert!(
+        leftovers.is_empty(),
+        "`mx new --infra aws` left placeholder tokens in the project:\n{}",
+        leftovers.join("\n")
+    );
+
+    let compose = std::fs::read_to_string(compose).unwrap();
+    assert!(
+        compose.contains("aws.pdr-demo.localhost"),
+        "the router hostname should carry the project slug:\n{compose}"
+    );
+}

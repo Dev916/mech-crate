@@ -1139,23 +1139,24 @@ fn no_shipped_recipe_leaves_a_placeholder_token_unsubstituted() {
 // ── No infra template ships a {{PLACEHOLDER}} nothing substitutes ────────────
 
 /// The placeholder names `mx new --infra <provider>` substitutes into the copied
-/// `templates/infra/<provider>/` tree. Mirrors `setup_cloudflare_infra` in
-/// `crates/mx-cli/src/commands/new.rs`, which expands exactly one name.
+/// `templates/infra/<provider>/` tree. Mirrors `setup_cloudflare_infra` and
+/// `setup_aws_infra` in `crates/mx-cli/src/commands/new.rs`, which each expand
+/// exactly one name.
 const INFRA_SUBSTITUTED_PLACEHOLDERS: &[&str] = &["PROJECT_NAME"];
 
 /// File extensions that substitution pass rewrites. A token in any other file
 /// is copied through literally.
-const INFRA_SUBSTITUTED_EXTENSIONS: &[&str] = &["ts", "toml", "json", "md"];
+const INFRA_SUBSTITUTED_EXTENSIONS: &[&str] = &["ts", "toml", "json", "md", "yml", "yaml"];
 
 /// The `templates/infra/<provider>/` trees `mx new --infra` actually installs.
-const INFRA_INSTALLED_PROVIDERS: &[&str] = &["cloudflare"];
+const INFRA_INSTALLED_PROVIDERS: &[&str] = &["cloudflare", "aws"];
 
 /// bd:mech-crate-pdr: `templates/infra/` sits outside `templates/recipes/`, so
 /// the recipe net above never looked at its `{{PROJECT_NAME}}` tokens. This is
 /// the static half of the same net for infra templates: every SCREAMING_SNAKE
 /// token must be one `mx new` substitutes, in a file the substitution pass
 /// rewrites, under a provider `mx new` installs. The behavioral half
-/// (`mx new --no-prompt --infra cloudflare` leaves zero tokens) lives in
+/// (`mx new --no-prompt --infra cloudflare|aws` leaves zero tokens) lives in
 /// `crates/mx-cli/tests/new_infra_placeholders.rs`, since it needs the binary.
 #[test]
 fn no_shipped_infra_template_leaves_a_placeholder_token_unsubstituted() {
