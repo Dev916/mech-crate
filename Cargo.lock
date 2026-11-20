@@ -1457,6 +1457,7 @@ dependencies = [
  "flate2",
  "glob",
  "hex",
+ "ignore",
  "indicatif",
  "pgvector",
  "proptest",

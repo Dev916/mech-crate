@@ -44,6 +44,8 @@ glob = { workspace = true }
 
 # Directory walking
 walkdir = "2.5"
+# Gitignore-aware walking for recipe payloads (no git checkout required)
+ignore = "0.4.25"
 
 # Environment variables
 dotenvy = { workspace = true }
