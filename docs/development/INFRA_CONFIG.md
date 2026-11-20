@@ -188,7 +188,7 @@ mx cf deploy api.example.com
 
 **Config Variables:**
 - `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID
-- `CF_DOCKER_PLATFORM` - Docker platform (linux/amd64 or linux/arm64)
+- `CF_DOCKER_PLATFORM` - Docker platform; Cloudflare Containers require `linux/amd64`, the default
 - `CLOUDFLARE_API_TOKEN` - API token for CI/CD (optional)
 
 The two credential names are wrangler's own, so the value in a config file
