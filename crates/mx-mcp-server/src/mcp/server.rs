@@ -4,6 +4,7 @@
 
 use serde_json::json;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::error::{error_codes, McpError, McpResult};
@@ -13,6 +14,87 @@ use crate::mx::MxExecutor;
 use crate::project::ProjectDetector;
 use crate::tools::ToolRegistry;
 use mx_lib::corpus::{CorpusStore, RagConfig};
+
+/// How long the server waits after a failed corpus connect before a RAG tool
+/// call may trigger another attempt. Long enough not to hammer a down database
+/// on every call, short enough that a Neon cold start or a laptop waking from
+/// sleep heals within one working minute.
+const CORPUS_RETRY_COOLDOWN: Duration = Duration::from_secs(30);
+
+/// The server's handle on the techniques corpus.
+///
+/// The connection used to be made exactly once at startup; a failure there
+/// (Neon compute still waking, VPN not yet up, laptop offline) left every
+/// `rag_*` tool answering "corpus is offline" for the rest of the process,
+/// which in a long-lived MCP session means for the rest of the day. This
+/// wrapper remembers the failure and lets the next RAG tool call retry once
+/// the cooldown has passed.
+pub(crate) struct CorpusLink {
+    store: Option<CorpusStore>,
+    disabled: bool,
+    last_attempt: Option<Instant>,
+    cooldown: Duration,
+}
+
+impl CorpusLink {
+    pub(crate) fn new(disabled: bool) -> Self {
+        Self {
+            store: None,
+            disabled,
+            last_attempt: None,
+            cooldown: CORPUS_RETRY_COOLDOWN,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_cooldown(mut self, cooldown: Duration) -> Self {
+        self.cooldown = cooldown;
+        self
+    }
+
+    pub(crate) fn store(&self) -> Option<&CorpusStore> {
+        self.store.as_ref()
+    }
+
+    /// Whether a connect attempt is due at `now`: never when RAG is disabled or
+    /// already connected; immediately when none was ever made; otherwise only
+    /// once the cooldown since the last failure has elapsed.
+    pub(crate) fn should_retry(&self, now: Instant) -> bool {
+        if self.disabled || self.store.is_some() {
+            return false;
+        }
+        match self.last_attempt {
+            None => true,
+            Some(at) => now.duration_since(at) >= self.cooldown,
+        }
+    }
+
+    /// Connect if an attempt is due. Returns whether the corpus is usable afterwards.
+    pub(crate) async fn ensure(&mut self, cfg: &RagConfig) -> bool {
+        let now = Instant::now();
+        if !self.should_retry(now) {
+            return self.store.is_some();
+        }
+        self.last_attempt = Some(now);
+        match CorpusStore::connect(cfg).await {
+            Ok(s) => {
+                info!(
+                    "Techniques corpus connected ({} backend)",
+                    s.backend().label()
+                );
+                self.store = Some(s);
+                true
+            }
+            Err(e) => {
+                warn!(
+                    "Techniques corpus unavailable: {e}. RAG tools report offline; the next RAG call after {}s retries.",
+                    self.cooldown.as_secs()
+                );
+                false
+            }
+        }
+    }
+}
 
 /// MCP Server
 pub struct McpServer {
@@ -77,24 +159,13 @@ impl McpServer {
         let mx = MxExecutor::new(self.mech_crate_root.clone());
         let project_detector = ProjectDetector::new();
 
-        let corpus: Option<CorpusStore> = if self.no_rag {
+        let rag_config = RagConfig::load();
+        let mut corpus = CorpusLink::new(self.no_rag);
+        if self.no_rag {
             info!("RAG disabled (--no-rag)");
-            None
         } else {
-            match CorpusStore::connect(&RagConfig::load()).await {
-                Ok(s) => {
-                    info!(
-                        "Techniques corpus connected ({} backend)",
-                        s.backend().label()
-                    );
-                    Some(s)
-                }
-                Err(e) => {
-                    warn!("Techniques corpus unavailable: {e}. RAG tools will report offline.");
-                    None
-                }
-            }
-        };
+            corpus.ensure(&rag_config).await;
+        }
 
         info!("MCP Server ready, waiting for requests...");
 
@@ -112,7 +183,13 @@ impl McpServer {
                 }
                 "tools/list" => self.handle_tools_list(&request),
                 "tools/call" => {
-                    self.handle_tool_call(&request, &mx, &project_detector, corpus.as_ref())
+                    // A RAG tool arriving while the corpus is down is the moment to
+                    // retry the connection (subject to the cooldown), so a database
+                    // that came up after startup is picked up without a restart.
+                    if Self::is_rag_tool_call(&request) {
+                        corpus.ensure(&rag_config).await;
+                    }
+                    self.handle_tool_call(&request, &mx, &project_detector, corpus.store())
                         .await
                 }
                 "resources/list" => self.handle_resources_list(&request),
@@ -171,6 +248,16 @@ impl McpServer {
         };
 
         JsonRpcResponse::success(request.id.clone(), serde_json::to_value(result).unwrap())
+    }
+
+    /// Whether a `tools/call` request names a techniques-corpus (`rag_*`) tool.
+    fn is_rag_tool_call(request: &JsonRpcRequest) -> bool {
+        request
+            .params
+            .as_ref()
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.as_str())
+            .is_some_and(|n| n.starts_with("rag_"))
     }
 
     /// Handle tools/call request
@@ -420,5 +507,52 @@ project-name/
 4. **Labels**: Traefik labels define hostname routing rules
 "#
         .to_string()
+    }
+}
+
+#[cfg(test)]
+mod corpus_link_tests {
+    use super::*;
+
+    #[test]
+    fn disabled_link_never_retries() {
+        let link = CorpusLink::new(true);
+        assert!(!link.should_retry(Instant::now()));
+    }
+
+    #[test]
+    fn first_attempt_is_immediate() {
+        let link = CorpusLink::new(false);
+        assert!(link.should_retry(Instant::now()));
+    }
+
+    #[test]
+    fn failed_attempt_waits_for_the_cooldown_then_retries() {
+        let mut link = CorpusLink::new(false).with_cooldown(Duration::from_secs(30));
+        let t0 = Instant::now();
+        link.last_attempt = Some(t0); // a failed connect leaves store None
+        assert!(!link.should_retry(t0 + Duration::from_secs(1)));
+        assert!(!link.should_retry(t0 + Duration::from_secs(29)));
+        assert!(link.should_retry(t0 + Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn rag_tool_calls_are_recognised_by_name() {
+        let call = |name: &str| JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: RequestId::Number(1),
+            method: "tools/call".to_string(),
+            params: Some(json!({ "name": name, "arguments": {} })),
+        };
+        assert!(McpServer::is_rag_tool_call(&call("rag_search")));
+        assert!(McpServer::is_rag_tool_call(&call("rag_health")));
+        assert!(!McpServer::is_rag_tool_call(&call("mx_doctor")));
+        let no_params = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: RequestId::Number(1),
+            method: "tools/call".to_string(),
+            params: None,
+        };
+        assert!(!McpServer::is_rag_tool_call(&no_params));
     }
 }

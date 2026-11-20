@@ -16,7 +16,8 @@ use mx_lib::corpus::{CorpusStore, SearchMode, TechHit, TechQuery};
 const CORPUS_OFFLINE: &str = "Techniques corpus is offline: could not reach Neon or local Postgres.\n\
 Configure ~/.mech-crate/config/rag.toml (database_url / fallback_database_url) or start a local pgvector:\n\
   docker run -d --name mx-rag -p 5432:5432 -e POSTGRES_DB=mx_rag -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17\n\
-Then run: mx rag ingest";
+Then run: mx rag ingest\n\
+The server retries the connection on the next RAG call once 30s have passed, so a database that was briefly unreachable needs no restart.";
 
 /// Render hits grouped by source doc, with metadata and scores.
 fn format_hits(header: &str, hits: &[TechHit], mode: SearchMode) -> String {

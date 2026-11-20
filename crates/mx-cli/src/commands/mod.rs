@@ -1,6 +1,7 @@
 //! CLI command implementations
 
 pub mod add;
+pub mod aws;
 pub mod build;
 pub mod cc_plugin;
 pub mod cf;

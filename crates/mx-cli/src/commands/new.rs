@@ -66,6 +66,7 @@ impl NewCommand {
 
         // Handle infrastructure setup
         let mut has_cloudflare = false;
+        let mut has_aws = false;
         let infra_providers = if !self.no_prompt && self.infra.is_empty() {
             self.prompt_infra_setup()?
         } else {
@@ -77,6 +78,10 @@ impl NewCommand {
                 "cloudflare" => {
                     has_cloudflare = true;
                     self.setup_cloudflare_infra(&templates_root, &project_path)?;
+                }
+                "aws" => {
+                    has_aws = true;
+                    self.setup_aws_infra(&templates_root, &project_path)?;
                 }
                 _ => {
                     println!(
@@ -93,6 +98,14 @@ impl NewCommand {
             let cf_mk = project_path.join("make/cloudflare.mk");
             if cf_mk.exists() {
                 std::fs::remove_file(cf_mk)?;
+            }
+        }
+
+        // Remove aws.mk if AWS not selected
+        if !has_aws {
+            let aws_mk = project_path.join("make/aws.mk");
+            if aws_mk.exists() {
+                std::fs::remove_file(aws_mk)?;
             }
         }
 
@@ -268,6 +281,7 @@ build/
 
 # Infrastructure secrets
 infra/**/.env
+infra/aws/.env.aws
 infra/**/*.tfvars
 infra/**/*.tfstate
 infra/**/*.tfstate.*
@@ -426,6 +440,45 @@ make down
         Ok(())
     }
 
+    /// Scaffold `infra/aws/`: the local emulator compose service, the committed
+    /// fake-credential env file for the emulator lane, and the README. The
+    /// matching targets live in `make/aws.mk`, which `copy_templates` already
+    /// copied and which is removed again when AWS is not selected.
+    fn setup_aws_infra(&self, templates_root: &Path, project_path: &Path) -> Result<()> {
+        println!("  {} Setting up AWS infrastructure...", style("→").cyan());
+
+        let aws_template_dir = templates_root.join("infra/aws");
+        let aws_project_dir = project_path.join("infra/aws");
+
+        if !aws_template_dir.exists() {
+            println!(
+                "  {} AWS templates not found at {}",
+                style("⚠").yellow(),
+                aws_template_dir.display()
+            );
+            return Ok(());
+        }
+
+        std::fs::create_dir_all(&aws_project_dir)?;
+        self.copy_dir_recursive(&aws_template_dir, &aws_project_dir)?;
+
+        let project_slug = self
+            .name
+            .to_lowercase()
+            .replace(' ', "-")
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '-')
+            .collect::<String>();
+
+        self.replace_placeholders_in_dir(&aws_project_dir, "{{PROJECT_NAME}}", &project_slug)?;
+
+        println!(
+            "  {} AWS infrastructure added (local emulator: make aws-up)",
+            style("✓").green()
+        );
+        Ok(())
+    }
+
     fn copy_dir_recursive(&self, src: &Path, dst: &Path) -> Result<()> {
         std::fs::create_dir_all(dst)?;
 
@@ -450,7 +503,7 @@ make down
         placeholder: &str,
         value: &str,
     ) -> Result<()> {
-        let extensions = ["ts", "toml", "json", "md"];
+        let extensions = ["ts", "toml", "json", "md", "yml", "yaml"];
 
         for entry in walkdir::WalkDir::new(dir) {
             let entry = entry?;
