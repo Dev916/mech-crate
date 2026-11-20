@@ -540,3 +540,125 @@ fn single_service_only_targets_refuse_a_list_loudly() {
         );
     }
 }
+
+// ── Behavioral: the make build -> build.sh argv contract (bd:mech-crate-pz6) ──
+
+/// A project with one buildable service and a recording `docker` stub.
+fn build_project(name: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join(name);
+    scaffold_project(&root, &["api"]);
+    let stub = stub_docker(&root);
+    std::fs::create_dir_all(root.join("docker/dockerfiles/api")).unwrap();
+    std::fs::write(root.join("docker/dockerfiles/api/app"), "FROM alpine:3\n").unwrap();
+    (tmp, root, stub)
+}
+
+/// The single `docker build …` argv the stub recorded.
+fn docker_build_call(root: &Path) -> String {
+    let log = std::fs::read_to_string(root.join("calls.log")).unwrap_or_default();
+    let builds: Vec<&str> = log.lines().filter(|l| l.starts_with("build ")).collect();
+    assert_eq!(
+        builds.len(),
+        1,
+        "expected exactly one docker build, the stub recorded:\n{log}"
+    );
+    builds[0].to_string()
+}
+
+/// Everything `docker build` received after `--file=<dockerfile>`: the extra
+/// args the caller asked for, then the build context. A stray `api` / `latest`
+/// / `dev` / `0` here is the pz6 defect.
+fn operands_after_file(call: &str) -> Vec<String> {
+    let tokens: Vec<&str> = call.split_whitespace().collect();
+    let at = tokens
+        .iter()
+        .position(|t| t.starts_with("--file="))
+        .unwrap_or_else(|| panic!("docker build had no --file=: {call}"));
+    tokens[at + 1..].iter().map(|t| t.to_string()).collect()
+}
+
+/// pz6: `_build` passed four args when `nocache=` was unset, `build.sh` then
+/// ran `shift 5`, which fails on four args without shifting, so EXTRA_ARGS
+/// became the whole argv and `docker build` got `api latest dev 0` as stray
+/// operands ("requires 1 argument").
+#[test]
+fn make_build_without_nocache_passes_docker_a_clean_argv() {
+    let (_tmp, root, stub) = build_project("pz6plain");
+    run_ok(&root, Some(&stub), "make build s=api");
+    let call = docker_build_call(&root);
+    assert_eq!(
+        operands_after_file(&call),
+        vec!["."],
+        "`make build s=api` must hand docker build only the context, got: {call}"
+    );
+    assert!(!call.contains("--no-cache"), "no nocache= given: {call}");
+    assert!(
+        call.contains("--file=docker/dockerfiles/api/app") && call.contains("--target development"),
+        "dev build must use the dev Dockerfile and target: {call}"
+    );
+}
+
+#[test]
+fn make_build_with_nocache_one_adds_no_cache_and_nothing_else() {
+    let (_tmp, root, stub) = build_project("pz6nocache");
+    run_ok(&root, Some(&stub), "make build s=api nocache=1");
+    let call = docker_build_call(&root);
+    assert!(
+        call.contains("--no-cache"),
+        "nocache=1 must reach docker: {call}"
+    );
+    assert_eq!(operands_after_file(&call), vec!["."], "{call}");
+}
+
+#[test]
+fn make_build_with_nocache_zero_keeps_the_cache() {
+    let (_tmp, root, stub) = build_project("pz6cache");
+    run_ok(&root, Some(&stub), "make build s=api nocache=0");
+    let call = docker_build_call(&root);
+    assert!(
+        !call.contains("--no-cache"),
+        "nocache=0 keeps the cache: {call}"
+    );
+    assert_eq!(operands_after_file(&call), vec!["."], "{call}");
+}
+
+/// The extra-args path: `build-multiplatform` used to pass `--platform=…` in
+/// the nocache slot, so it was read as NOCACHE and dropped.
+#[test]
+fn make_build_multiplatform_forwards_platform_as_an_extra_arg() {
+    let (_tmp, root, stub) = build_project("pz6multi");
+    let out = run_ok(&root, Some(&stub), "make build-multiplatform s=api");
+    let call = docker_build_call(&root);
+    assert_eq!(
+        operands_after_file(&call),
+        vec!["--platform=linux/amd64,linux/arm64", "."],
+        "{call}"
+    );
+    assert!(!call.contains("--no-cache"), "{call}");
+    assert!(out.contains("No cache:   no"), "{out}");
+    assert!(call.contains("--target production"), "{call}");
+}
+
+/// `build.sh` itself honors the documented "[nocache] [extra_args...]" optional
+/// tail: fewer than five args must not leak positional args into docker, and
+/// args past the fifth are forwarded one argv entry each.
+#[test]
+fn build_script_tolerates_short_argv_and_forwards_extra_args() {
+    let (_tmp, root, stub) = build_project("pz6script");
+    for (argv, want) in [
+        ("api", vec!["."]),
+        ("api v1", vec!["."]),
+        ("api v1 dev 0", vec!["."]),
+        ("api v1 dev 0 0", vec!["."]),
+        (
+            "api v1 dev 0 0 --platform=linux/arm64 --pull",
+            vec!["--platform=linux/arm64", "--pull", "."],
+        ),
+    ] {
+        let _ = std::fs::remove_file(root.join("calls.log"));
+        run_ok(&root, Some(&stub), &format!("./scripts/build.sh {argv}"));
+        let call = docker_build_call(&root);
+        assert_eq!(operands_after_file(&call), want, "build.sh {argv}: {call}");
+    }
+}

@@ -102,7 +102,7 @@ Use `{{PLACEHOLDER}}` in any template file:
 |--------|-------------|
 | `astro` | Astro 4 + Vue 3 SSR + shadcn-vue + PrimeVue + Pinia + PostgreSQL + Redis |
 | `laravel` | Laravel 12 + Octane (Swoole) + Filament + Inertia |
-| `nuxt` | Nuxt 3 SSR/SSG + Tailwind |
+| `nuxt` | Nuxt app via `nuxi init`; recipe adds infra + health |
 | `rust-api` | Actix-web + SQLx (API only) |
 | `rust-leptos` | Leptos SSR + Actix + shadcn-ui + PostgreSQL + Redis |
 | `rust-worker` | Job worker with Redis pub/sub, PostgreSQL, LLM support |

@@ -166,7 +166,7 @@ No hand edit in between. `make init` generates the development credentials the d
 |--------|--------|-----------------|
 | `astro` | ✅ | Full-stack Astro 5 with Vue 3 islands, SSR, shadcn-vue, PrimeVue, global state, Cloudflare deployment |
 | `laravel` | ✅ | Laravel 12 + Octane (Swoole) with Filament admin & Inertia.js SSR frontend |
-| `nuxt` | ✅ | Nuxt 3 SSR/SSG application with Nitro server, Tailwind CSS |
+| `nuxt` | ✅ | Nuxt app scaffolded by `nuxi init`, wired into the stack with the Nitro server and a dependency-free health endpoint |
 | `rust-api` | ✅ | Rust API service with Actix-web, SQLx, and hexagonal architecture |
 | `rust-leptos` | ✅ | Leptos SSR + Actix-web with shadcn-ui, actor model, PostgreSQL, and Redis |
 | `rust-worker` | ✅ | High-performance job worker with Redis pub/sub, PostgreSQL, and local LLM evaluation |

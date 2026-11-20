@@ -38,8 +38,11 @@ build-dev: ## Build development image (s=[service] t=[tag] - one service)
 build-prod: ## Build production image (s=[service] t=[tag] push=[0|1] - one service)
 	@$(MAKE) _build service="$(call get_service)" tag="$(call get_tag)" mode=prod push=$(PUSH_IMAGE)
 
+# build.sh takes exactly five positional args (service tag mode push nocache)
+# before any extra docker args, so nocache always fills its slot
+# (bd:mech-crate-pz6).
 _build:
-	@./scripts/build.sh "$(service)" "$(tag)" $(mode) $(push) $(nocache)
+	@./scripts/build.sh "$(service)" "$(tag)" $(mode) $(push) $(or $(nocache),0)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Multi-Platform Builds (for CI/CD)
@@ -49,4 +52,4 @@ _build:
 
 build-multiplatform: ## Build multi-platform production image (s=[service] t=[tag] - one service)
 	@echo "Building multi-platform image..."
-	@./scripts/build.sh "$(call get_service)" "$(call get_tag)" prod 0 --platform=linux/amd64,linux/arm64
+	@./scripts/build.sh "$(call get_service)" "$(call get_tag)" prod 0 0 --platform=linux/amd64,linux/arm64

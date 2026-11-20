@@ -27,8 +27,10 @@ RUN apk add --no-cache libc6-compat python3 make g++
 # Copy package files
 COPY apps/{{SERVICE_NAME}}/package*.json ./
 
-# Install all dependencies (including devDeps for build)
-RUN npm ci
+# Install all dependencies (including devDeps for build). nuxi init owns
+# package.json and runs with --no-install, so a fresh app has no lockfile: npm ci
+# only when one exists (bd:mech-crate-whj).
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Builder

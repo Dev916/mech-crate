@@ -46,7 +46,7 @@
     },
     "zola_version": {
       "flag": "--zola-version",
-      "default": "0.19.2",
+      "default": "0.21.0",
       "description": "Zola version"
     },
     "theme": {
@@ -90,6 +90,7 @@
 
   "templates": [
     { "from": "app/config.toml", "to": "apps/{{SERVICE_NAME}}/config.toml" },
+    { "from": "app/gitignore.template", "to": "apps/{{SERVICE_NAME}}/gitignore.template" },
     { "from": "app/content", "to": "apps/{{SERVICE_NAME}}/content" },
     { "from": "app/sass", "to": "apps/{{SERVICE_NAME}}/sass" },
     { "from": "app/static", "to": "apps/{{SERVICE_NAME}}/static" },

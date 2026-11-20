@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use console::style;
 use dialoguer::{Input, Password};
+use std::path::Path;
 
 use mx_lib::config::MechCrateConfig;
 use mx_lib::infra::{InfraConfig, InfraProvider, Resolution, DEPRECATED_LINK_MARKER, LINK_FLAG};
@@ -29,6 +30,55 @@ fn cloudflare_config_body(account_id: &str, api_token: &str) -> String {
          CLOUDFLARE_API_TOKEN={}\n",
         account_id, api_token
     )
+}
+
+/// Write a global credentials file (`~/.mech-crate/config/infra/<provider>.env`).
+///
+/// Every provider file holds an API token or secret key, so on unix it is owner
+/// read/write only (0600), matching the `chmod 600` the shell path in
+/// `bin/lib/infra.sh` applies to the same file (bd:mech-crate-8xc).
+///
+/// The parent directory is likewise owner-only (0700).
+///
+/// Race-free shape: a new file is created 0600 (`OpenOptions::mode`), so it is
+/// never world-readable even for an instant. `mode` only applies at creation,
+/// so a file an older mx left 0644 is tightened through the open handle
+/// (fchmod) after the truncate and *before* the new secret is written: the new
+/// body never lands in a loose file.
+fn write_credentials_file(path: &Path, body: &str) -> std::io::Result<()> {
+    use std::io::Write;
+
+    if let Some(parent) = path.parent() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent)?;
+            // `mode` only applies to directories this call creates; the infra
+            // directory holds nothing but credentials, so tighten one an older
+            // mx left 0755. Ancestors (~/.mech-crate) are shared and left alone.
+            std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
+        }
+        #[cfg(not(unix))]
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    file.write_all(body.as_bytes())?;
+    file.sync_all()
 }
 
 /// Manage infrastructure providers
@@ -136,10 +186,7 @@ impl InfraCommand {
             .interact()?;
 
         let path = infra.global_config_path(InfraProvider::Cloudflare);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&path, cloudflare_config_body(&account_id, &api_token))?;
+        write_credentials_file(&path, &cloudflare_config_body(&account_id, &api_token))?;
 
         println!(
             "{} Cloudflare configured: {}",
@@ -188,10 +235,7 @@ impl InfraCommand {
         }
 
         let path = infra.global_config_path(InfraProvider::DigitalOcean);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&path, config)?;
+        write_credentials_file(&path, &config)?;
 
         println!(
             "{} DigitalOcean configured: {}",
@@ -225,10 +269,7 @@ impl InfraCommand {
         );
 
         let path = infra.global_config_path(InfraProvider::Aws);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&path, config)?;
+        write_credentials_file(&path, &config)?;
 
         println!(
             "{} AWS configured: {}",
@@ -257,10 +298,7 @@ impl InfraCommand {
         );
 
         let path = infra.global_config_path(InfraProvider::Hetzner);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&path, config)?;
+        write_credentials_file(&path, &config)?;
 
         println!(
             "{} Hetzner configured: {}",
@@ -525,6 +563,7 @@ fn render_keys(r: &Resolution) -> String {
 #[cfg(test)]
 mod tests {
     use super::cloudflare_config_body;
+    use super::write_credentials_file;
     use super::{render_header, render_keys};
     use mx_lib::infra::{CredentialScope, InfraProvider, Resolution, ResolvedKey};
 
@@ -655,6 +694,97 @@ mod tests {
         assert!(
             body.ends_with('\n'),
             "the credentials body must end with a newline"
+        );
+    }
+
+    /// bd:mech-crate-8xc: a freshly written credentials file is owner-only.
+    #[cfg(unix)]
+    #[test]
+    fn credentials_file_is_created_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config/infra/cloudflare.env");
+
+        write_credentials_file(&path, &cloudflare_config_body("acct-dummy", "tok-dummy")).unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "credentials file mode was {mode:o}, want 600");
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("tok-dummy"));
+
+        let dir_mode = std::fs::metadata(path.parent().unwrap())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            dir_mode, 0o700,
+            "credentials directory mode was {dir_mode:o}, want 700"
+        );
+    }
+
+    /// bd:mech-crate-8xc: an infra directory an older mx left 0755 is tightened
+    /// to 0700 on the next write.
+    #[cfg(unix)]
+    #[test]
+    fn existing_loose_credentials_directory_is_tightened_on_write() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let infra_dir = dir.path().join("infra");
+        std::fs::create_dir(&infra_dir).unwrap();
+        std::fs::set_permissions(&infra_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        write_credentials_file(&infra_dir.join("aws.env"), "AWS_SECRET_ACCESS_KEY=dummy\n")
+            .unwrap();
+
+        let dir_mode = std::fs::metadata(&infra_dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            dir_mode, 0o700,
+            "credentials directory mode was {dir_mode:o}, want 700"
+        );
+    }
+
+    /// bd:mech-crate-8xc: a file left 0644 by an older mx is tightened on the
+    /// next write, not merely overwritten with its loose mode kept.
+    #[cfg(unix)]
+    #[test]
+    fn existing_loose_credentials_file_is_tightened_on_rewrite() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hetzner.env");
+        std::fs::write(&path, "HETZNER_API_TOKEN=old-dummy\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        write_credentials_file(&path, "HETZNER_API_TOKEN=new-dummy\n").unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "rewritten credentials file mode was {mode:o}, want 600"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "HETZNER_API_TOKEN=new-dummy\n",
+            "a rewrite replaces the old body entirely"
+        );
+    }
+
+    /// Every provider setup goes through the one owner-only writer: no bare
+    /// `std::fs::write` of a credentials body survives in this module.
+    #[test]
+    fn every_provider_setup_uses_the_owner_only_writer() {
+        let src = include_str!("infra.rs");
+        let body = src.split("#[cfg(test)]").next().unwrap();
+        let bare_writes = body.matches("std::fs::write(").count();
+        assert_eq!(
+            bare_writes, 0,
+            "only write_credentials_file may write credentials; found {bare_writes} bare std::fs::write call(s)"
+        );
+        assert_eq!(
+            body.matches("write_credentials_file(&path").count(),
+            4,
+            "cloudflare, digitalocean, aws and hetzner must each call write_credentials_file"
         );
     }
 }

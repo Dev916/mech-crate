@@ -36,7 +36,9 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 FROM base AS builder
 
 COPY apps/{{SERVICE_NAME}}/package*.json ./
-RUN npm ci
+# nuxi init owns package.json and runs with --no-install, so a fresh app has no
+# lockfile: npm ci only when one exists (bd:mech-crate-whj).
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY apps/{{SERVICE_NAME}}/ .
 

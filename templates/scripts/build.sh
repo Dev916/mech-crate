@@ -31,8 +31,12 @@ TAG=${2:-latest}
 MODE=${3:-dev}
 PUSH=${4:-0}
 NOCACHE=${5:-0}
-shift 5 2>/dev/null || true
-EXTRA_ARGS="$@"
+# Positions 1-5 are the fixed contract with make/build.mk; everything after is
+# forwarded to docker build verbatim. `shift 5` on a shorter argv fails WITHOUT
+# shifting, which used to leak the whole argv into docker as stray operands
+# (bd:mech-crate-pz6), so shift only what is there.
+if [ $# -ge 5 ]; then shift 5; else shift $#; fi
+EXTRA_ARGS=("$@")
 
 if [ -z "$SERVICE" ]; then
     echo "Usage: $0 <service> [tag] [mode] [push] [nocache] [extra_args...]"
@@ -133,7 +137,7 @@ echo "  Target:     $TARGET"
 echo "  Version:    $IMAGE_VERSION"
 echo "  Push:       $([ "$PUSH" = "1" ] && echo "yes" || echo "no")"
 echo "  No cache:   $([ "$NOCACHE" = "1" ] && echo "yes" || echo "no")"
-[ -n "$EXTRA_ARGS" ] && echo "  Extra args: $EXTRA_ARGS"
+[ ${#EXTRA_ARGS[@]} -gt 0 ] && echo "  Extra args: ${EXTRA_ARGS[*]}"
 echo ""
 
 # Run prebuild script if exists
@@ -175,7 +179,7 @@ DOCKER_BUILDKIT=1 docker build \
     "${BUILD_ARGS[@]}" \
     --target "$TARGET" \
     --file="$DOCKERFILE" \
-    $EXTRA_ARGS \
+    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
     .
 
 print_success "Image built: $IMAGE_NAME"
