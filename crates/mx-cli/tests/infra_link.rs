@@ -575,3 +575,63 @@ fn infra_list_shows_a_linked_project() {
         .success()
         .stdout(contains("cloudflare").and(contains("linked")));
 }
+
+// ── the environment scope in cf-init-app.sh ─────────────────────────────────
+
+/// `cf-init-app.sh` run with `CLOUDFLARE_ACCOUNT_ID` in the environment, as CI
+/// and `make cf-init` both do. Returns the account id written to wrangler.toml.
+fn bash_init_with_env_account(
+    project: &Path,
+    home: &Path,
+    app: &str,
+    env_account: &str,
+) -> std::result::Result<String, String> {
+    let mut cmd = Command::new("bash");
+    cmd.args(["scripts/cf-init-app.sh", app, "--type=worker", "--yes"]);
+    let mut cmd = scrubbed(cmd, project, home);
+    cmd.env("CLOUDFLARE_ACCOUNT_ID", env_account);
+    cmd.write_stdin("\n".repeat(16));
+    let out = run(&mut cmd);
+    if !out.status.success() {
+        return Err(format!("{}{}", stdout_of(&out), stderr_of(&out)));
+    }
+    let wrangler = std::fs::read_to_string(
+        project
+            .join("infra/cloudflare/apps")
+            .join(app)
+            .join("wrangler.toml"),
+    )
+    .map_err(|e| e.to_string())?;
+    wrangler
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("account_id = "))
+        .map(|v| v.trim_matches('"').to_string())
+        .ok_or_else(|| "wrangler.toml carries no account_id".to_string())
+}
+
+/// CI sets the credentials in the environment and has no credentials file.
+/// `make cf-check-credentials` accepts that; the init script must too.
+#[test]
+fn init_script_resolves_an_account_id_given_only_in_the_environment() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    template_project(project.path());
+
+    let account = bash_init_with_env_account(project.path(), home.path(), "envonly", "env-acct")
+        .expect("env-only credentials must be enough for cf-init-app.sh");
+    assert_eq!(account, "env-acct");
+}
+
+/// Same precedence as cloudflare.mk: the environment beats both files.
+#[test]
+fn init_script_lets_the_environment_beat_the_credentials_files() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    template_project(project.path());
+    write_global_cf(home.path(), "CLOUDFLARE_ACCOUNT_ID=global-acct\n");
+    write_project_cf(project.path(), "CLOUDFLARE_ACCOUNT_ID=project-acct\n");
+
+    let account = bash_init_with_env_account(project.path(), home.path(), "envwins", "env-acct")
+        .expect("cf-init-app.sh must exit 0");
+    assert_eq!(account, "env-acct");
+}

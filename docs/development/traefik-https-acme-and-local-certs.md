@@ -9,7 +9,7 @@ use_cases:
   - serving https://<service>.localhost in local development with a certificate that Chrome, Firefox, Safari and curl all accept, and knowing why a "*.localhost" wildcard is rejected by every one of them
   - planning around the 2025-2029 Web PKI changes (OCSP gone, ARI, 160-hour and 45-day profiles, the 200/100/47-day validity schedule, no expiry emails) before they break a renewal
   - deciding between mkcert, Caddy's local CA, step-ca, a real wildcard over DNS-01 and Tailscale certificates for trusted HTTPS off the public internet
-summary: "Operating guide, verified against Traefik v3.7.15 source and the Let's Encrypt, CA/Browser Forum, Cloudflare, Chromium and Mozilla primary pages as of 2026-10: how a Traefik ACME resolver really issues, stores and renews (including the renewal tiers, ACME profile support and the still-missing ARI), which challenge fits which situation, how to run DNS-01 through Cloudflare and sit behind its proxy, and the one finding that changes the mx router recipe: a *.localhost wildcard certificate is rejected by Chrome, Firefox and Apple's TLS stack, so local certs must list each hostname or use a three-label wildcard."
+summary: "Operating guide, verified against Traefik v3.7.15 source (re-checked at v3.7.19 on 2026-11-20) and the Let's Encrypt, CA/Browser Forum, Cloudflare, Chromium and Mozilla primary pages as of 2026-10: how a Traefik ACME resolver really issues, stores and renews (including the renewal tiers, ACME profile support and the still-missing ARI), which challenge fits which situation, how to run DNS-01 through Cloudflare and sit behind its proxy, and the one finding that changes the mx router recipe: a *.localhost wildcard certificate is rejected by Chrome, Firefox and Apple's TLS stack, so local certs must list each hostname or use a three-label wildcard."
 provenance: researched
 researched: 2026-10-19
 sources:
@@ -84,11 +84,13 @@ sources:
   - https://developers.cloudflare.com/fundamentals/api/get-started/create-token/
   - https://cert-manager.io/docs/configuration/acme/dns01/Cloudflare/
   - https://raw.githubusercontent.com/traefik/traefik/v3.7.15/pkg/provider/traefik/internal.go
+  - https://news.ycombinator.com/item?id=46950780
+  - https://github.com/curl/curl/blob/curl-8_7_1/lib/hostip.c
 ---
 
 # HTTPS for a Traefik Router: ACME in Production, Trusted Certificates Locally
 
-Companion to `mx-app-playbook.md` section 5 (the router rule) and `mx-cloudflare-deploy.md`. The mx router is one global Traefik v3 container that owns host ports 80 and 443, watches the Docker socket with `exposedByDefault: false`, reads static config from `config/traefik.yml`, hot-reloads `config/dynamic/`, and mounts `letsencrypt/` at `/etc/traefik/acme` [68]. As shipped it has no `certificatesResolvers` block, `ping` sits on the `web` entrypoint, the dashboard API is `insecure: true`, and every recipe label says `entrypoints=web` [68]. Everything below is about turning that into HTTPS, first in production, then locally.
+Companion to `mx-app-playbook.md` section 5 (the router rule) and `mx-cloudflare-deploy.md`. The mx router is one global Traefik v3 container that publishes host ports 80 and 443 by default (`MX_ROUTER_HTTP_PORT` and `MX_ROUTER_HTTPS_PORT` override them), watches the Docker socket with `exposedByDefault: false`, reads static config from `config/traefik.yml`, hot-reloads `config/dynamic/`, and mounts `letsencrypt/` at `/etc/traefik/acme` [68]. As shipped it has no `certificatesResolvers` block, `ping` sits on the `web` entrypoint, the dashboard API is `insecure: true`, and every recipe label says `entrypoints=web` [68]. Everything below is about turning that into HTTPS, first in production, then locally.
 
 The numbers in this doc were read from the primary pages and from Traefik v3.7.15 source on 2026-10-19; where a claim comes only from a forum thread or an inference it is labelled.
 
@@ -100,9 +102,9 @@ The numbers in this doc were read from the primary pages and from Traefik v3.7.1
 | Port 80 blocked, 443 open | `tlsChallenge` (TLS-ALPN-01) | "Traefik must be reachable by Let's Encrypt through port 443" [1] |
 | Wildcard, many hostnames, or host not reachable from the internet | `dnsChallenge` with a Cloudflare token scoped to `Zone:Read` + `DNS:Edit` | Only DNS-01 issues wildcards and validates names "whose webservers aren't exposed to the public internet" [17][34] |
 | Behind Cloudflare's orange cloud | Full (strict) with a Let's Encrypt cert at the origin via DNS-01, or a Cloudflare Origin CA cert | Full (strict) validates the origin certificate; Origin CA certs are only trusted by Cloudflare [36][37] |
-| Local `https://<service>.localhost` | mkcert with every hostname listed explicitly, or a three-label wildcard such as `*.dev.localhost`; load through the file provider | A `*.localhost` wildcard is rejected by Chrome, Firefox and Apple's TLS stack (section 6.2, verified) [49][51][44] |
+| Local `https://<service>.localhost` | mkcert with every hostname listed explicitly, or a three-label wildcard such as `*.dev.localhost`; load through the file provider | A `*.localhost` wildcard is rejected by Chrome and Firefox, and by curl's own hostname check (section 6.2); Safari was not tested [49][51][44] |
 | Team or phones need the same local certs without sharing a root key | A real `*.dev.example.com` wildcard via DNS-01 pointed at 127.0.0.1 or a LAN address | One public cert, no root CA to distribute; the hostname goes into CT logs [63][30] |
-| Internal CA with ACME semantics | step-ca ACME provisioner (24 h default leaf lifetime) or Caddy's `tls internal` (12 h leaf) | Both are proper ACME or auto-renewing CAs rather than a static mkcert cert [57][56] |
+| Internal CA with ACME semantics | step-ca ACME provisioner (short-lived leaves; the lifetime is the provisioner's `defaultTLSCertDuration`) or Caddy's `tls internal` (12 h leaf) | Both are proper ACME or auto-renewing CAs rather than a static mkcert cert [57][56] |
 
 ## 1. The Web PKI in 2026: what changed and what is scheduled
 
@@ -110,7 +112,7 @@ This section exists because several "known facts" about Let's Encrypt stopped be
 
 **OCSP is gone.** Let's Encrypt announced on 2024-12-05 that Must-Staple requests would fail from January 30, 2025, that OCSP URLs would be dropped from certificates on May 7, 2025 (CRL URLs added before that), and that "On this date we will turn off our OCSP responders" for August 6, 2025. The stated reason is privacy: with OCSP the CA "immediately becomes aware of which website is being visited from that visitor's particular IP address" [22]. Revocation is now CRL only.
 
-**ARI is a standard, and the CA now tells you when to renew.** ACME Renewal Information is RFC 9773 (Let's Encrypt post of 2025-09-16) [23]. A client that implements it reads a `suggestedWindow` per certificate, renews at a random time inside the window, and sets `replaces` on the new order; such renewals "will now be exempt from all rate limits" [24][18]. Let's Encrypt's integration guide asks clients to check ARI "at least twice a day", and as a fallback to renew at two thirds of lifetime, which for 90-day certificates means "renewing 30 days before expiration" [21].
+**ARI is a standard, and the CA now tells you when to renew.** ACME Renewal Information is RFC 9773 (Let's Encrypt post of 2025-09-16) [23]. A client that implements it reads a `suggestedWindow` per certificate, renews at a random time inside the window, and sets `replaces` on the new order; such renewals "will now be exempt from all rate limits" [24][18]. Let's Encrypt's integration guide asks clients to check ARI "at least twice a day", and as a fallback to renew once a third of the certificate's lifetime remains, which for a 90-day certificate is 30 days before expiry [21].
 
 **Profiles replace the one-size certificate.** A client picks a profile per order [20]:
 
@@ -143,7 +145,7 @@ Staging has "significantly higher limits" (30000 duplicate certificates per week
 
 ## 2. How a Traefik v3 ACME resolver actually behaves
 
-Traefik's stable line is v3.7, with v3.7.15 released 2026-10-15; the mx router template pins `traefik:v3.6.1` [11][68]. Everything below was checked against the v3.7 reference pages and the v3.7.15 source.
+Traefik's stable line is v3.7: v3.7.15 (2026-10-15) was current when this was researched and v3.7.19 (2026-11-13) was current at the 2026-11-20 review; the mx router template pins `traefik:v3.6.1` [11][68]. Everything below was checked against the v3.7 reference pages and the v3.7.15 source; at the review, `provider.go` at v3.7.19 still contained no ARI code and the upstream ARI issue was still open, and `internal.go` was unchanged in the lines cited.
 
 ### 2.1 Minimum configuration
 
@@ -184,7 +186,7 @@ Field facts from the reference page [1]:
 
 On non-Windows builds Traefik refuses to start a resolver whose storage file is readable by group or others: `if fi.Mode().Perm()&0o077 != 0 { return false, fmt.Errorf("permissions %o for %s are too open, please use 600", ...) }`, and it creates a missing file with `0o600` [9]. `mx router install` sets `0o600` on `letsencrypt/acme.json` after copying the template [68]. Two consequences: a bind mount that does not preserve modes (some Windows and macOS shared folders) fails with exactly that message, and a `cp` or restore that leaves the file at 644 does the same.
 
-The reference page is explicit that the file "cannot be shared across multiple instances of Traefik" because "there is no way to ensure that the correct instance of Traefik receives the challenge request"; it points to Traefik Enterprise's distributed Let's Encrypt or to cert-manager on Kubernetes [1]. For one workstation router this is irrelevant; for a multi-node setup it is the first design constraint.
+Traefik's documentation says running multiple instances with Let's Encrypt enabled is not possible, "because there is no way to ensure that the correct instance of Traefik receives the challenge request, and subsequent responses" [1]. For one workstation router this is irrelevant; for a multi-node setup it is the first design constraint.
 
 ### 2.3 Renewal tiers, verbatim from source
 
@@ -234,7 +236,7 @@ For a wildcard covering a whole dev domain, option (b) plus explicit domains is 
 
 ### 2.5 Redirect, TLS options, default certificate
 
-**HTTP to HTTPS.** On the entrypoint: `http.redirections.entryPoint.to: websecure`; `scheme` defaults to `https`, `permanent` to `true`, and the redirect router's priority to `MaxInt-1` [2]. Let's Encrypt's HTTP-01 "follows redirects, up to 10 redirects deep", only to `http:` or `https:` on ports 80 or 443, and "When redirected to an HTTPS URL, it does not validate certificates" [17], so the redirect and HTTP-01 coexist. Two source-level details matter for the mx template. First, the redirect is an internal router whose rule is ``HostRegexp(`^.+$`)`` and whose priority is the entrypoint's configured `priority` (default `MaxInt-1`); when the entrypoint's `allowACMEByPass` option is set the rule becomes ``HostRegexp(`^.+$`) && !PathPrefix(`/.well-known/acme-challenge/`)``, so the challenge path is never redirected [71][2]. Second, the `ping` router that `ping.entryPoint` creates has `Priority: math.MaxInt` [71], one above the redirect, which is why `ping.entryPoint: web` plus the compose `healthcheck` that runs `traefik healthcheck --ping` [68] should keep answering 200 after the redirect is added. Traefik's documented default for ping is its own `traefik` entrypoint on port 8080 [7]; this doc could not run the container to confirm the priority reasoning (section 7.3).
+**HTTP to HTTPS.** On the entrypoint: `http.redirections.entryPoint.to: websecure`; `scheme` defaults to `https`, `permanent` to `true`, and the redirect router's priority to `MaxInt-1` [2]. Let's Encrypt's HTTP-01 "follows redirects, up to 10 redirects deep", only to `http:` or `https:` on ports 80 or 443, and "When redirected to an HTTPS URL, it does not validate certificates" [17], so the redirect and HTTP-01 coexist. Two source-level details matter for the mx template. First, the redirect is an internal router whose rule is ``HostRegexp(`^.+$`)`` and whose priority is the entrypoint's configured `priority` (default `MaxInt-1`); Traefik's own HTTP-01 handler is an internal router (`acme-http`) with `Priority: math.MaxInt`, one above the redirect, so ACME challenges are never redirected whether or not anything else is set [71]. The entrypoint's `allowACMEByPass` option matters only when challenges are served by your own routers: it changes the redirect rule to ``HostRegexp(`^.+$`) && !PathPrefix(`/.well-known/acme-challenge/`)`` and lowers the internal ACME router so a custom one can win [71][2]. Second, the `ping` router that `ping.entryPoint` creates has `Priority: math.MaxInt` [71], one above the redirect, which is why `ping.entryPoint: web` plus the compose `healthcheck` that runs `traefik healthcheck --ping` [68] should keep answering 200 after the redirect is added. Traefik's documented default for ping is its own `traefik` entrypoint on port 8080 [7]; this doc could not run the container to confirm the priority reasoning (section 7.3).
 
 **TLS options live in the file provider only.** "TLS options are not supported by label or tag-based providers"; define them in `config/dynamic/` and reference them from labels with the provider suffix, `tls.options=myoptions@file` [4]. The option named `default` applies to every TLS router that does not name one. `sniStrict: true` means Traefik "won't allow connections from clients that do not specify a server_name extension or don't match any of the configured certificates"; the ALPN default is `h2, http/1.1, acme-tls/1` (keep `acme-tls/1` if you use `tlsChallenge`); TLS 1.3 cipher suites "are not configurable" [4]. When two routers on the same host and entrypoint disagree on options, both fall back to `default` [4].
 
@@ -244,10 +246,10 @@ tls:
   options:
     default:
       minVersion: VersionTLS12
-      sniStrict: true
+      sniStrict: true   # optional: also refuses https://127.0.0.1 and any name outside the certificate's SAN list
 ```
 
-**Default certificate.** Certificate selection is by SNI, and HTTP router rules "are evaluated after TLS has been established, so they do not influence certificate selection" [5]. With no match Traefik serves its generated self-signed certificate unless `tls.stores.default.defaultCertificate` (a file) or `defaultGeneratedCert` (resolver plus `domain.main`/`sans`) is set; "Any store definition other than the default one (named `default`) will be ignored" [3]. User-supplied certificates are declared only in the file provider's `tls.certificates` list with `certFile` and `keyFile` [3].
+**Default certificate.** Certificates are chosen by SNI during the TLS handshake, before any HTTP router rule is evaluated [5]. With no match Traefik serves its generated self-signed certificate unless `tls.stores.default.defaultCertificate` (a file) or `defaultGeneratedCert` (resolver plus `domain.main`/`sans`) is set; "Any store definition other than the default one (named `default`) will be ignored" [3]. User-supplied certificates are declared only in the file provider's `tls.certificates` list with `certFile` and `keyFile` [3].
 
 **HSTS.** The headers middleware exposes `stsSeconds`, `stsIncludeSubdomains`, `stsPreload` and `forceSTSHeader` [61]. Preloading requires `max-age` of at least 31536000 with `includeSubDomains` and `preload`, "applies to all subdomains, including internal subdomains that are not publicly accessible", and "cannot easily be undone" [60]; do not preload a domain whose dev subdomains still answer on plain HTTP.
 
@@ -317,11 +319,11 @@ RFC 6761 section 6.3 reserves "The domain 'localhost.' and any names falling wit
 | Client | Behaviour | Since |
 |---|---|---|
 | Chromium | resolves names ending in `.localhost` to loopback without DNS, honouring `/etc/hosts` first | 2015 ("Resolve RFC 6761 localhost names to loopback") [48] |
-| Firefox | `localhost` and `*.localhost` hard-coded to 127.0.0.1 and ::1 | Firefox 84, bug 1220810, pref `network.dns.native-is-localhost` [50] |
-| curl | only the literal `localhost` is hard-coded; subdomains go to the OS resolver | 7.78.0 [52] |
+| Firefox | `localhost` and `*.localhost` hard-coded to 127.0.0.1 and ::1 | Firefox 84, bug 1220810 [50] |
+| curl | `localhost` is hard-coded since 7.78.0 [52]; names ending `.localhost` are also resolved to loopback internally in current releases (`tailmatch(hostname, ".localhost")` in `lib/hostip.c`, checked at curl 8.7.1) [72] | 7.78.0 for `localhost`; later for `*.localhost` |
 | Safari / macOS resolver | WebKit bug 160504 closed MOVED because "this was implemented in OS frameworks below WebKit"; works on macOS 26, failed on 15.7 | macOS 26 Tahoe [53][54] |
 
-Observed on the authoring machine (macOS 26, Darwin 25.6): `ping foo.localhost` and `ping a.dev.localhost` both answered from 127.0.0.1 with no `/etc/hosts` entry, so curl and Safari get loopback through the OS resolver there. On macOS 15 and earlier a July 2026 thread shows Safari failing on a `.localhost` name while Chrome, Firefox and curl worked, fixed by an `/etc/hosts` line [54].
+Observed on the authoring machine (macOS 26, Darwin 25.6): `ping foo.localhost` and `ping a.dev.localhost` both answered from 127.0.0.1 with no `/etc/hosts` entry, so Safari, which relies on the OS resolver, gets loopback there; curl resolves `.localhost` names itself [72]. On macOS 15 and earlier a July 2026 thread shows Safari failing on a `.localhost` name while Chrome, Firefox and curl worked, fixed by an `/etc/hosts` line [54].
 
 ### 6.2 The wildcard trap: `*.localhost` does not match `app.localhost` anywhere
 
@@ -329,7 +331,7 @@ Observed on the authoring machine (macOS 26, Darwin 25.6): `ping foo.localhost` 
 
 - **Chromium.** `VerifyHostname` computes the registry-controlled part of the reference name with `INCLUDE_UNKNOWN_REGISTRIES`, and the comment explains: "unknown top-level domains (such as 'intranet' domains or new TLDs/gTLDs not yet added to the registry controlled domain dataset) are also implicitly prevented. Because |reference_domain| must contain at least one name component that is not registry controlled, this ensures that all reference domains contain at least three domain components when using wildcards" [49]. `app.localhost` has two components; wildcard matching is disabled for it.
 - **Firefox (mozilla::pkix).** "Like NSS, require at least two labels to follow the wildcard label." followed by `if (labelCount < 3) { return false; }` [51]. `*.localhost` has one label after the wildcard.
-- **Apple's TLS stack.** Verified empirically below through curl built against Secure Transport.
+- **curl on macOS.** Verified empirically below. This shows curl's own matcher, which requires at least two dots in a wildcard pattern (`lib/vtls/hostcheck.c`, curl 8.7.1), not Apple's Security framework; Safari was not tested.
 - **mkcert itself warns.** Its `printHosts` matches `^\*\.[0-9a-z_-]+$` and prints "Warning: many browsers don't support second-level wildcards like %q" [42]; the author's answer to a user whose `*.localhost` cert showed as invalid in Chrome was that browsers do not support first-level wildcards and that "mkcert prints an error for those, but can't do anything else" [44]; on the equivalent `*.test` report: "It will work if you use a name like *.wild.test" [45].
 
 **Empirical check, 2026-10-19.** A throwaway CA and a leaf with `subjectAltName=DNS:*.localhost,DNS:localhost` were served from 127.0.0.1:8443 by a Python TLS server; a second leaf with `DNS:*.dev.localhost` on port 8444.
@@ -359,7 +361,7 @@ mkcert "*.dev.localhost" localhost 127.0.0.1 ::1
 #  -> _wildcard.dev.localhost+3.pem (matches api.dev.localhost, not api.localhost)
 ```
 
-Option 1 means re-running mkcert when an app is added (Traefik hot-reloads the file provider, so no restart). Option 2 changes every recipe's default hostname from `<svc>.localhost` to `<svc>.dev.localhost`, which the `_ROUTER_HOST` override already allows per stack without editing shipped files [68]. Either way the dynamic file is:
+Option 1 means re-running mkcert when an app is added. mkcert encodes the host count in the file name (`api.localhost+5.pem` becomes `+6`), so either pin the names with `-cert-file` and `-key-file` or update `certs.yml`; editing that file in the watched `config/dynamic/` directory is what makes Traefik reload, with no restart. Option 2 changes every recipe's default hostname from `<svc>.localhost` to `<svc>.dev.localhost`, which the `_ROUTER_HOST` override already allows per stack without editing shipped files [68]. Either way the dynamic file is:
 
 ```yaml
 # ~/.mech-crate/router/config/dynamic/certs.yml
@@ -392,7 +394,7 @@ To trust the root somewhere else, copy `rootCA.pem` (never the key) and either s
 1. `mkcert -install` once per workstation.
 2. Generate one certificate listing every `.localhost` hostname the router serves (section 6.2, option 1) into `~/.mech-crate/router/letsencrypt/`, which is already mounted at `/etc/traefik/acme` [68].
 3. Add `config/dynamic/certs.yml` and `config/dynamic/tls.yml` (sections 6.2 and 2.5). Both hot-reload.
-4. In each app, set `entrypoints=websecure` and `tls=true`; keep `web` only if you add the redirect (7.3).
+4. In each app, set `entrypoints=websecure` and `tls=true`; keep `web` only if you add the redirect (7.3), which is router-wide: it redirects every project on the shared router, including stacks whose hostnames are not in the certificate, and it assumes HTTPS is on port 443.
 5. The devloop URL-discovery rule already infers `https` from a sibling `tls=true` label, so nothing else changes for agents [68].
 
 ### 7.2 Production
@@ -402,7 +404,7 @@ Add the resolver pair from section 2.1 (production and staging) to `config/traef
 ### 7.3 Things to test rather than assume
 
 - **Ping behind the redirect.** The template's `ping.entryPoint: web` and the compose healthcheck share the entrypoint that would carry the HTTP to HTTPS redirect [68][2]. By source, the ping router outranks the redirect router (`math.MaxInt` versus `MaxInt-1`) [71], but Docker was unavailable on the authoring machine, so this was reasoned, not run. After enabling the redirect, run `docker exec mx-router traefik healthcheck --ping`; if it fails, give ping its own entrypoint, which is Traefik's documented default [7].
-- **Dashboard exposure.** `api.insecure: true` publishes the dashboard on the mapped port over plain HTTP [68]; it is fine on a workstation and must not survive to a public host.
+- **Dashboard exposure.** The template sets `api.insecure: true` and maps `${MX_ROUTER_DASHBOARD_PORT:-7680}:8080` on all host interfaces, an unauthenticated plain-HTTP dashboard, and mounts the Docker socket [68]. That is acceptable on a workstation. Before any public exposure (7.2) it is a required change, not a thing to test: remove `api.insecure` and the port mapping, or bind the mapping to `127.0.0.1`.
 - **Browser caches.** After replacing a local certificate, Chrome may keep an HSTS or cert state for `.localhost`; a fresh profile is the quickest check.
 
 ## Agreed vs folklore (compressed)
@@ -426,9 +428,9 @@ Add the resolver pair from section 2.1 (production and staging) to `config/traef
 
 **Decision ladder for a one-router shop.** Start with HTTP-01 on `web` and router-level `certresolver` labels; move to DNS-01 the day you need a wildcard, a LAN-only host, or you put Cloudflare in front; never use entrypoint-level `certResolver` on a router that also serves scratch stacks. Keep `profile` unset until Traefik ships ARI; a 160-hour certificate on a renewer with fixed windows and no CA feedback buys you a smaller compromise window at the price of a much smaller margin for a broken token or an outage, and Let's Encrypt's own default stays at 90 days through 2026.
 
-**The hostname convention is the real decision.** The two-label `<svc>.localhost` scheme is pleasant to type and resolves everywhere modern, but it forces per-hostname SANs because no browser will match a wildcard against it. The three-label `<svc>.dev.localhost` scheme costs one more label and gets a single wildcard for every present and future app. For a framework that scaffolds hostnames, the second is the better default; for an existing fleet, re-running mkcert with the full list is the cheaper fix. Either is a template change to `docs/router.md`, whose current recipe produces a certificate that fails in every browser.
+**The hostname convention is the real decision.** The two-label `<svc>.localhost` scheme is pleasant to type and resolves everywhere modern, but it forces per-hostname SANs because no browser will match a wildcard against it. The three-label `<svc>.dev.localhost` scheme costs one more label and gets a single wildcard for every present and future app. For a framework that scaffolds hostnames, the second is the better default; for an existing fleet, re-running mkcert with the full list is the cheaper fix. Either is a template change to `docs/router.md`, whose current recipe produces a certificate that fails in every browser. Adopting the three-label scheme as the scaffold default would change the playbook's `<service>.localhost` rule (`mx-app-playbook.md` section 5), so it is a proposal here, not current convention.
 
-**What a renewal-safe router looks like.** One persistent, mode-600 storage file per resolver; a staging resolver that stays in the config forever so it can be swapped in during incidents; `resolvers` pointed at public DNS for DNS-01; an external expiry monitor because nobody emails and Traefik's dashboard warning threshold is fixed; and a calendar note for March 15, 2027, when the 100-day ceiling arrives for anything not issued through ACME.
+**What a renewal-safe router looks like.** One persistent, mode-600 storage file per resolver; a staging resolver that stays in the config forever so it can be swapped in during incidents; `resolvers` pointed at public DNS for DNS-01; an external expiry monitor because nobody emails and Traefik's dashboard warning threshold is fixed; and a calendar note for March 15, 2027, when the 100-day ceiling applies to every publicly trusted certificate; certificates rotated by hand are the ones at risk.
 
 **Why mkcert is still the right local tool despite its age.** Nothing in the browsers' trust-store handling changed in a way that breaks it, its root is per-machine by design, and the alternative that is also a renewing CA (step-ca) is more infrastructure than a workstation router warrants. The thing that aged is not mkcert but the folk recipe around it.
 
@@ -506,4 +508,5 @@ Add the resolver pair from section 2.1 (production and staging) to `config/traef
 68. mx repo (mech-crate) at commit e266c26: `templates/router/docker-compose.yml`, `templates/router/config/traefik.yml`, `templates/router/config/dynamic/middlewares.yml`, `crates/mx-lib/src/router/mod.rs` (install sets 0o600 on acme.json), `docs/router.md` (HTTPS section), `templates/recipes/*/docker/compose/service.yml` (`entrypoints=web`), `~/.claude/skills/devloop/references/url-discovery.md`
 69. Cloudflare, Create API token: https://developers.cloudflare.com/fundamentals/api/get-started/create-token/
 70. cert-manager, Cloudflare DNS-01: https://cert-manager.io/docs/configuration/acme/dns01/Cloudflare/
-71. Traefik source v3.7.15, `pkg/provider/traefik/internal.go` (redirect router rule and priority, `allowACMEByPass` exclusion, ping router at `math.MaxInt`): https://raw.githubusercontent.com/traefik/traefik/v3.7.15/pkg/provider/traefik/internal.go
+71. Traefik source v3.7.15, `pkg/provider/traefik/internal.go` (redirect router rule and priority, `acme-http` router at `math.MaxInt`, `allowACMEByPass` exclusion, ping router at `math.MaxInt`): https://raw.githubusercontent.com/traefik/traefik/v3.7.15/pkg/provider/traefik/internal.go
+72. curl source at 8.7.1, `lib/hostip.c` (`localhost` and `.localhost` resolved internally) and `lib/vtls/hostcheck.c` (wildcard patterns need at least two dots): https://github.com/curl/curl/blob/curl-8_7_1/lib/hostip.c

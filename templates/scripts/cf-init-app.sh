@@ -98,10 +98,17 @@ fi
 # Same contract as make/cloudflare.mk: one canonical pair
 # CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN (the names wrangler reads from
 # the environment), with CF_ACCOUNT_ID / CF_API_TOKEN accepted as deprecated
-# aliases. Resolution order is global config then project config, project
-# winning, and each scope is read on its own so a project file carrying only
-# the deprecated alias still beats a global file carrying the canonical name.
+# aliases. Resolution order, highest first: the environment, then the project
+# config, then the global config, exactly as make/cloudflare.mk resolves it.
+# Each file scope is read on its own so a project file carrying only the
+# deprecated alias still beats a global file carrying the canonical name.
 MX_GLOBAL_CF_CONFIG="${HOME}/.mech-crate/config/infra/cloudflare.env"
+
+# The environment scope, captured before any credentials file is sourced. CI
+# sets these and has no file; `make cf-init` exports whatever cloudflare.mk
+# resolved.
+CF_ID_FROM_ENV="${CLOUDFLARE_ACCOUNT_ID:-${CF_ACCOUNT_ID:-}}"
+CF_TOKEN_FROM_ENV="${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
 
 # Print the account id one credentials file supplies, canonical name first.
 # Runs in a subshell so sourcing a credentials file cannot leak into this one.
@@ -152,10 +159,22 @@ if [[ "$CF_LINKED_TO_GLOBAL" != true ]]; then
     fi
 fi
 
+# The environment wins over both files. It is reported as the source only when
+# it supplied a value the files did not: under `make cf-init` the environment
+# merely carries what cloudflare.mk already resolved from one of them.
+if [[ -n "$CF_ID_FROM_ENV" && "$CF_ID_FROM_ENV" != "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+    CLOUDFLARE_ACCOUNT_ID="$CF_ID_FROM_ENV"
+    CF_ACCOUNT_ID_SOURCE="environment"
+fi
+if [[ -n "$CF_TOKEN_FROM_ENV" ]]; then
+    CLOUDFLARE_API_TOKEN="$CF_TOKEN_FROM_ENV"
+fi
+
 if [[ -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
     echo -e "${RED}✗${NC} No Cloudflare account id found." >&2
     echo "" >&2
     echo "  Looked for CLOUDFLARE_ACCOUNT_ID (deprecated alias CF_ACCOUNT_ID) in:" >&2
+    echo "    the environment" >&2
     echo "    project: $CF_ENV_FILE" >&2
     echo "    global:  $MX_GLOBAL_CF_CONFIG" >&2
     echo "" >&2
