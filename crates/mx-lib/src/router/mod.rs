@@ -2,6 +2,8 @@
 //!
 //! Manages the global Traefik router for local development.
 
+pub mod visibility;
+
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 
