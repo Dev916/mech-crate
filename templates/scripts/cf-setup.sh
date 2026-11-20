@@ -122,7 +122,8 @@ read -r -p "Enter API Token (or press Enter to skip): " CLOUDFLARE_API_TOKEN
 echo ""
 echo -e "${BOLD}Step 4: Default Docker Platform${NC}"
 echo ""
-echo "Cloudflare Containers support linux/amd64 and linux/arm64."
+echo "Cloudflare Containers run linux/amd64 images only; leave this at the default"
+echo "unless you build for something other than Cloudflare Containers."
 read -r -p "Default platform [linux/amd64]: " CF_DOCKER_PLATFORM
 CF_DOCKER_PLATFORM="${CF_DOCKER_PLATFORM:-linux/amd64}"
 

@@ -103,7 +103,7 @@ The standard approach until mx grows native support — treat recipes as **scaff
 | Image name | `<PROJECT>/<svc>:<tag>` + `:<tag>-dev\|-prod` twin | compose default naming or `<SVC>_IMAGE_TAG` from `docker/compose/.env` | `registry.cloudflare.com/<acct>/<app>:v<ver>` |
 | Push | `docker push` iff `push=1` (no registry prefix logic) | n/a | `npx wrangler containers push` |
 
-[templates/make/build.mk; templates/scripts/build.sh:29-202; templates/scripts/.bashrc:36-180; templates/make/cloudflare.mk:99-186]
+[templates/make/build.mk; templates/scripts/build.sh:29-202; templates/scripts/.bashrc:36-180; templates/make/cloudflare.mk, targets `cf-build` through `cf-deploy`]
 
 **`make build s=<svc> [t=<tag>] [prod=1] [push=1] [nocache=1]`** → `scripts/build.sh`: picks the dockerfile by mode (prod prefers the hardened distroless `app.prod`; dev uses the `app` file's `development` stage), builds from **project root** context, passes `IMAGE_VERSION/IMAGE_TAG/BUILD_TIME/BUILD_MODE` build-args (+`NODE_ENV/RUST_ENV/APP_ENV=production` in prod), runs an optional `scripts/prebuild/<svc>.sh` hook, and writes the tag back to `docker/compose/.env` as `<SVC>_IMAGE_TAG` [build.sh:55-185]. `mx build` is a thin wrapper over `make _build` (MCP `mx_build` → `mx build` → make → build.sh) [crates/mx-cli/src/commands/build.rs:48-102; crates/mx-mcp-server/src/mx/mod.rs:215-239].
 
@@ -113,7 +113,7 @@ The standard approach until mx grows native support — treat recipes as **scaff
 
 **Release flow**: `make release* app=<app>` targets [templates/make/release.mk] — version source of truth is `apps/<app>/package.json`; conventional-commit releases delegate to per-app `yarn release*` (standard-version), `post_release` syncs versions into `.release-please-manifest.json` and amends the changelog; `release` auto-pushes with `--follow-tags`. The simple path (`release-simple*`) uses `npm version` + tag `<app>-v<ver>` without conventional commits [simple-release.sh]. **Gap:** recipe-generated apps don't ship the `release*` package scripts or standard-version — `make release` fails on a fresh recipe app until they're added (bootstrap steps in `appendix-build-deploy-recipe.md`); `release-simple` works out of the box.
 
-**Released version ≠ image version** for standalone/compose builds (git-derived `IMAGE_VERSION` only); the **Cloudflare path is the only one that stamps `APP_VERSION` from package.json** into the image [cloudflare.mk:24-29, 108].
+**Released version ≠ image version** for standalone/compose builds (git-derived `IMAGE_VERSION` only); the **Cloudflare path is the only one that stamps `APP_VERSION` from package.json** into the image [cloudflare.mk, `cf-build`].
 
 ## 6. Gaps inventory (as of research date)
 

@@ -9,7 +9,7 @@ use_cases:
   - "choosing where a Unix socket lives, what mode it and its directory need, and which peer-credential call to trust"
   - "framing a request/response protocol over a stream socket (JSONL, bounded lines, SIGPIPE) and passing file descriptors"
   - "deciding between a self-daemonizing process and systemd or launchd socket activation"
-summary: "Primary-source and experiment-backed guidance for local daemons that serve a CLI over a Unix domain socket: an exclusive flock held for the daemon's life is the singleton and the socket is derived state; bind fails on any existing path and the kernel never removes it; connect-refused means stale only when you hold the lock (a full backlog also refuses on macOS); the 0700 directory is the portable access control while socket modes are enforced on Linux and macOS but not by POSIX; peer uid/gid from SO_PEERCRED, getpeereid or LOCAL_PEERCRED is reliable and the pid is not; JSONL with a hard line limit; SCM_RIGHTS rules; systemd and launchd socket activation with worked unit files; two CVEs from world-writable sockets."
+summary: "Primary-source and experiment-backed guidance for local daemons that serve a CLI over a Unix domain socket: an exclusive flock held for the daemon's life is the singleton and the socket is derived state; bind fails on any existing path and the kernel never removes it; connect-refused means stale only when you hold the lock (a full backlog also refuses on macOS); the 0700 directory is the portable access control while socket modes are enforced on Linux and macOS but not by POSIX; peer uid/gid from SO_PEERCRED, getpeereid or LOCAL_PEERCRED is reliable and the pid is not; JSONL with a hard line limit; SCM_RIGHTS rules; systemd and launchd socket activation with worked unit files; two CVEs from over-permissive sockets."
 provenance: researched
 researched: 2026-11-02
 sources:
@@ -33,7 +33,7 @@ sources:
   - https://doc.rust-lang.org/stable/src/std/os/unix/net/ucred.rs.html
   - https://doc.rust-lang.org/std/os/linux/net/trait.SocketAddrExt.html
   - https://doc.rust-lang.org/stable/src/std/sys/pal/unix/mod.rs.html
-  - https://doc.rust-lang.org/unstable-book/language-features/unix-sigpipe.html
+  - https://doc.rust-lang.org/unstable-book/compiler-flags/on-broken-pipe.html
   - https://github.com/rust-lang/rust/pull/101077/files
   - https://docs.rs/tokio/latest/tokio/net/struct.UnixListener.html
   - https://docs.rs/tokio/latest/tokio/net/struct.UnixStream.html
@@ -98,15 +98,15 @@ sources:
 
 Purpose: the operating-system facts and the resulting discipline for a local daemon that a CLI (or an editor, an agent harness, a console) talks to over a Unix domain socket, on macOS and Linux. The reference stack is Rust with tokio, but every load-bearing fact is a kernel or libc fact and the Python version is shown too. This complements `rust-async-cancellation-graceful-shutdown.md` (what happens inside the daemon when it stops) and the a2a repo profile (a production instance of everything here). Child-process supervision (process groups, PID-reuse witnesses, reaping) is a separate backlog topic and is only touched where the daemon's own lifecycle needs it.
 
-Citations use `[n]` keyed to the `sources` list in the frontmatter. Quotes are verbatim from the cited page. Claims marked **(verified in this run)** come from the experiments in Appendix A, run on 2026-11-02 on macOS (Darwin 25.6.0, Python 3.9.6) and Linux (kernel 7.2.12, `python:3.13-slim` container, Python 3.13.18); the Rust example compiled against rustc 1.99.0, tokio 1.54.1 and rustix 1.1.6. The `x` provider returned HTTP 400 on every query and was skipped.
+Citations use `[n]` keyed to the `sources` list in the frontmatter. Quotes are verbatim from the cited page. Claims marked **(verified in this run)** come from the experiments in Appendix A, run on 2026-11-02 on macOS (Darwin 25.6.0, Python 3.9.6) and Linux (kernel 7.2.12, `python:3.13-slim` container, Python 3.13.18); the Rust example compiled against rustc 1.99.0, tokio 1.54.1 and rustix 1.1.6. The document was reviewed on 2026-11-20: the Rust example was rewritten, recompiled (rustc 1.99.0) and exercised on macOS for the singleton, request, SIGTERM-cleanup and stale-socket paths.
 
 ## 1. The invariant: one lifetime lock; the socket is derived state
 
 A local daemon has two things that look like "I am the instance": a lock and a listening socket. Only the lock can decide ownership, because only the lock has the right failure semantics.
 
-**flock locks die with the process, pidfiles do not.** Linux `flock(2)`: "Locks created by flock() are associated with an open file description (see open(2)). This means that duplicate file descriptors (created by, for example, fork(2) or dup(2)) refer to the same lock", and "the lock is released either by an explicit LOCK_UN operation on any of these duplicate file descriptors, or when all such file descriptors have been closed" [2]. Process death, including `SIGKILL`, closes every descriptor, so there is no stale-lock analogue of the stale pidfile **(verified in this run: a child holding `LOCK_EX` was `SIGKILL`ed and the parent's non-blocking lock then succeeded on both OSes)**. macOS documents the same model: "Locks are on files, not file descriptors. That is, file descriptors duplicated through dup(2) or fork(2) do not result in multiple instances of a lock, but rather multiple references to a single lock. If a process holding a lock on a file forks and the child explicitly unlocks the file, the parent will lose its lock" [7]. systemd's own SysV recipe concedes that a pidfile, if you must have one, "must be implemented in race-free fashion" [14]; a lock held for the process lifetime simply removes the requirement.
+**flock locks die with the process, pidfiles do not.** Linux `flock(2)`: "Locks created by flock() are associated with an open file description (see open(2)). This means that duplicate file descriptors (created by, for example, fork(2) or dup(2)) refer to the same lock", and "the lock is released either by an explicit LOCK_UN operation on any of these duplicate file descriptors, or when all such file descriptors have been closed" [2]. Process death, including `SIGKILL`, closes the process's descriptors, so a killed daemon cannot leave a stale lock **(verified in this run: a child holding `LOCK_EX` was `SIGKILL`ed and the parent's non-blocking lock then succeeded on both OSes)**, with one exception that follows from the quote above: another process that still holds a duplicate of the open file description keeps the lock alive. A child the daemon spawned that inherited the lock descriptor would do exactly that, so open the lock file close-on-exec (Rust's std and Python 3 do by default) and never pass it to a child [2]. macOS documents the same model: "Locks are on files, not file descriptors. That is, file descriptors duplicated through dup(2) or fork(2) do not result in multiple instances of a lock, but rather multiple references to a single lock. If a process holding a lock on a file forks and the child explicitly unlocks the file, the parent will lose its lock" [7]. systemd's own SysV recipe concedes that a pidfile, if you must have one, "must be implemented in race-free fashion" [14]; a lock held for the process lifetime simply removes the requirement.
 
-**Why flock (or an OFD lock) and not a POSIX record lock.** `fcntl(2)` record locks have the trap that "If a process closes any file descriptor referring to a file, then all of the process's locks on that file are released, regardless of the file descriptor(s) on which the locks were obtained" [3], and "Record locks are not inherited by a child created via fork(2), but are preserved across an execve(2)" [3], so a daemonizing fork drops them. Linux's open-file-description locks (`F_OFD_SETLK`, "Linux-specific, and available since Linux 3.15") "are inherited across fork(2) ... and are only automatically released on the last close of the open file description, instead of being released on any close of the file" [3], which is the flock model with record-lock ranges. On Linux the two families do not interact: "there is no interaction between the types of lock placed by flock() and fcntl(2)" [2]. Two more flock facts matter for daemons: "A process may hold only one type of lock (shared or exclusive) on a file", and conversion "is not guaranteed to be atomic: the existing lock is first removed, and then a new lock is established" [2]. Over NFS, flock is emulated "as fcntl(2) byte-range locks on the entire file" since Linux 2.6.12 [2]; keep the lock file on local storage.
+**Why flock (or an OFD lock) and not a POSIX record lock.** `fcntl(2)` record locks have the trap that "If a process closes any file descriptor referring to a file, then all of the process's locks on that file are released, regardless of the file descriptor(s) on which the locks were obtained" [3], and "Record locks are not inherited by a child created via fork(2), but are preserved across an execve(2)" [3], so a daemonizing fork drops them. Linux's open-file-description locks (`F_OFD_SETLK`, "Linux-specific, and available since Linux 3.15") "are inherited across fork(2) ... and are only automatically released on the last close of the open file description, instead of being released on any close of the file" [3], which is the flock model with record-lock ranges. On local Linux filesystems the two families do not interact: "there is no interaction between the types of lock placed by flock() and fcntl(2)"; the same page notes that on "the modern BSDs" and over NFS they do interact [2], and macOS is a BSD here. Two more flock facts matter for daemons: "A process may hold only one type of lock (shared or exclusive) on a file", and conversion "is not guaranteed to be atomic: the existing lock is first removed, and then a new lock is established" [2]. Over NFS, flock is emulated "as fcntl(2) byte-range locks on the entire file" since Linux 2.6.12 [2], which brings back the close-any-descriptor trap; keep the lock file on local storage, and if `$HOME` may be network-mounted put it under `$XDG_RUNTIME_DIR` instead.
 
 **Advisory means cooperative.** "Advisory locks allow cooperating processes to perform consistent operations on files, but do not guarantee consistency (i.e., processes may still access files without using advisory locks possibly resulting in inconsistencies)" [7]. Every instance of your daemon must take the same lock on the same path; the lock protects against your own second copy, not against a stranger.
 
@@ -159,15 +159,15 @@ Measured **(verified in this run)**:
 | 0200 | 0700 | n/a | ok |
 | 0666 | 0600 (no search bit) | n/a | `EACCES` |
 
-So current macOS enforces socket modes too, and both kernels enforce directory search permission.
+So current macOS checks the owner class of a socket's mode (a `0000` or `0444` socket refuses even its owner), and both kernels enforce directory search permission. A different uid against a `0600` socket was not tested on macOS.
 
 **But POSIX does not promise any of it.** "POSIX does not make any statement about the effect of the permissions on a socket file, and on some systems (e.g., older BSDs), the socket permissions are ignored. Portable programs should not rely on this feature for security" [1]. PostgreSQL names Solaris 10 and later as a system where the mode is ignored and recommends restricting search permission on the socket directory instead [50]. The portable control is therefore the `0700` directory; the socket mode is defence in depth; and the peer check in section 5 is the inner gate that holds even when the first two are misconfigured (a2a: "the 0700 home is the outer gate, and the peer-uid check is the inner one" [75]).
 
-**bind() honours the umask.** With the default `umask 022` the socket file is created `0755` **(verified in this run on both OSes)**, which on Linux is not connectable by others only because the write bit is clear; a `umask 000` would leave it `0777`. FreeBSD documents `fchmod()` before `bind()` as the race-free fix ("This avoids the race that would otherwise occur between creation of the file and a subsequent call to chmod(2)") [8], but tinc found that "fchmod(fd, 0777) has no effect on Unix domain sockets on some systems" and switched to setting the umask around `bind()` [60], and Tor filed the same problem [61]. The two portable options are `umask` around `bind()` (the Python example) or `bind()` then `chmod()` inside a `0700` directory, where the window is closed by the directory (the Rust example and a2a [75]).
+**bind() honours the umask.** With the default `umask 022` the socket file is created `0755` **(verified in this run on both OSes)**, which on Linux is not connectable by others only because the write bit is clear; a `umask 000` would leave it `0777`. FreeBSD documents `fchmod()` before `bind()` as the race-free fix ("This avoids the race that would otherwise occur between creation of the file and a subsequent call to chmod(2)") [8], but tinc found that "fchmod(fd, 0777) has no effect on Unix domain sockets on some systems" and switched to setting the umask around `bind()` [60], and Tor filed the same problem [61]. The two portable options are `umask` around `bind()` (the Python example) or `bind()` then `chmod()` inside a `0700` directory, where the window is closed by the directory (the Rust example and a2a [75]). `umask` is process-global, so the first option is only safe before any other thread exists; a multithreaded runtime should use the second.
 
 **Group-based access is a deliberate trade.** Docker: "By default, a unix domain socket (or IPC socket) is created at /var/run/docker.sock, requiring either root permission, or docker group membership" [42]; "The docker group grants root-level privileges to the user" [40], because a member "can start a container where the /host directory is the / directory on your host; and the container can alter your host filesystem without any restriction" [41]. Mounting `docker.sock` into a container is a standard escape path [43]. PostgreSQL's `unix_socket_permissions` default is `0777`, "meaning anyone can connect", with `0770` and `0700` as the documented alternatives [50]. A group socket is a documented statement that group membership equals the daemon's privilege; if your daemon runs as the user who talks to it, there is no reason to widen beyond `0600`.
 
-**Two incidents from the same mistake.** CVE-2015-8222: "The lxd-unix.socket systemd unit file in the Ubuntu lxd package before 0.20-0ubuntu4.1 uses world-readable permissions for /var/lib/lxd/unix.socket, which allows local users to gain privileges via unspecified vectors" [56], a `SocketMode=` left at its `0666` default (section 8). CVE-2026-53657 (Lima, published 2026-07-10, CVSS 3.1 8.2): "an arbitrary user in the VM could access /run/lima-guestagent.sock when the guest agent is enabled, which could result in running arbitrary commands with root privileges in the VM because the guest agent socket provides tunneling for arbitrary addresses, including Unix socket addresses for privileged daemons like D-Bus. This issue is fixed in version 2.1.3" [68][69]; the fix was an `os.Chown` plus `os.Chmod(socket, 0o600)` [57].
+**Two incidents from the same mistake.** CVE-2015-8222: "The lxd-unix.socket systemd unit file in the Ubuntu lxd package before 0.20-0ubuntu4.1 uses world-readable permissions for /var/lib/lxd/unix.socket, which allows local users to gain privileges via unspecified vectors" [56]. The advisory does not name the cause; `SocketMode=` defaults to `0666` (section 8), so a socket unit that does not set it produces a socket any local user can connect to. CVE-2026-53657 (Lima, published 2026-07-10, CVSS 3.1 8.2): "an arbitrary user in the VM could access /run/lima-guestagent.sock when the guest agent is enabled, which could result in running arbitrary commands with root privileges in the VM because the guest agent socket provides tunneling for arbitrary addresses, including Unix socket addresses for privileged daemons like D-Bus. This issue is fixed in version 2.1.3" [68][69]; the fix was an `os.Chown` plus `os.Chmod(socket, 0o600)` [57].
 
 ## 5. Peer identity: trust the uid, not the pid
 
@@ -176,7 +176,7 @@ Every Unix kernel will tell a server who connected, and the answer is unforgeabl
 | Mechanism | Platform | Returns | Snapshot taken | Source |
 |---|---|---|---|---|
 | `getsockopt(SOL_SOCKET, SO_PEERCRED)` | Linux | `struct ucred { pid, uid, gid }` | "at the time of the call to connect(2), listen(2), or socketpair(2)" | [1] |
-| `getpeereid(3)` | macOS, FreeBSD, OpenBSD, NetBSD | effective uid and gid | peer's `connect(2)` (server side) or `listen(2)` (client side) | [6] |
+| `getpeereid(3)` | macOS [6]; also present on the BSDs (not separately sourced here) | effective uid and gid | peer's `connect(2)` (server side) or `listen(2)` (client side) | [6] |
 | `getsockopt(SOL_LOCAL, LOCAL_PEERCRED)` | macOS, FreeBSD | `struct xucred { cr_version, cr_uid, cr_ngroups, cr_groups[16] }`; FreeBSD's also carries `cr_pid`, macOS's does not | peer's `connect(2)` | [8][9][78] |
 | `LOCAL_PEERPID`, `LOCAL_PEEREPID` | macOS | pid, effective pid | connect time; subject to PID reuse | [9] |
 | `LOCAL_PEERTOKEN` | macOS 13+ | audit token, "securely bound to the original connecting process, even if that process exits and its PID is reused" | connect time | [10] |
@@ -199,7 +199,7 @@ getpeereid's man page states the guarantee precisely: "This mechanism is reliabl
 
 **Correlation and versioning.** Put a request `id` in every line so replies can be matched when a client pipelines, and start every connection with a hello that carries a protocol version. a2a refuses a mismatched `protocol_version` with a remedy string ("`a2a broker restart`") rather than guessing [75]; the realistic failure is a CLI upgraded under a daemon that is still running the old binary.
 
-**SIGPIPE.** On Linux, writing to a socket whose peer has gone raises `EPIPE` and "If enabled, a SIGPIPE is sent as well. This can be avoided by passing the MSG_NOSIGNAL flag to send(2) or sendmsg(2)" [1]. macOS has no `MSG_NOSIGNAL`; the per-socket option is `SO_NOSIGPIPE`, which "prevents SIGPIPE from being raised when a write fails on a socket to which there is no reader; instead, the write to the socket returns with the error EPIPE" [77][79] (the same conclusion reached independently by php-src, questdb-rs and corosio [62][63][64]). Rust programs are covered by default: the runtime "set[s] SIGPIPE to ignore when the program starts up in order to prevent this problem" [20], and the behaviour is opt-out via `-Zon-broken-pipe` or the unstable `#[unix_sigpipe]` attribute [21]; note that Rust resets `SIGPIPE` to default in children it spawns [22], so a helper process that writes to a closed pipe still dies the Unix way. Python and Node install their own handling; a C daemon must call `signal(SIGPIPE, SIG_IGN)` or set the socket option itself.
+**SIGPIPE.** On Linux, writing to a socket whose peer has gone raises `EPIPE` and "If enabled, a SIGPIPE is sent as well. This can be avoided by passing the MSG_NOSIGNAL flag to send(2) or sendmsg(2)" [1]. macOS has no `MSG_NOSIGNAL`; the per-socket option is `SO_NOSIGPIPE`, which "prevents SIGPIPE from being raised when a write fails on a socket to which there is no reader; instead, the write to the socket returns with the error EPIPE" [77][79] (the same conclusion reached independently by php-src, questdb-rs and corosio [62][63][64]). Rust programs are covered by default: the runtime "set[s] SIGPIPE to ignore when the program starts up in order to prevent this problem" [20], and the behaviour is opt-out via the unstable `-Zon-broken-pipe` compiler flag [21] (the earlier `#[unix_sigpipe]` attribute no longer exists); note that Rust resets `SIGPIPE` to default in children it spawns [22], so a helper process that writes to a closed pipe still dies the Unix way. A C daemon must call `signal(SIGPIPE, SIG_IGN)` or set the socket option itself.
 
 ## 7. Passing file descriptors (SCM_RIGHTS)
 
@@ -233,7 +233,7 @@ ExecStart=%h/.local/bin/myd --activated
 # no Type=forking: an activated daemon must not daemonize
 ```
 
-The facts behind each line: an address that "starts with a slash ("/")" is "a file system socket in the AF_UNIX socket family" [11]; `%t` "is either /run/ (for the system manager) or the path $XDG_RUNTIME_DIR resolves to (for user managers)" [13], and user units load from "$XDG_CONFIG_HOME/systemd/user or $HOME/.config/systemd/user" [13]; `SocketMode=` "Defaults to 0666" [11], which is how CVE-2015-8222 happened, so set it; `DirectoryMode=` "Defaults to 0755" [11]; `Accept=no` (the default) means "all listening sockets themselves are passed to the started service unit" rather than one service per connection [11]; `RemoveOnStop=yes` means "any file nodes created by this socket unit are removed when it is stopped" [11]; `SocketUser=`/`SocketGroup=` default to the invoking user in user context [11]. In the daemon, `sd_listen_fds(3)` returns the count of passed descriptors starting at `SD_LISTEN_FDS_START` (3), returns 0 "If $LISTEN_FDS/$LISTEN_PID was not set or was not correctly set for this daemon", checks that `$LISTEN_PID` matches `getpid()`, sets `FD_CLOEXEC` on every passed descriptor, and with `unset_environment` clears "$LISTEN_FDS, $LISTEN_PID, $LISTEN_PIDFDID, and $LISTEN_FDNAMES" [12]. In Rust, `tokio::net::UnixListener::from_std(std::os::unix::net::UnixListener::from_raw_fd(3))` after the `LISTEN_PID` check is the whole integration; the `listenfd` and `sd-notify` crates wrap it.
+The facts behind each line: an address that "starts with a slash ("/")" is "a file system socket in the AF_UNIX socket family" [11]; `%t` "is either /run/ (for the system manager) or the path $XDG_RUNTIME_DIR resolves to (for user managers)" [13], and user units load from "$XDG_CONFIG_HOME/systemd/user or $HOME/.config/systemd/user" [13]; `SocketMode=` "Defaults to 0666" [11], the kind of default behind CVE-2015-8222 (section 4), so set it; `DirectoryMode=` "Defaults to 0755" [11]; `Accept=no` (the default) means "all listening sockets themselves are passed to the started service unit" rather than one service per connection [11]; `RemoveOnStop=yes` means "any file nodes created by this socket unit are removed when it is stopped" [11]; `SocketUser=`/`SocketGroup=` default to the invoking user in user context [11]. In the daemon, `sd_listen_fds(3)` returns the count of passed descriptors starting at `SD_LISTEN_FDS_START` (3), returns 0 "If $LISTEN_FDS/$LISTEN_PID was not set or was not correctly set for this daemon", checks that `$LISTEN_PID` matches `getpid()`, sets `FD_CLOEXEC` on every passed descriptor, and with `unset_environment` clears "$LISTEN_FDS, $LISTEN_PID, $LISTEN_PIDFDID, and $LISTEN_FDNAMES" [12]. In Rust the integration is short but has three traps: after checking `$LISTEN_PID == getpid()` and `$LISTEN_FDS >= 1`, build the listener with `unsafe { std::os::unix::net::UnixListener::from_raw_fd(3) }`, call `set_nonblocking(true)` on it (systemd passes a blocking descriptor, and tokio documents that "passing a listener in blocking mode is always erroneous"), and only then call `tokio::net::UnixListener::from_std(..)`, from inside the runtime [23].
 
 ### launchd (user agent)
 
@@ -257,7 +257,7 @@ The facts behind each line: an address that "starts with a slash ("/")" is "a fi
 </plist>
 ```
 
-`Sockets` "is used to specify launch on demand sockets that can be used to let launchd know when to run the job. The job must check-in to get a copy of the file descriptors using the launch_activate_socket(3) API" [15]. `SockPathName` "implies SockFamily is set to "Unix". It specifies the path to connect(2) or bind(2) to"; `SockPathMode` "specifies the mode of the socket. Known bug: Property lists don't support octal, so please convert the value to decimal" [15], hence `384` for `0600`; `SockType` defaults to stream and `SockPassive` to true (listen) [15]. `SecureSocketWithKey` is the variant where "a securely generated socket is created and the path is assigned to the environment variable that is inherited by all jobs spawned in the job's context" [15], which is how `SSH_AUTH_SOCK` is provided on macOS. `launch_activate_socket(const char *name, int **fds, size_t *cnt)` fills an array of all descriptors launchd created for that `Sockets` key; the man page describes it as the way "a launchd(8) job [can] retrieve a set of file descriptors corresponding to a socket service that launchd(8) has created and advertised on behalf of the job" [16][17], and it is the only correct way, since launchd does not promise descriptor numbers [17]. A launchd job must not "Call daemon(3)" nor "Do the moral equivalent of daemon(3) by calling fork(2) and have the parent process exit(3)" [15]. The plist above passes `plutil -lint` **(verified in this run)**.
+`Sockets` "is used to specify launch on demand sockets that can be used to let launchd know when to run the job. The job must check-in to get a copy of the file descriptors using the launch_activate_socket(3) API" [15]. `SockPathName` "implies SockFamily is set to "Unix". It specifies the path to connect(2) or bind(2) to"; `SockPathMode` "specifies the mode of the socket. Known bug: Property lists don't support octal, so please convert the value to decimal" [15], hence `384` for `0600`; `SockType` defaults to stream and `SockPassive` to true (listen) [15]. `SecureSocketWithKey` is the variant where "a securely generated socket is created and the path is assigned to the environment variable that is inherited by all jobs spawned in the job's context" [15]. `launch_activate_socket(const char *name, int **fds, size_t *cnt)` fills an array of all descriptors launchd created for that `Sockets` key; the man page describes it as the way "a launchd(8) job [can] retrieve a set of file descriptors corresponding to a socket service that launchd(8) has created and advertised on behalf of the job" [16][17], and it is the only correct way, since launchd does not promise descriptor numbers [17]. A launchd job must not "Call daemon(3)" nor "Do the moral equivalent of daemon(3) by calling fork(2) and have the parent process exit(3)" [15]. The plist above passes `plutil -lint` **(verified in this run)**.
 
 **When to choose which.** Activation is right when the daemon should outlive any single CLI invocation, start on first connect, and be restarted by the init on crash. The self-claiming daemon of section 2 is right when the tool must work in a plain shell, a CI runner or a container with no init, and when the user never installs anything. a2a ships the second and documents that the lock, not launchd, is its singleton [75]; a tool that wants both can accept an `--activated` flag and skip steps 1 to 4 when `LISTEN_FDS` or a launchd check-in succeeds.
 
@@ -265,28 +265,30 @@ The facts behind each line: an address that "starts with a slash ("/")" is "a fi
 
 When the CLI starts the daemon itself, the classic steps are daemon(7) 5 to 11: fork; "In the child, call setsid() to detach from any terminal and create an independent session"; "In the child, call fork() again, to ensure that the daemon can never re-acquire a terminal again"; exit the first child; "connect /dev/null to standard input, output, and error"; "reset the umask to 0"; `chdir("/")` [14]. a2a's version keeps stdout and stderr on a log file instead of `/dev/null`, writes its own pid to a `0600` pidfile after daemonizing ("Ops needs a pid it can signal, and the crash tests need one they can `SIGKILL`"), and ignores `SIGHUP` between the two forks [75]. Do not reset the umask to 0 if you then `bind()` a socket (section 4).
 
-glibc 2.26 added `POSIX_SPAWN_SETSID` so a spawned child can start in its own session without a fork in the parent [65][66]; Apple's `spawn.h` does not define it **(verified in this run: no such symbol in the macOS SDK header)**, so a cross-platform launcher still double-forks or runs `setsid` in the child before `exec`. Idle exit (a2a's `IdleWatch`) is what keeps a lazily started daemon from accumulating: when no client has connected for the idle window, run the teardown in section 2 step 5 and exit, and let the next CLI invocation re-claim. Everything about stopping cleanly inside the process, bounded drain and cancellation safety, is in `rust-async-cancellation-graceful-shutdown.md`.
+glibc 2.26 added `POSIX_SPAWN_SETSID` so a spawned child can start in its own session without a fork in the parent [65][66]; macOS defines it too: the SDK's `sys/spawn.h` has `#define POSIX_SPAWN_SETSID 0x0400` in its Darwin-extension block (checked 2026-11-20 against the Xcode macOS SDK; an earlier version of this document wrongly said the symbol was absent, having looked only at the top-level `spawn.h`). A launcher can therefore use `posix_spawn` with that flag on both glibc 2.26+ and macOS, and should check the oldest macOS it supports before dropping a `setsid`-in-child fallback. Idle exit (a2a's `IdleWatch`) is what keeps a lazily started daemon from accumulating: when no client has connected for the idle window, run the teardown in section 2 step 5 and exit, and let the next CLI invocation re-claim. Everything about stopping cleanly inside the process, bounded drain and cancellation safety, is in `rust-async-cancellation-graceful-shutdown.md`.
 
 ## 10. Reference implementation
 
-Both programs implement sections 1 to 6: `0700` home, lifetime `flock`, lock-first stale probe, `0600` socket, peer-uid check, bounded JSONL. The Rust one compiled with rustc 1.99.0 against tokio 1.54.1, rustix 1.1.6 and serde_json 1.0.154 **(verified in this run)**; the Python one ran its self-test on Python 3.13.18 (second `claim()` returned `None` while the daemon lived; a request got `{"ok":true}`; after `SIGKILL` the socket file remained and the next `claim()` took the lock and unlinked it) and `claim()` alone on macOS Python 3.9.6 **(verified in this run)**.
+Both programs implement sections 1 to 6: `0700` home that is verified to be ours, lifetime `flock`, lock-first stale probe that refuses to delete a non-socket, `0600` socket, peer-uid check, bounded JSONL, and cleanup on both Ctrl-C and `SIGTERM`. The Rust one compiled with rustc 1.99.0 against tokio 1.54.1, rustix 1.1.6 and serde_json 1.0.154 **(verified in this run)**; the Python one ran its self-test on Python 3.13.18 (second `claim()` returned `None` while the daemon lived; a request got `{"ok":true}`; after `SIGKILL` the socket file remained and the next `claim()` took the lock and unlinked it) and `claim()` alone on macOS Python 3.9.6 **(verified in this run)**.
 
 ```rust
 //! Singleton local daemon over a Unix socket: lock, then stale-probe, then bind.
 use std::fs::{self, File, OpenOptions};
 use std::io;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use rustix::fs::{flock, FlockOperation};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
+use tokio::signal::unix::{signal, SignalKind};
 
 /// Longest request line we will buffer before closing the connection.
 const MAX_LINE: u64 = 64 * 1024;
 
-/// Field order is drop order: the listener goes first, the lock last, and
-/// `Drop` unlinks the socket path in between.
+/// `Drop::drop` runs first and unlinks the socket path; the fields are then
+/// dropped in declaration order (listener, then the lock last), so the lock is
+/// released only after the path is gone.
 pub struct Singleton {
     listener: UnixListener,
     sock: PathBuf,
@@ -299,14 +301,28 @@ impl Drop for Singleton {
     }
 }
 
+fn refuse(msg: String) -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, msg)
+}
+
 /// `Ok(None)` means another instance holds the lock: exit quietly.
 pub fn claim(home: &Path) -> io::Result<Option<Singleton>> {
     // 1. The home directory is the outer gate: 0700, so no other uid can even
-    //    reach the socket path. (Harmless if it already exists with that mode.)
+    //    reach the socket path. An existing directory is verified, not assumed:
+    //    it must be a real directory (not a symlink), ours, and closed to others.
     fs::DirBuilder::new().recursive(true).mode(0o700).create(home)?;
+    let meta = fs::symlink_metadata(home)?;
+    let me = rustix::process::geteuid().as_raw();
+    if !meta.file_type().is_dir() || meta.uid() != me || meta.mode() & 0o077 != 0 {
+        return Err(refuse(format!(
+            "{} must be a directory owned by uid {me} with mode 0700",
+            home.display()
+        )));
+    }
 
     // 2. The lock decides ownership. It lives for the whole process and the
-    //    kernel releases it on any exit, including SIGKILL.
+    //    kernel releases it when the last descriptor on it closes. std opens
+    //    with O_CLOEXEC, so a spawned child cannot inherit it and outlive us.
     let lock = OpenOptions::new()
         .create(true)
         .write(true)
@@ -319,24 +335,32 @@ pub fn claim(home: &Path) -> io::Result<Option<Singleton>> {
         Err(e) => return Err(e.into()),
     }
 
-    // 3. Holding the lock, a leftover socket file can only be stale, so a
-    //    refused connect is the signal to unlink it. A connect that succeeds
-    //    means someone is listening without the lock: refuse to steal it.
+    // 3. Holding the lock, a leftover socket can only be stale, so a refused
+    //    connect is the signal to unlink it. A connect that succeeds means
+    //    someone is listening without the lock: refuse to steal it. Anything at
+    //    the path that is not a socket is not ours to delete.
     let sock = home.join("daemon.sock");
-    match std::os::unix::net::UnixStream::connect(&sock) {
-        Ok(_) => {
-            return Err(io::Error::new(
-                io::ErrorKind::AddrInUse,
-                "a listener is live on the socket but does not hold the lock",
-            ))
-        }
+    match fs::symlink_metadata(&sock) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) if e.kind() == io::ErrorKind::ConnectionRefused => fs::remove_file(&sock)?,
         Err(e) => return Err(e),
+        Ok(m) if !m.file_type().is_socket() => {
+            return Err(refuse(format!("{} exists and is not a socket", sock.display())))
+        }
+        Ok(_) => match std::os::unix::net::UnixStream::connect(&sock) {
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    "a listener is live on the socket but does not hold the lock",
+                ))
+            }
+            Err(e) if e.kind() == io::ErrorKind::ConnectionRefused => fs::remove_file(&sock)?,
+            Err(e) => return Err(e),
+        },
     }
 
     // 4. bind() honours the umask, so tighten the mode right after. The
     //    window is covered by the 0700 directory and the peer check below.
+    //    (umask itself is process-global, so it is not touched here.)
     let listener = UnixListener::bind(&sock)?;
     fs::set_permissions(&sock, fs::Permissions::from_mode(0o600))?;
 
@@ -344,13 +368,16 @@ pub fn claim(home: &Path) -> io::Result<Option<Singleton>> {
 }
 
 pub async fn serve(daemon: Singleton) -> io::Result<()> {
-    let me = rustix::process::getuid().as_raw();
+    let me = rustix::process::geteuid().as_raw();
     loop {
         let (stream, _) = daemon.listener.accept().await?;
         // Ask the kernel who connected; never trust a uid the client sends.
         // (SO_PEERCRED on Linux, LOCAL_PEERCRED on macOS, behind one tokio API.)
         match stream.peer_cred() {
             Ok(cred) if cred.uid() == me => {
+                // Detached on purpose to keep the example short: in-flight
+                // requests are not drained at shutdown. Track them with a
+                // JoinSet or TaskTracker if a request must finish.
                 tokio::spawn(handle(stream));
             }
             Ok(_) | Err(_) => drop(stream),
@@ -386,16 +413,23 @@ async fn handle(stream: UnixStream) -> io::Result<()> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // No /tmp fallback: a predictable name in a shared directory can be
+    // pre-created by another user (section 3).
     let home = std::env::var_os("DAEMON_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join("uds-scratch"));
+        .or_else(|| std::env::var_os("XDG_RUNTIME_DIR").map(|d| PathBuf::from(d).join("uds-demo")))
+        .ok_or_else(|| refuse("set DAEMON_HOME or XDG_RUNTIME_DIR".into()))?;
     let Some(daemon) = claim(&home)? else {
         eprintln!("already running");
         return Ok(());
     };
+    // systemd and launchd stop a service with SIGTERM; without this branch the
+    // process would die without running Drop and leave the socket file behind.
+    let mut term = signal(SignalKind::terminate())?;
     tokio::select! {
         r = serve(daemon) => r,
         _ = tokio::signal::ctrl_c() => Ok(()),
+        _ = term.recv() => Ok(()),
     }
 }
 ```
@@ -405,6 +439,7 @@ async fn main() -> io::Result<()> {
 ```python
 """Singleton local daemon over a Unix socket: lock, then stale-probe, then bind."""
 import asyncio, fcntl, os, socket, struct, sys
+import stat
 from pathlib import Path
 
 MAX_LINE = 64 * 1024
@@ -413,6 +448,9 @@ MAX_LINE = 64 * 1024
 def claim(home: Path):
     """Return (lock_file, socket_path) if we own the daemon role, else None."""
     home.mkdir(mode=0o700, parents=True, exist_ok=True)   # outer gate
+    st = home.lstat()                                      # verify it, do not assume it
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
+        raise PermissionError(f"{home} must be a directory we own with mode 0700")
     lock = open(home / "daemon.lock", "a")
     os.chmod(lock.fileno(), 0o600)
     try:
@@ -421,6 +459,9 @@ def claim(home: Path):
         lock.close()
         return None
     sock = home / "daemon.sock"
+    if sock.is_symlink() or (sock.exists() and not sock.is_socket()):
+        lock.close()
+        raise PermissionError(f"{sock} exists and is not a socket")   # not ours to delete
     probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         probe.connect(str(sock))
@@ -504,7 +545,7 @@ On Python 3.12 and earlier drop the `cleanup_socket` argument and unlink in a `f
 - [ ] Authorize every connection on the kernel's peer uid/gid; log the pid; never authorize on it.
 - [ ] JSONL with a hard maximum line length, a request `id`, and a hello carrying a protocol version.
 - [ ] `SIGPIPE` ignored or `MSG_NOSIGNAL`/`SO_NOSIGPIPE` set; `EPIPE` handled as "client went away".
-- [ ] For `SCM_RIGHTS`: at least one data byte, at most 253 descriptors, a library not raw macros, received-count checked.
+- [ ] For `SCM_RIGHTS`: at least one data byte, at most 253 descriptors per message on Linux (keep batches small elsewhere), a library not raw macros, received-count checked.
 - [ ] Teardown in reverse: stop accepting, drain, unlink socket, remove pidfile, release lock last.
 - [ ] If an init system is available, prefer socket activation with `SocketMode=0600` / `SockPathMode` 384 and no daemonizing.
 
@@ -513,7 +554,7 @@ On Python 3.12 and earlier drop the `cleanup_socket` argument and unlink in a `f
 - *"If the socket file exists, the daemon is running."* The kernel never removes it [1][8]; after a crash it is litter that makes `bind()` fail [1].
 - *"A refused connect means the socket is stale."* Only if you hold the lock. A live macOS listener with a full backlog also refuses **(verified in this run)**.
 - *"The pidfile is the singleton."* It is a note the daemon wrote; the kernel does not know about it. A held `flock` is released on any exit, a pidfile is not [2][14].
-- *"chmod 600 on the socket protects it."* On Linux and current macOS, yes **(verified in this run)**; POSIX promises nothing and some systems ignore it [1][50]. The directory mode is the portable control.
+- *"chmod 600 on the socket protects it."* On Linux, yes; on current macOS the owner class is checked **(verified in this run, as the owner only)**; POSIX promises nothing and some systems ignore it [1][50]. The directory mode is the portable control.
 - *"The peer pid identifies the client."* It is a connect-time snapshot subject to reuse; `SO_PEERPIDFD` and `LOCAL_PEERTOKEN` exist because of that [67][10].
 - *"A lock on the socket file itself is enough."* The socket path is unlinked and re-created during startup; lock a sibling file.
 - *"Abstract sockets avoid all the problems."* They avoid stale files and path limits, at the cost of filesystem access control and macOS support [1][19].
@@ -525,7 +566,7 @@ These are this document's own conclusions, drawn from the cited facts rather tha
 
 - **Ownership, liveness and reachability are three different facts and need three different mechanisms.** The lock answers "who owns this home" (kernel-released, race-free). The connect probe answers "is anyone listening" (and only that: it cannot tell stale from saturated on macOS). The socket file answers "where to connect". Designs that use one of these to infer another (socket exists therefore running; connect refused therefore stale; pidfile present therefore owned) are where the bugs in section 2 live. Make each fact come from its own mechanism, and make the lock the one that decides.
 - **The macOS full-backlog refusal is an argument for lock-first on every platform**, not a macOS quirk to special-case: a probe-and-unlink daemon is correct exactly as often as its backlog is not full, which is to say under light load only.
-- **Treat the socket mode as a tripwire rather than a wall.** It costs one `chmod`, it catches the world-writable mistake behind two CVEs, and when it is bypassed (a system that ignores it, an abstract socket, a descriptor passed in) the directory and the peer check still hold. The three-layer order in a2a (0700 directory, 0600 socket, uid check) is the right default for a single-user daemon; widen one layer at a time and only with a reason you can write down, the way Docker documents the `docker` group as root-equivalent.
+- **Treat the socket mode as a tripwire rather than a wall.** It costs one `chmod`, it catches the over-permissive-socket mistake behind two CVEs, and when it is bypassed (a system that ignores it, an abstract socket, a descriptor passed in) the directory and the peer check still hold. The three-layer order in a2a (0700 directory, 0600 socket, uid check) is the right default for a single-user daemon; widen one layer at a time and only with a reason you can write down, the way Docker documents the `docker` group as root-equivalent.
 - **A lazily started daemon should be a socket-activated daemon with a fallback, not the other way around.** The lock-first claim in section 2 is the fallback for shells, CI and containers; where launchd or `systemd --user` exists, letting the init own the path removes the whole stale-socket class and gives crash restart for free. Ship `--activated` and have `claim()` short-circuit when the init handed over a listener.
 - **Version the hello before the first feature.** The failure that actually happens is a CLI upgraded under a long-lived daemon; refusing a mismatched protocol version with a one-line remedy, as a2a does, turns a confusing hang into an actionable message.
 
@@ -545,4 +586,4 @@ Scripts were Python 3 using the `socket`, `fcntl` and `os` modules; Linux runs u
 10. `std::os::unix::net::UnixListener` and `tokio::net::UnixListener` dropped: socket file still present (macOS, rustc 1.99.0, tokio 1.54.1).
 11. Section 10 Rust example: `cargo build` clean. Section 10 Python example: self-test passed on Linux 3.13.18 (second claim `None`; request answered; after `SIGKILL` the stale socket was unlinked by the next claim); `claim()` on macOS 3.9.6 behaved the same.
 12. Section 8 launchd plist: `plutil -lint` OK. The systemd unit was not validated (no `systemd-analyze` on this machine); its directives are quoted from systemd.socket(5) and systemd.unit(5).
-13. macOS SDK headers: `sys/un.h` defines `LOCAL_PEERCRED 0x001`, `LOCAL_PEERPID 0x002`, `LOCAL_PEEREPID 0x003`, `LOCAL_PEERUUID`, `LOCAL_PEEREUUID`, `LOCAL_PEERTOKEN 0x006` and `sun_path[104]`; `sys/ucred.h` `struct xucred` has `cr_version`, `cr_uid`, `cr_ngroups`, `cr_groups[NGROUPS]` and no pid; `sys/socket.h` defines `SO_NOSIGPIPE 0x1022`; `spawn.h` has no `POSIX_SPAWN_SETSID`.
+13. macOS SDK headers: `sys/un.h` defines `LOCAL_PEERCRED 0x001`, `LOCAL_PEERPID 0x002`, `LOCAL_PEEREPID 0x003`, `LOCAL_PEERUUID`, `LOCAL_PEEREUUID`, `LOCAL_PEERTOKEN 0x006` and `sun_path[104]`; `sys/ucred.h` `struct xucred` has `cr_version`, `cr_uid`, `cr_ngroups`, `cr_groups[NGROUPS]` and no pid; `sys/socket.h` defines `SO_NOSIGPIPE 0x1022`; `sys/spawn.h` defines `POSIX_SPAWN_SETSID 0x0400` (corrected 2026-11-20).
