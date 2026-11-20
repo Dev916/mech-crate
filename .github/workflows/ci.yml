@@ -108,6 +108,21 @@ jobs:
           tool: cargo-nextest,cargo-llvm-cov
       - run: make coverage
 
+  # A recipe lock that pins a release with a published advisory ships that
+  # advisory into every scaffold (bd:mech-crate-hca). This lane goes red when a
+  # new advisory lands on a shipped lock. It is non-blocking on purpose: the
+  # advisory feed changes independently of the diff under review, so it must be
+  # visible on every PR without holding unrelated work hostage.
+  recipe-audit:
+    name: recipe-audit (lock advisories, non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: composer --version
+      - run: make recipe-audit
+
   known-broken:
     name: known-broken (scoreboard, non-blocking)
     runs-on: ubuntu-latest

@@ -6,7 +6,7 @@ CARGO := cargo
 PREFIX ?= /usr/local
 
 .PHONY: build build-release install install-local uninstall init lint fmt clean help
-.PHONY: test test-unit test-int test-known-broken coverage test-e2e test-mutants test-smoke
+.PHONY: test test-unit test-int test-known-broken coverage test-e2e test-mutants test-smoke recipe-audit
 
 # Include documentation module
 -include make/docs.mk
@@ -66,6 +66,10 @@ init: build-release
 TEST_DB_URL ?= postgres://postgres@localhost:55433/mx_rag
 
 ## Run the full gate suite (what CI runs)
+## Audit shipped recipe lockfiles for known security advisories (needs composer + network)
+recipe-audit:
+	@./scripts/recipe-audit.sh
+
 test:
 	$(CARGO) nextest run --workspace --profile ci
 	$(CARGO) test --workspace --doc
