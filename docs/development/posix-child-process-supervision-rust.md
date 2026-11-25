@@ -91,13 +91,14 @@ sources:
   - https://issues.apache.org/jira/browse/YARN-3678
   - "a2a repository, src/exec.rs at commit 19240f7 (2026-10-23), profiled in docs/development/repos/a2a.md"
   - "docs/development/repos/hq.md (agent.run handler)"
+  - https://man7.org/linux/man-pages/man2/clone.2.html
 ---
 
 # POSIX Child-Process Supervision in Rust
 
 Purpose: the kernel and library facts, and the discipline that follows from them, for a Rust program on Linux or macOS that starts other programs and is responsible for them: a CLI running a build or a test, a harness running coding-agent workers, a daemon running jobs. It answers four questions: who reaps, how to stop a whole tree, how to signal a process you recorded earlier without hitting a stranger, and how to let a child outlive you or make sure it does not. It complements `unix-socket-ipc-singleton-daemons.md` (the daemon's own lifecycle and why a pid is not an identity for a socket peer) and `rust-async-cancellation-graceful-shutdown.md` (what happens inside a process when it is asked to stop).
 
-Citations use `[n]` keyed to the `sources` list in the frontmatter. Quotes are verbatim from the cited page. Claims marked **(verified in this run)** come from the experiments in Appendix A, run on 2026-11-23 on macOS 26.6.2 (Darwin 25.6.0, arm64, rustc 1.99.0) and Linux (kernel 7.2.12, `rust:1` container, rustc 1.100.0, glibc 2.41), both with libc 0.2.191 and tokio 1.54.1.
+Citations use `[n]` keyed to the `sources` list in the frontmatter. Quotes are verbatim from the cited page. Claims marked **(verified in this run)** come from the experiments in Appendix A, run on 2026-11-23 on macOS 26.6.2 (Darwin 25.6.0, arm64, rustc 1.99.0) and Linux (an OrbStack VM on the same Mac, kernel 7.2.12-orbstack, `rust:1` container, rustc 1.100.0, glibc 2.41), both with libc 0.2.191 and tokio 1.54.1.
 
 ## 1. Decision ladder
 
@@ -128,7 +129,7 @@ Citations use `[n]` keyed to the `sources` list in the frontmatter. Quotes are v
 | `kill_on_drop(true)`, handle dropped, runtime thread blocked for 500 ms | zombie |
 | Same, then the runtime ran for 500 ms | reaped |
 | No `kill_on_drop`, handle dropped | still running; reaped by the runtime after it exited on its own |
-| `kill_on_drop(true)`, handle dropped, runtime dropped at once | zombie until the process exits |
+| `kill_on_drop(true)`, handle dropped, runtime dropped at once | zombie until the supervisor process exits |
 
 On Linux tokio waits through a pidfd since 1.36.0 ("process: use pidfd on Linux when available") and falls back to the SIGCHLD reaper when `pidfd_open` fails [9][10]. On macOS and other Unix it is SIGCHLD-driven, and the module notes that signals coalesce so every SIGCHLD checks all spawned children [11]. `tokio::process::Child::id()` returns `None` once the child has been polled to completion [12]. tokio's `kill` and `kill_on_drop` target the direct pid only, never a group [11].
 
@@ -152,7 +153,7 @@ On Linux tokio waits through a pidfd since 1.36.0 ("process: use pidfd on Linux 
 
 **What a group does not give you.**
 
-- *Membership is voluntary.* A process leaves by "calling `setsid()` or `setpgid()`" [3]. A grandchild that called `setsid()` survived the group kill and was reparented to pid 1, on both systems **(verified in this run)**. Section 10 has a field report of a group kill missing the real server process.
+- *Membership is voluntary.* A process group ends when its last member leaves, "due either to the end of the lifetime of the last process or to the last remaining process calling the setsid() or setpgid() functions" [3]; any member can leave that way. A grandchild that called `setsid()` survived the group kill and was reparented to pid 1, on both systems **(verified in this run)**. Section 10 has a field report of a group kill missing the real server process.
 - *The terminal stops talking to the child.* Ctrl-C is delivered "to all processes in the foreground process group" [19]. A child in its own group is not in it, so the supervisor must forward SIGINT, SIGTERM and the stop/continue pair itself. nextest states the consequence: "nextest creates a new process group for each unit of work" and "It is then nextest's responsibility to send the signal to all child process groups" [20].
 - *Terminal reads stop the child.* A background group that reads the controlling terminal is "sent a SIGTTIN signal, which suspends it" [15][19]. Give a grouped child `Stdio::null()` or a pipe for stdin; stdin is inherited by default [7].
 - *A new session is stronger and stricter.* `setsid` gives a new session and group with no controlling terminal, and "fails if the calling process is already a process group leader" [17]. Use it for detachment (section 7), not just for kill scope.
@@ -169,7 +170,7 @@ On Linux tokio waits through a pidfd since 1.36.0 ("process: use pidfd on Linux 
 
 **Everything else needs a witness.** A pid read from a pidfile, a state file, another process's message or an earlier run of your own CLI can name a different process by the time you signal it. systemd's advice is "PID files should be avoided in modern projects" [33].
 
-*Linux: pidfd.* A pidfd is "a Linux-specific way of referring to processes that avoids the race conditions inherent in Unix process ID numbers" [32]. Timeline: `pidfd_send_signal` 5.1, `CLONE_PIDFD` 5.2, `pidfd_open` 5.3, `waitid(P_PIDFD)` 5.4, `PIDFD_NONBLOCK` 5.10, group signalling through a pidfd 6.9 [13][34][1]. A pidfd polls readable when the process exits and reports hangup once it is reaped [13]; signalling a reaped target fails with `ESRCH`: "The target process does not exist (i.e., it has terminated and been waited on)" [34]. All of that held on kernel 7.2 **(verified in this run)**: `poll` returned 0 before exit and `POLLIN` after, signal 0 succeeded on the zombie, and after `wait` the same descriptor returned `ESRCH`. Limits: a pidfd must be opened while you still know who the pid is (as the parent, before reaping), and it is a descriptor, so it does not survive into a later CLI invocation unless a long-lived process holds it. In Rust the std API (`CommandExt::create_pidfd`, `ChildExt::pidfd`) is still unstable [35] and std does not use pidfds unless asked [5]; use `rustix` or raw syscalls.
+*Linux: pidfd.* A pidfd is "a Linux-specific way of referring to processes that avoids the race conditions inherent in Unix process ID numbers" [32]. Timeline: `pidfd_send_signal` 5.1, `CLONE_PIDFD` (since Linux 5.2 per clone(2)), `pidfd_open` 5.3, `waitid(P_PIDFD)` 5.4, `PIDFD_NONBLOCK` 5.10, group signalling through a pidfd 6.9 [13][34][1]. A pidfd polls readable when the process exits and reports hangup once it is reaped [13]; signalling a reaped target fails with `ESRCH`: "The target process does not exist (i.e., it has terminated and been waited on)" [34]. All of that held on kernel 7.2 **(verified in this run)**: `poll` returned 0 before exit and `POLLIN` after, signal 0 succeeded on the zombie, and after `wait` the same descriptor returned `ESRCH`. Limits: a pidfd must be opened while you still know who the pid is (as the parent, before reaping), and it is a descriptor, so it does not survive into a later CLI invocation unless a long-lived process holds it. In Rust the std API (`std::os::linux::process::CommandExt::create_pidfd`, `ChildExt::pidfd`) is still unstable [35] and std does not use pidfds unless asked [5]; use `rustix` or raw syscalls.
 
 *Portable: pid plus start time.* On Linux, `/proc/<pid>/stat` field 22 is "The time the process started after system boot", in clock ticks [36]; the second field is the command name in parentheses and can contain spaces, so parse from the last `)`. On macOS, `proc_pidinfo(PROC_PIDTBSDINFO)` fills a `proc_bsdinfo` with `pbi_start_tvsec` and `pbi_start_tvusec` [37]. psutil uses exactly this identity: "two instances are equal if they have the same PID and creation time", and its signal methods re-check it [38]. The `sysinfo` crate documents a reuse hazard on macOS and FreeBSD for `wait()` ("it will wait for the new process to end") [39], so do not assume a process library checks for you. Section 9 has a compiled `start_time` and `signal_if_same`; a wrong start time left the process untouched and the right one signalled it, on both systems **(verified in this run)**. Two measured differences: for a zombie, Linux still reports a start time while macOS `proc_pidinfo` returns nothing; and the Linux value is relative to boot, so persist a boot identifier with it.
 
@@ -195,37 +196,43 @@ A supervisor that is SIGKILLed, crashes or is OOM-killed runs no cleanup code, s
 
 - It tracks a thread: the signal is sent "upon subsequent termination of the parent thread". A child spawned from a short-lived thread was SIGKILLed as soon as that thread returned, while the process lived on **(verified in this run)**. Spawn from a thread that lives as long as the supervisor.
 - It covers one generation and is cleared by privilege changes: "The parent-death signal setting is cleared for the child of a fork(2)", and when executing a set-id or capability-bearing binary.
-- It has a start-up race: if the parent is already gone when the call is made, "no parent-death signal is sent". Record the parent's pid before spawning and compare `getppid()` after the `prctl` [44]; do not compare with 1, because a subreaper may be the new parent [41].
+- It has a start-up race: if the parent is already gone when the call is made, "no parent-death signal is sent". Record the parent's pid before spawning and compare `getppid()` after the `prctl`; do not compare with 1, because a subreaper may be the new parent [41]. The check narrows the window but does not close it: [44] describes a kernel data race in which `getppid()` still returns the old parent although no signal will be sent.
 
-With the check in place, SIGKILLing the supervisor removed the child **(verified in this run)**.
+With the check in place, SIGKILLing the supervisor removed the child **(verified in this run)**; that shows the normal path works, not that the start-up race is closed.
 
 ```rust
-use std::os::unix::process::CommandExt;
-let parent = unsafe { libc::getpid() };
-unsafe {
-    cmd.pre_exec(move || {
-        if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        if libc::getppid() != parent { libc::_exit(1); } // parent died before prctl took effect
-        Ok(())
-    });
+#[cfg(target_os = "linux")]
+fn kill_with_parent(cmd: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+    let parent = std::process::id() as libc::pid_t;
+    // SAFETY: the closure only calls prctl, getppid and _exit, all safe after fork.
+    unsafe {
+        cmd.pre_exec(move || {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // Parent already gone before prctl took effect. Narrows, but on kernels
+            // without the fix in [44] does not fully close, the start-up race.
+            if libc::getppid() != parent { libc::_exit(1); }
+            Ok(())
+        });
+    }
 }
 ```
 
-**macOS and portable: the lifeline pipe.** macOS has no parent-death signal. Give the child (or a small wrapper around it) the read end of a pipe whose only write end the supervisor holds; when the supervisor dies for any reason the kernel closes the write end and the reader sees end-of-file. With the child's stdin as the lifeline, SIGKILLing the supervisor ended the child on both systems **(verified in this run)**. It works only if no other process holds the write end: a descriptor opened without `O_CLOEXEC` anywhere in the supervisor is inherited by every child (on Linux `close_range` [67], on macOS `POSIX_SPAWN_CLOEXEC_DEFAULT` [68] bound that), and a child that inherits the write end keeps the lifeline open. A child can also watch its parent's pid with kqueue `NOTE_EXIT` [40].
+**macOS and portable: the lifeline pipe.** macOS has no parent-death signal. Give the child (or a small wrapper around it) the read end of a pipe whose only write end the supervisor holds; when the supervisor dies for any reason the kernel closes the write end and the reader sees end-of-file. With the child's stdin as the lifeline, SIGKILLing the supervisor ended the child on both systems **(verified in this run)**. It works only if no other process holds the write end: a descriptor opened without `O_CLOEXEC` anywhere in the supervisor is inherited by every child (closing inherited descriptors in the child bounds that: `close_range` in `pre_exec` on Linux [67], `POSIX_SPAWN_CLOEXEC_DEFAULT` with a hand-written `posix_spawn` on macOS [68]; std's `Command` does neither), and a child that inherits the write end keeps the lifeline open. A child can also watch its parent's pid with kqueue `NOTE_EXIT` [40].
 
 **For a whole tree** on Linux, put it in a scope or cgroup owned by something that outlives the supervisor's crash (section 5); the death signal alone protects only direct children.
 
 ## 7. Detaching: letting a child outlive the CLI
 
-**Do not fork a running Rust program to daemonize it.** "After a fork() in a multithreaded program, the child can safely call only async-signal-safe functions" until it execs [43]; nix adds that "memory allocation may not be async-signal-safe" [60]. A process with a tokio runtime is multithreaded, and the tokio maintainers' advice is to fork before creating the first runtime [61]. The classic recipe (fork, `setsid`, fork again so "the daemon can never re-acquire a terminal again", stdio to `/dev/null`, `chdir("/")`) [59] is safe only at the very start of `main`.
+**Do not fork a running Rust program to daemonize it.** "After a fork() in a multithreaded program, the child can safely call only async-signal-safe functions" until it execs [43]; nix adds that "memory allocation may not be async-signal-safe" [60]. A process with a multi-thread tokio runtime is multithreaded, and a current-thread runtime starts blocking-pool threads on demand, and the tokio maintainers' advice is to fork before creating the first runtime [61]. The classic recipe (fork, `setsid`, fork again so "the daemon can never re-acquire a terminal again", stdio to `/dev/null`, `chdir("/")`) [59] is safe only at the very start of `main`.
 
-**Spawn a fresh process in a new session instead.** Re-execute your own binary with a hidden subcommand: stdin from `/dev/null`, stdout and stderr to a log file, `setsid` in `pre_exec` (async-signal-safe) or `process-wrap`'s `ProcessSession` [24]. glibc 2.26 has `POSIX_SPAWN_SETSID` [62] and the macOS SDK defines the flag too [63], but std uses it only on Linux glibc [5]. The CLI then exits without waiting; the child is reparented to init or the nearest subreaper [1][41], which reaps it.
+**Spawn a fresh process in a new session instead.** Re-execute your own binary with a hidden subcommand: stdin from `/dev/null`, stdout and stderr to a log file, `setsid` in `pre_exec` (async-signal-safe) or `process-wrap`'s `ProcessSession` [24]. glibc 2.26 has `POSIX_SPAWN_SETSID` [62] and the macOS SDK defines the flag too [63], but std's unstable `CommandExt::setsid` uses it only on Linux glibc and falls back to fork elsewhere [5]. The CLI then exits without waiting; the child is reparented to init or the nearest subreaper [1][41], which reaps it.
 
 **What can still kill it.**
 
-- SIGHUP: when a session leader with a controlling terminal exits, "a SIGHUP signal is sent to each process in the foreground process group" [19]. A new session has no controlling terminal [17], which is why `setsid` rather than a new process group is the detachment primitive.
+- SIGHUP: when a session leader with a controlling terminal exits, "a SIGHUP signal is sent to each process in the foreground process group" [17]. A new session has no controlling terminal [17], which is why `setsid` rather than a new process group is the detachment primitive.
 - systemd-logind: with `KillUserProcesses=` on, "the scope unit corresponding to the session and all processes inside that scope will be terminated" at logout, which "will break tools like screen(1) and tmux(1), unless they are moved out of the session scope" [66]. `setsid` does not leave the scope; `systemd-run --user` does [52].
 - launchd: a job must not detach at all. "You must not daemonize your process. This includes calling the `daemon` function, calling `fork` followed by `exec`, or calling `fork` followed by `exit`. If you do, `launchd` thinks your process has died" [65]. On macOS `daemon(3)` itself "is discouraged in favor of using launchd(8)" [64].
 
@@ -271,17 +278,25 @@ fn exited_unreaped(pid: i32) -> io::Result<bool> {
 /// Stop a child started with `spawn_group`: SIGTERM the group, give the leader up to
 /// `grace` to exit, SIGKILL whatever is left in the group, then reap the leader.
 /// The leader is reaped last on purpose: until then the group id cannot be reused.
+/// The grace period is measured on the leader only: if the leader exits early, the
+/// remaining members get SIGKILL at once.
 fn terminate_group(child: &mut Child, grace: Duration) -> io::Result<ExitStatus> {
-    if let Some(status) = child.try_wait()? {
-        return Ok(status); // already reaped by us earlier: the group id is no longer ours to signal
-    }
     let pgid = child.id() as i32;
+    // Do not use try_wait here: on a leader that has exited but is unreaped it would
+    // reap it, freeing the group id while other members may still be running.
+    match exited_unreaped(pgid) {
+        // ECHILD: std reaped the leader in an earlier wait/try_wait, so the group id
+        // is no longer reserved for us; return the cached status without signalling.
+        Err(e) if e.raw_os_error() == Some(libc::ECHILD) => return child.wait(),
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
     let _ = kill(-pgid, libc::SIGTERM);
     let deadline = Instant::now() + grace;
     while !exited_unreaped(pgid)? && Instant::now() < deadline {
         sleep(Duration::from_millis(20));
     }
-    // Leader exited (grandchildren may remain) or the grace period ran out.
+    // Leader exited (other members may remain) or the grace period ran out.
     let _ = kill(-pgid, libc::SIGKILL);
     child.wait()
 }
@@ -329,7 +344,7 @@ Measured with a shell and two `sleep` children in the group: a cooperative group
 
 ## 11. Worked examples from our repositories
 
-- **a2a** (`src/exec.rs`): a worker is a detached session (the spawner `setsid`s in `pre_exec`) whose liveness is a `flock` held by a shim process, not a polled pid. Every kill first compares a recorded start-time witness and refuses on mismatch, then sends SIGTERM to the group, polls for two seconds and sends SIGKILL [77]. The witness is the output of `ps -o lstart=` [77].
+- **a2a** (`src/exec.rs`): a worker is a detached session (the spawner `setsid`s in `pre_exec`) whose liveness is a `flock` held by a shim process, not a polled pid. Every kill first compares a recorded start-time witness and refuses on mismatch, then sends SIGTERM to the group (or to the bare pid if it does not lead its group), polls the leader for up to two seconds, and sends SIGKILL to the same target only if the leader is still running [77]; like `terminate_group` in section 9, the grace is measured on the leader only. The witness is the output of `ps -o lstart=` [77].
 - **hq** (`agent.run`): spawns the agent command and SIGKILLs its process group at `timeout_secs` (default 600) [78].
 
 ## 12. Checklist
@@ -359,7 +374,7 @@ Measured with a shell and two `sleep` children in the group: a cooperative group
 | `PR_SET_PDEATHSIG` means "die with the parent process" | Parent thread, one generation, cleared on set-id exec, with a start-up race [42][43] |
 | `getppid() == 1` detects an orphan | Not under a subreaper [41]; compare with the recorded parent pid [44] |
 | `command-group` is the crate for this | Retired in favour of `process-wrap` [23][24] |
-| Background output to the terminal stops a job | Reads do; writes only when `TOSTOP` is set [19] |
+| Background output to the terminal stops a job | Reads do; writes only when `TOSTOP` is set; changes to terminal settings (`tcsetattr`) do regardless of `TOSTOP` [19] |
 | Exit code 137 comes from the kernel | The kernel reports "killed by signal 9"; 128+n is added by shells [72] |
 
 ## 14. Synthesis (inferred)
@@ -378,7 +393,7 @@ These are our own conclusions from the sources and experiments above, not claims
 One Rust binary (std plus libc 0.2.191 and tokio 1.54.1), run natively on macOS 26.6.2 (rustc 1.99.0) and in a `rust:1` container on Linux 7.2.12 (rustc 1.100.0, glibc 2.41, `--init`); experiments 8 and 14 in a `--privileged` container. "Both" means the same result on macOS and Linux.
 
 1. `Child` of `true` dropped without `wait`: `stat=Z` after 300 ms; `kill(pid, 0)` returns 0 on the zombie; after a manual `waitpid` the pid is gone and `kill(pid, 0)` gives `ESRCH` (both). `start_time(zombie)`: `None` on macOS, a value on Linux.
-2. `terminate_group` (section 9) on `sh -c 'sleep 300 & sleep 300 & wait'` spawned with `process_group(0)`: three members before; leader status signal 15; no members after, in 78 to 120 ms (both). With `trap '' TERM` in the shell and a 500 ms grace: leader status signal 9 after about 540 to 590 ms; no members after (both). With a grandchild that calls `setsid()`: it has its own group and session before, and after the group kill it is still running with parent pid 1 (both).
+2. `terminate_group` (section 9) on `sh -c 'sleep 300 & sleep 300 & wait'` spawned with `process_group(0)`: three members before; leader status signal 15; no members after, in 78 to 120 ms (both). With `trap '' TERM` in the shell and a 500 ms grace: leader status signal 9 after about 540 to 590 ms; no members after (both). With a grandchild that calls `setsid()`: it has its own group and session before, and after the group kill it is still running with parent pid 1 (both). Added at the 2026-11-25 review: with a leader that had already exited (`sh -c 'sleep 304 & exit 0'`, called 300 ms later) the routine as first published reaped the leader and left `sleep 304` running; the corrected routine leaves no members (both).
 3. `wait`, then `kill`: `Ok(())`; second `wait` and `try_wait`: the cached status. `kill` on an exited but unreaped child: `Ok(())` (both).
 4. Intermediate parent SIGKILLed: its `sleep` child keeps running, parent pid 1 (both).
 5. Linux: `pre_exec` with `PR_SET_PDEATHSIG, SIGKILL` and the `getppid` check; intermediate parent SIGKILLed: child gone. Spawned from a thread that then exits while the process lives: `try_wait` shows the child killed by signal 9.
@@ -391,6 +406,6 @@ One Rust binary (std plus libc 0.2.191 and tokio 1.54.1), run natively on macOS 
 12. tokio current-thread runtime: the four rows of the table in section 2 (both).
 13. Linux: `PR_SET_CHILD_SUBREAPER` set; intermediate parent SIGKILLed: the grandchild's parent pid becomes the supervisor's, and the supervisor's `waitpid` on it succeeds (without the flag, experiment 4, `waitpid` fails with `ECHILD`).
 14. Linux, privileged: shell moved into a new cgroup, with a `setsid` grandchild and a `sleep`; `cgroup.procs` lists all three, `populated 1`; `echo 1 > cgroup.kill`; `cgroup.procs` empty, `populated 0`, `rmdir` succeeds.
-15. Sections 6 and 9 code: `cargo build --release` clean on both toolchains.
+15. Section 9 code builds clean on both toolchains; the section 6 block is Linux-only (`#[cfg(target_os = "linux")]`) and was built and exercised there. Corrected at the 2026-11-25 review: the block as first published did not compile on macOS.
 
 Not tested: terminal behaviour (Ctrl-C delivery, SIGTTIN), systemd units and `systemd-run`, launchd jobs, logind's `KillUserProcesses`, tokio's blocking pool with `PR_SET_PDEATHSIG`, and `POSIX_SPAWN_SETSID` at run time on macOS. Those statements rest on the cited documentation.
