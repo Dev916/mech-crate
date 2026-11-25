@@ -1,0 +1,442 @@
+[
+ {
+  "id": "repo-mech-crate-what",
+  "group": "repo",
+  "query": "what does mech-crate do",
+  "expect": [
+   "repos/mech-crate.md"
+  ]
+ },
+ {
+  "id": "repo-mech-crate-build",
+  "group": "repo",
+  "query": "how do I build and run mech-crate",
+  "expect": [
+   "repos/mech-crate.md"
+  ]
+ },
+ {
+  "id": "repo-mech-crate-cap",
+  "group": "repo",
+  "query": "which repo owns the mx router and the techniques corpus",
+  "expect": [
+   "repos/mech-crate.md"
+  ]
+ },
+ {
+  "id": "repo-a2a-what",
+  "group": "repo",
+  "query": "what does a2a do",
+  "expect": [
+   "repos/a2a.md"
+  ]
+ },
+ {
+  "id": "repo-a2a-build",
+  "group": "repo",
+  "query": "how do I build and run a2a",
+  "expect": [
+   "repos/a2a.md"
+  ]
+ },
+ {
+  "id": "repo-a2a-cap",
+  "group": "repo",
+  "query": "dispatch Codex workers from a Claude session",
+  "expect": [
+   "repos/a2a.md"
+  ]
+ },
+ {
+  "id": "repo-hq-what",
+  "group": "repo",
+  "query": "what does hq do",
+  "expect": [
+   "repos/hq.md"
+  ]
+ },
+ {
+  "id": "repo-hq-build",
+  "group": "repo",
+  "query": "how do I build and run hq",
+  "expect": [
+   "repos/hq.md"
+  ]
+ },
+ {
+  "id": "repo-hq-cap",
+  "group": "repo",
+  "query": "client and project registry the other repos key off",
+  "expect": [
+   "repos/hq.md"
+  ]
+ },
+ {
+  "id": "repo-meetnotes-what",
+  "group": "repo",
+  "query": "what does meetnotes do",
+  "expect": [
+   "repos/meetnotes.md"
+  ]
+ },
+ {
+  "id": "repo-meetnotes-build",
+  "group": "repo",
+  "query": "how do I build and run meetnotes",
+  "expect": [
+   "repos/meetnotes.md"
+  ]
+ },
+ {
+  "id": "repo-meetnotes-cap",
+  "group": "repo",
+  "query": "record and transcribe a meeting and file the notes",
+  "expect": [
+   "repos/meetnotes.md"
+  ]
+ },
+ {
+  "id": "repo-understudy-what",
+  "group": "repo",
+  "query": "what does understudy do",
+  "expect": [
+   "repos/understudy.md"
+  ]
+ },
+ {
+  "id": "repo-understudy-build",
+  "group": "repo",
+  "query": "how do I build and run understudy",
+  "expect": [
+   "repos/understudy.md"
+  ]
+ },
+ {
+  "id": "repo-understudy-cap",
+  "group": "repo",
+  "query": "listen to a live meeting and draft replies",
+  "expect": [
+   "repos/understudy.md"
+  ]
+ },
+ {
+  "id": "repo-devloop-what",
+  "group": "repo",
+  "query": "what does devloop do",
+  "expect": [
+   "repos/devloop.md"
+  ]
+ },
+ {
+  "id": "repo-devloop-build",
+  "group": "repo",
+  "query": "how do I build and run devloop",
+  "expect": [
+   "repos/devloop.md"
+  ]
+ },
+ {
+  "id": "repo-devloop-cap",
+  "group": "repo",
+  "query": "execute an implementation plan with live verification",
+  "expect": [
+   "repos/devloop.md"
+  ]
+ },
+ {
+  "id": "repo-cupcake-what",
+  "group": "repo",
+  "query": "what does cupcake do",
+  "expect": [
+   "repos/cupcake.md"
+  ]
+ },
+ {
+  "id": "repo-cupcake-build",
+  "group": "repo",
+  "query": "how do I build and run cupcake",
+  "expect": [
+   "repos/cupcake.md"
+  ]
+ },
+ {
+  "id": "repo-cupcake-cap",
+  "group": "repo",
+  "query": "download media from a URL and manage the resulting library",
+  "expect": [
+   "repos/cupcake.md"
+  ]
+ },
+ {
+  "id": "tech-01",
+  "group": "technique",
+  "query": "rust async cancellation and graceful shutdown",
+  "expect": [
+   "rust-async-cancellation-graceful-shutdown.md"
+  ]
+ },
+ {
+  "id": "tech-02",
+  "group": "technique",
+  "query": "trie dispatch for command routing",
+  "expect": [
+   "tries-and-radix-dispatch.md"
+  ]
+ },
+ {
+  "id": "tech-03",
+  "group": "technique",
+  "query": "pgvector batch embedding in rust",
+  "expect": [
+   "pgvector-rust-batch-embedding.md"
+  ]
+ },
+ {
+  "id": "tech-04",
+  "group": "technique",
+  "query": "docker compose recipe for a new service",
+  "expect": [
+   "docker-assembly-guide.md",
+   "mx-recipes-and-build.md",
+   "RECIPE_AUTHORING_GUIDE.md",
+   "BUILD_DEPLOY_RECIPE.md",
+   "appendix-build-deploy-recipe.md",
+   "mx-app-playbook.md"
+  ]
+ },
+ {
+  "id": "tech-05",
+  "group": "technique",
+  "query": "mx router URL for a local service",
+  "expect": [
+   "MX_QUICK_REFERENCE.md",
+   "QUICK_REFERENCE.md",
+   "mx-app-playbook.md",
+   "traefik-https-acme-and-local-certs.md",
+   "MX_RUST_CLI_AND_MCP_SERVER.md",
+   "INFRA_CONFIG.md",
+   "mx-mcp~usage.md",
+   "instructions.md"
+  ]
+ },
+ {
+  "id": "tech-06",
+  "group": "technique",
+  "query": "CRDT merge semantics for local-first sync",
+  "expect": [
+   "local-first-sync-engines-crdts-in-practice.md"
+  ]
+ },
+ {
+  "id": "tech-07",
+  "group": "technique",
+  "query": "hardening tRPC procedures against unauthenticated access",
+  "expect": [
+   "trpc-in-production.md"
+  ]
+ },
+ {
+  "id": "tech-08",
+  "group": "technique",
+  "query": "reciprocal rank fusion for hybrid retrieval",
+  "expect": [
+   "rag-retrieval-fusion-and-chunking.md",
+   "appendix-rag.md",
+   "rag-context-engineering-ladder.md"
+  ]
+ },
+ {
+  "id": "tech-09",
+  "group": "technique",
+  "query": "shadow traffic to test a new service version",
+  "expect": [
+   "shadow-traffic-and-dark-launches.md"
+  ]
+ },
+ {
+  "id": "tech-10",
+  "group": "technique",
+  "query": "single-instance daemon over a unix domain socket",
+  "expect": [
+   "unix-socket-ipc-singleton-daemons.md"
+  ]
+ },
+ {
+  "id": "tech-11",
+  "group": "technique",
+  "query": "prompt caching to cut LLM token cost",
+  "expect": [
+   "llm-token-cache-efficiency.md"
+  ]
+ },
+ {
+  "id": "tech-12",
+  "group": "technique",
+  "query": "auditing cargo dependencies for supply chain attacks",
+  "expect": [
+   "supply-chain-security-cargo-npm.md"
+  ]
+ },
+ {
+  "id": "tech-13",
+  "group": "technique",
+  "query": "ACME certificates with Traefik for local HTTPS",
+  "expect": [
+   "traefik-https-acme-and-local-certs.md"
+  ]
+ },
+ {
+  "id": "tech-14",
+  "group": "technique",
+  "query": "designing MCP server tools so models pick the right one",
+  "expect": [
+   "mcp-server-tool-design.md"
+  ]
+ },
+ {
+  "id": "tech-15",
+  "group": "technique",
+  "query": "Raft leader election",
+  "expect": [
+   "appendix-consensus.md"
+  ]
+ },
+ {
+  "id": "tech-16",
+  "group": "technique",
+  "query": "actor model supervision trees",
+  "expect": [
+   "appendix-actor-model.md"
+  ]
+ },
+ {
+  "id": "tech-17",
+  "group": "technique",
+  "query": "Grafana dashboard and alerting practices",
+  "expect": [
+   "grafana-observability-practices.md"
+  ]
+ },
+ {
+  "id": "tech-18",
+  "group": "technique",
+  "query": "emulating AWS services locally",
+  "expect": [
+   "local-aws-emulation-architecture.md"
+  ]
+ },
+ {
+  "id": "tech-19",
+  "group": "technique",
+  "query": "Django production security hardening",
+  "expect": [
+   "django-production-hardening.md",
+   "django-enterprise-architecture.md",
+   "python-secure-coding-practices.md"
+  ]
+ },
+ {
+  "id": "tech-20",
+  "group": "technique",
+  "query": "when to use a decision model instead of an LLM",
+  "expect": [
+   "system-one-decision-models-jev.md"
+  ]
+ },
+ {
+  "id": "neg-far-01",
+  "group": "negative-far",
+  "query": "how to bake sourdough bread at high altitude",
+  "expect": []
+ },
+ {
+  "id": "neg-far-02",
+  "group": "negative-far",
+  "query": "best hiking trails near Lake Tahoe",
+  "expect": []
+ },
+ {
+  "id": "neg-far-03",
+  "group": "negative-far",
+  "query": "treatment options for plantar fasciitis",
+  "expect": []
+ },
+ {
+  "id": "neg-far-04",
+  "group": "negative-far",
+  "query": "French past subjunctive conjugation",
+  "expect": []
+ },
+ {
+  "id": "neg-far-05",
+  "group": "negative-far",
+  "query": "mortgage refinancing break-even calculation",
+  "expect": []
+ },
+ {
+  "id": "neg-far-06",
+  "group": "negative-far",
+  "query": "how to tune a guitar by ear",
+  "expect": []
+ },
+ {
+  "id": "neg-near-01",
+  "group": "negative-near",
+  "query": "Kubernetes Helm chart rollback strategy",
+  "expect": []
+ },
+ {
+  "id": "neg-near-02",
+  "group": "negative-near",
+  "query": "SwiftUI NavigationStack deep linking",
+  "expect": []
+ },
+ {
+  "id": "neg-near-03",
+  "group": "negative-near",
+  "query": "Kotlin coroutines structured concurrency on Android",
+  "expect": []
+ },
+ {
+  "id": "neg-near-04",
+  "group": "negative-near",
+  "query": "Elasticsearch shard rebalancing",
+  "expect": []
+ },
+ {
+  "id": "neg-near-05",
+  "group": "negative-near",
+  "query": "parsing COBOL copybooks",
+  "expect": []
+ },
+ {
+  "id": "neg-near-06",
+  "group": "negative-near",
+  "query": "GraphQL federation schema stitching",
+  "expect": []
+ },
+ {
+  "id": "neg-near-07",
+  "group": "negative-near",
+  "query": "WebGL shader compilation errors",
+  "expect": []
+ },
+ {
+  "id": "neg-near-08",
+  "group": "negative-near",
+  "query": "Flutter widget state management",
+  "expect": []
+ },
+ {
+  "id": "neg-near-09",
+  "group": "negative-near",
+  "query": "Redis cluster hash slot migration",
+  "expect": []
+ },
+ {
+  "id": "neg-near-10",
+  "group": "negative-near",
+  "query": "OAuth PKCE flow for a mobile app",
+  "expect": []
+ }
+]

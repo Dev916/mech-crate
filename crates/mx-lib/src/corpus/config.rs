@@ -10,6 +10,76 @@ pub struct RagConfig {
     pub embedding_base_url: String,
     pub embedding_model: String,
     pub embedding_api_key: Option<String>,
+    /// Optional relevance stage behind retrieval (trial; off by default).
+    pub rerank: RerankConfig,
+}
+
+/// Relevance-stage settings. Env only: nothing here is read from `rag.toml`.
+#[derive(Debug, Clone)]
+pub struct RerankConfig {
+    /// `MX_RAG_RERANK`. The stage runs only when this is `jev` and a key is set.
+    pub provider: Option<String>,
+    /// `MX_RAG_JEV_API_KEY`, else `TYPESAFE_API_KEY`.
+    pub api_key: Option<String>,
+    pub base_url: String,
+    pub model: String,
+    /// Chunks judged below this probability are dropped.
+    pub threshold: f64,
+    /// Doc-path prefixes whose chunks are never sent to the provider.
+    pub private_prefixes: Vec<String>,
+    /// `MX_RAG_JEV_TRACE`: append one JSON line per search (measurement).
+    pub trace_path: Option<PathBuf>,
+}
+
+impl Default for RerankConfig {
+    fn default() -> Self {
+        Self {
+            provider: None,
+            api_key: None,
+            base_url: "https://api.typesafe.ai/v1".to_string(),
+            // Pinned, not an alias: a moving alias invalidates a tuned threshold.
+            model: "jev-1.13.0".to_string(),
+            threshold: 0.5,
+            private_prefixes: vec!["repos/".to_string()],
+            trace_path: None,
+        }
+    }
+}
+
+impl RerankConfig {
+    fn apply_env(&mut self) {
+        if let Ok(v) = std::env::var("MX_RAG_RERANK") {
+            self.provider = Some(v);
+        }
+        if let Ok(v) =
+            std::env::var("MX_RAG_JEV_API_KEY").or_else(|_| std::env::var("TYPESAFE_API_KEY"))
+        {
+            self.api_key = Some(v);
+        }
+        if let Ok(v) = std::env::var("MX_RAG_JEV_BASE_URL") {
+            self.base_url = v;
+        }
+        if let Ok(v) = std::env::var("MX_RAG_JEV_MODEL") {
+            self.model = v;
+        }
+        if let Ok(v) = std::env::var("MX_RAG_JEV_THRESHOLD") {
+            match v.parse::<f64>() {
+                Ok(t) if (0.0..=1.0).contains(&t) => self.threshold = t,
+                _ => tracing::warn!("invalid MX_RAG_JEV_THRESHOLD ({v}): using default"),
+            }
+        }
+        if let Ok(v) = std::env::var("MX_RAG_JEV_PRIVATE_PREFIXES") {
+            self.private_prefixes = v
+                .split(',')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .map(String::from)
+                .collect();
+        }
+        if let Ok(v) = std::env::var("MX_RAG_JEV_TRACE") {
+            self.trace_path = Some(PathBuf::from(v));
+        }
+    }
 }
 
 impl Default for RagConfig {
@@ -20,6 +90,7 @@ impl Default for RagConfig {
             embedding_base_url: "https://api.openai.com/v1".to_string(),
             embedding_model: "text-embedding-3-small".to_string(),
             embedding_api_key: None,
+            rerank: RerankConfig::default(),
         }
     }
 }
@@ -88,6 +159,7 @@ impl RagConfig {
         {
             cfg.embedding_api_key = Some(v);
         }
+        cfg.rerank.apply_env();
         cfg
     }
 }
@@ -133,5 +205,46 @@ mod tests {
         assert_eq!(cfg.embedding_model, "env-model");
         std::env::remove_var("MX_RAG_DATABASE_URL");
         std::env::remove_var("MX_RAG_EMBEDDING_MODEL");
+    }
+
+    #[test]
+    fn rerank_is_off_by_default_and_private_prefixes_default_to_repos() {
+        for k in ["MX_RAG_RERANK", "MX_RAG_JEV_API_KEY", "TYPESAFE_API_KEY"] {
+            std::env::remove_var(k);
+        }
+        let cfg = RagConfig::load_from(None);
+        assert!(cfg.rerank.provider.is_none());
+        assert!(cfg.rerank.api_key.is_none());
+        assert_eq!(cfg.rerank.private_prefixes, vec!["repos/".to_string()]);
+        assert_eq!(cfg.rerank.threshold, 0.5);
+        assert_eq!(cfg.rerank.model, "jev-1.13.0");
+    }
+
+    #[test]
+    fn rerank_env_overrides() {
+        std::env::set_var("MX_RAG_RERANK", "jev");
+        std::env::set_var("MX_RAG_JEV_API_KEY", "k");
+        std::env::set_var("MX_RAG_JEV_THRESHOLD", "0.7");
+        std::env::set_var("MX_RAG_JEV_PRIVATE_PREFIXES", "repos/, internal/");
+        let cfg = RagConfig::load_from(None);
+        assert_eq!(cfg.rerank.provider.as_deref(), Some("jev"));
+        assert_eq!(cfg.rerank.api_key.as_deref(), Some("k"));
+        assert_eq!(cfg.rerank.threshold, 0.7);
+        assert_eq!(cfg.rerank.private_prefixes, vec!["repos/", "internal/"]);
+
+        // Out-of-range threshold keeps the default; empty prefix list sends everything.
+        std::env::set_var("MX_RAG_JEV_THRESHOLD", "7");
+        std::env::set_var("MX_RAG_JEV_PRIVATE_PREFIXES", "");
+        let cfg = RagConfig::load_from(None);
+        assert_eq!(cfg.rerank.threshold, 0.5);
+        assert!(cfg.rerank.private_prefixes.is_empty());
+        for k in [
+            "MX_RAG_RERANK",
+            "MX_RAG_JEV_API_KEY",
+            "MX_RAG_JEV_THRESHOLD",
+            "MX_RAG_JEV_PRIVATE_PREFIXES",
+        ] {
+            std::env::remove_var(k);
+        }
     }
 }
