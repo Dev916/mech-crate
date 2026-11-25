@@ -5,6 +5,7 @@ use clap::{Args, Subcommand};
 use console::style;
 
 use mx_lib::config::MechCrateConfig;
+use mx_lib::router::visibility::{declared_routers, diagnose, docker_provider_routers, RouterView};
 use mx_lib::router::Router;
 
 /// Manage global Traefik router
@@ -163,6 +164,25 @@ impl RouterCommand {
 
         println!("  Location: {}", status.install_dir.display());
 
+        // "running" above is the router container on the active Docker context.
+        // It does not say that container owns host :80. Compare what this
+        // daemon's containers declare with what the Traefik answering on the
+        // host has loaded (bd:mech-crate-86o).
+        if status.running {
+            if let Some(port) = status.dashboard_port {
+                let view = diagnose(
+                    &declared_router_names(router.network_name()),
+                    loaded_router_names(port).await,
+                );
+                print_router_view(&view, port);
+                if view.is_fault() {
+                    anyhow::bail!(
+                        "the router is running but is not routing this Docker daemon's containers"
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -202,5 +222,109 @@ impl RouterCommand {
         println!("{} Router uninstalled", style("✓").green().bold());
 
         Ok(())
+    }
+}
+
+/// Router names declared by the active daemon's running containers on the
+/// router network. A docker failure yields an empty list, which the diagnosis
+/// reports as unverified rather than as a fault.
+fn declared_router_names(network: &str) -> Vec<String> {
+    let ids = std::process::Command::new("docker")
+        .args(["ps", "-q", "--filter", &format!("network={network}")])
+        .output();
+    let Ok(ids) = ids else { return Vec::new() };
+    let ids: Vec<String> = String::from_utf8_lossy(&ids.stdout)
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let out = std::process::Command::new("docker")
+        .arg("inspect")
+        .args(["--format", "{{json .Config.Labels}}"])
+        .args(&ids)
+        .output();
+    let Ok(out) = out else { return Vec::new() };
+    let mut names = Vec::new();
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let Ok(labels) = serde_json::from_str::<std::collections::BTreeMap<String, String>>(line)
+        else {
+            continue;
+        };
+        names.extend(declared_routers(
+            labels.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+        ));
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Docker-provider routers loaded by whichever Traefik answers on the host
+/// dashboard port.
+async fn loaded_router_names(port: u16) -> std::result::Result<Vec<String>, String> {
+    let url = format!("http://127.0.0.1:{port}/api/http/routers");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("{url} answered {}", resp.status()));
+    }
+    let routers: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+    let names: Vec<&str> = routers
+        .iter()
+        .filter_map(|r| r.get("name").and_then(|n| n.as_str()))
+        .collect();
+    Ok(docker_provider_routers(names))
+}
+
+fn print_router_view(view: &RouterView, port: u16) {
+    match view {
+        RouterView::Consistent { routers } => println!(
+            "  Routing: {} ({routers} router(s) declared on this Docker daemon, all loaded)",
+            style("ok").green()
+        ),
+        RouterView::Unverified => println!(
+            "  Routing: {} (no container on this Docker daemon declares a router yet)",
+            style("not verified").yellow()
+        ),
+        RouterView::Blind { missing } => {
+            println!(
+                "  Routing: {}",
+                style("the Traefik on the host ports cannot see this Docker daemon").red()
+            );
+            println!(
+                "    It has loaded none of the {} router(s) declared here: {}",
+                missing.len(),
+                missing.join(", ")
+            );
+            println!(
+                "    Another Docker daemon (Docker Desktop, OrbStack, colima) is likely running its own"
+            );
+            println!(
+                "    mx-router and holding ports 80 and {port}. Stop that router or that daemon, then run"
+            );
+            println!("    `mx router restart`. Active context: `docker context show`.");
+        }
+        RouterView::Partial { missing, seen } => {
+            println!(
+                "  Routing: {} ({seen} loaded, {} missing: {})",
+                style("partial").yellow(),
+                missing.len(),
+                missing.join(", ")
+            );
+            println!(
+                "    A container may still be starting, or Traefik rejected its labels: `mx router logs`."
+            );
+        }
+        RouterView::ApiUnreachable { detail } => {
+            println!(
+                "  Routing: {} (dashboard API on port {port} did not answer: {detail})",
+                style("unknown").red()
+            );
+        }
     }
 }
