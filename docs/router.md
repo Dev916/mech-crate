@@ -156,12 +156,12 @@ mx router logs
 
 Useful for debugging routing issues—you'll see every request that hits the router.
 
-### `mx router reload`
+### Reloading configuration
 
-Hot-reload configuration without restarting the container. Use this after editing files in `~/.mech-crate/router/config/dynamic/`.
+There is no reload command and none is needed for dynamic configuration: Traefik watches `~/.mech-crate/router/config/dynamic/` and applies edits on its own. A change to the static config (`config/traefik.yml`) or to the compose file needs a restart:
 
 ```bash
-mx router reload
+mx router restart
 ```
 
 ### `mx router inspect`
