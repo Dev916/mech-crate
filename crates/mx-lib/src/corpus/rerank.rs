@@ -258,6 +258,7 @@ impl RerankStage {
                 json!({
                     "path": h.path,
                     "heading_path": h.heading_path,
+                    "content_sha": &super::store::sha256_hex(&h.content)[..16],
                     "score": h.score,
                     "status": status,
                     "probability": verdicts[i].map(|j| j.probability),

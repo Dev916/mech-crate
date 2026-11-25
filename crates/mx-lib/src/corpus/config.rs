@@ -40,7 +40,9 @@ impl Default for RerankConfig {
             base_url: "https://api.typesafe.ai/v1".to_string(),
             // Pinned, not an alias: a moving alias invalidates a tuned threshold.
             model: "jev-1.13.0".to_string(),
-            threshold: 0.5,
+            // 0.3 lost no answerable query on the judged real-query sample;
+            // 0.5 dropped 3 of 27. Higher is stricter.
+            threshold: 0.3,
             private_prefixes: vec!["repos/".to_string()],
             trace_path: None,
         }
@@ -231,7 +233,7 @@ mod tests {
         assert!(crate::corpus::rerank::RerankStage::from_config(&cfg.rerank).is_none());
         std::env::remove_var("JEV_API_KEY");
         assert_eq!(cfg.rerank.private_prefixes, vec!["repos/".to_string()]);
-        assert_eq!(cfg.rerank.threshold, 0.5);
+        assert_eq!(cfg.rerank.threshold, 0.3);
         assert_eq!(cfg.rerank.model, "jev-1.13.0");
     }
 
@@ -251,7 +253,7 @@ mod tests {
         std::env::set_var("MX_RAG_JEV_THRESHOLD", "7");
         std::env::set_var("MX_RAG_JEV_PRIVATE_PREFIXES", "");
         let cfg = RagConfig::load_from(None);
-        assert_eq!(cfg.rerank.threshold, 0.5);
+        assert_eq!(cfg.rerank.threshold, 0.3);
         assert!(cfg.rerank.private_prefixes.is_empty());
         for k in [
             "MX_RAG_RERANK",
