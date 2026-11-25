@@ -7,8 +7,8 @@ use_cases:
   - "bootstrapping monorepo build and deploy infrastructure"
   - "organizing modular Makefiles and scripts"
   - "setting up semantic version bumping"
-  - "deploying to Cloudflare with Terraform IaC"
-summary: "A batteries-included blueprint for monorepo infrastructure: modular Makefiles, Docker organization, semantic versioning, Cloudflare deployment, and Terraform IaC."
+  - "provisioning a DigitalOcean GPU droplet with Terraform (the only IaC in this recipe)"
+summary: "A batteries-included blueprint for monorepo infrastructure: modular Makefiles, Docker organization, semantic versioning, and a Terraform example for a DigitalOcean GPU droplet. For the Cloudflare deploy path as implemented, see mx-cloudflare-deploy.md."
 ---
 
 # Build, Deploy & Release Recipe
