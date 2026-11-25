@@ -1265,7 +1265,7 @@ With devmesh-traefik running, access services by hostname:
 
 ### HTTPS Support
 
-For HTTPS, add certificates to `~/.devmesh-traefik/letsencrypt/` and update the entrypoint:
+For HTTPS, the router's certificate storage is `~/.mech-crate/router/letsencrypt/`; issuing and loading certificates (ACME in production, mkcert locally) is covered in `traefik-https-acme-and-local-certs.md`. Then move the service to the TLS entrypoint:
 
 ```yaml
 labels:
@@ -1283,7 +1283,7 @@ labels:
 | `mx router status` | Show router container status |
 | `mx router logs` | Tail router logs |
 | `mx router inspect` | Show dashboard URL and connected services |
-| `mx router reload` | Hot-reload config without restart |
+| `mx router restart` | Restart the router (edits under `config/dynamic/` are picked up without one) |
 | `mx router uninstall` | Remove router installation |
 
 ### Troubleshooting
