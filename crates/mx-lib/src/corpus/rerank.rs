@@ -154,7 +154,9 @@ impl RerankStage {
             return None;
         }
         let Some(key) = cfg.api_key.as_deref() else {
-            tracing::warn!("MX_RAG_RERANK=jev but no MX_RAG_JEV_API_KEY: relevance stage off");
+            tracing::warn!(
+                "MX_RAG_RERANK=jev but no MX_RAG_JEV_API_KEY / JEV_API_KEY: relevance stage off"
+            );
             return None;
         };
         let judge = Arc::new(JevJudge::new(&cfg.base_url, key, &cfg.model));
@@ -170,10 +172,15 @@ impl RerankStage {
         (limit * 2).min(MAX_CANDIDATES).max(limit)
     }
 
+    /// A prefix matches at the start of the path or at any directory boundary,
+    /// so `repos/` still guards `docs/development/repos/x.md` when the corpus
+    /// was ingested from a different root.
     fn is_private(&self, path: &str) -> bool {
-        self.private_prefixes
-            .iter()
-            .any(|p| path.starts_with(p.as_str()))
+        let path = path.replace('\\', "/");
+        self.private_prefixes.iter().any(|p| {
+            let p = p.trim_start_matches('/');
+            path.starts_with(p) || path.contains(&format!("/{p}"))
+        })
     }
 
     /// Filter `hits` (retrieval order) down to at most `limit` kept hits.
@@ -380,6 +387,21 @@ mod tests {
         let out = stage(judge.clone(), 0.5).apply("q", hits, 5).await;
         assert_eq!(contents(&out), vec!["secret"]);
         assert_eq!(*judge.seen.lock().unwrap(), vec!["public".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn private_prefix_matches_at_any_directory_boundary() {
+        let judge = Arc::new(FakeJudge::new(&[("public", 0.9), ("lookalike", 0.9)]));
+        let hits = vec![
+            hit("docs/development/repos/hq.md", "nested"),
+            hit("/abs/root/repos/hq.md", "absolute"),
+            hit("myrepos/x.md", "lookalike"),
+            hit("x.md", "public"),
+        ];
+        stage(judge.clone(), 0.5).apply("q", hits, 5).await;
+        let mut seen = judge.seen.lock().unwrap().clone();
+        seen.sort();
+        assert_eq!(seen, vec!["lookalike".to_string(), "public".to_string()]);
     }
 
     #[tokio::test]

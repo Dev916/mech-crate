@@ -19,7 +19,8 @@ pub struct RagConfig {
 pub struct RerankConfig {
     /// `MX_RAG_RERANK`. The stage runs only when this is `jev` and a key is set.
     pub provider: Option<String>,
-    /// `MX_RAG_JEV_API_KEY`, else `TYPESAFE_API_KEY`.
+    /// `MX_RAG_JEV_API_KEY`, else `JEV_API_KEY`, else `TYPESAFE_API_KEY`.
+    /// A key alone never switches the stage on.
     pub api_key: Option<String>,
     pub base_url: String,
     pub model: String,
@@ -51,8 +52,9 @@ impl RerankConfig {
         if let Ok(v) = std::env::var("MX_RAG_RERANK") {
             self.provider = Some(v);
         }
-        if let Ok(v) =
-            std::env::var("MX_RAG_JEV_API_KEY").or_else(|_| std::env::var("TYPESAFE_API_KEY"))
+        if let Ok(v) = std::env::var("MX_RAG_JEV_API_KEY")
+            .or_else(|_| std::env::var("JEV_API_KEY"))
+            .or_else(|_| std::env::var("TYPESAFE_API_KEY"))
         {
             self.api_key = Some(v);
         }
@@ -209,12 +211,25 @@ mod tests {
 
     #[test]
     fn rerank_is_off_by_default_and_private_prefixes_default_to_repos() {
-        for k in ["MX_RAG_RERANK", "MX_RAG_JEV_API_KEY", "TYPESAFE_API_KEY"] {
+        for k in [
+            "MX_RAG_RERANK",
+            "MX_RAG_JEV_API_KEY",
+            "JEV_API_KEY",
+            "TYPESAFE_API_KEY",
+        ] {
             std::env::remove_var(k);
         }
         let cfg = RagConfig::load_from(None);
         assert!(cfg.rerank.provider.is_none());
         assert!(cfg.rerank.api_key.is_none());
+
+        // A key in the environment is picked up but does not switch the stage on.
+        std::env::set_var("JEV_API_KEY", "k");
+        let cfg = RagConfig::load_from(None);
+        assert_eq!(cfg.rerank.api_key.as_deref(), Some("k"));
+        assert!(cfg.rerank.provider.is_none());
+        assert!(crate::corpus::rerank::RerankStage::from_config(&cfg.rerank).is_none());
+        std::env::remove_var("JEV_API_KEY");
         assert_eq!(cfg.rerank.private_prefixes, vec!["repos/".to_string()]);
         assert_eq!(cfg.rerank.threshold, 0.5);
         assert_eq!(cfg.rerank.model, "jev-1.13.0");

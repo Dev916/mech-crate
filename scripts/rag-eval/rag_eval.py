@@ -183,7 +183,9 @@ def cmd_jev_sweep(a):
             kept = [
                 c["path"]
                 for c in t["chunks"]
-                if c["probability"] is None or c["probability"] >= thr
+                if c["probability"] is None
+                or (a.unjudged_prefix and c["path"].startswith(a.unjudged_prefix))
+                or c["probability"] >= thr
             ][: a.limit]
             rows.append({**questions[t["query"]], "docs": kept})
         mm = metrics(rows)
@@ -236,6 +238,10 @@ def main():
     j.add_argument("trace")
     j.add_argument("--questions", default="scripts/rag-eval/questions.json")
     j.add_argument("--limit", type=int, default=3)
+    j.add_argument(
+        "--unjudged-prefix",
+        help="treat chunks under this path prefix as unjudged (simulates the privacy guard)",
+    )
     j.set_defaults(fn=cmd_jev_sweep)
     t = sub.add_parser("stub")
     t.add_argument("--port", type=int, default=18099)
