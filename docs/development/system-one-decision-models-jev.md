@@ -292,3 +292,27 @@ The smart-home demo shows the hybrid that most systems will actually want: Jev d
 **Run your own calibration check before trusting any threshold.** The vendor's calibration claim is about groups, and the independent record is split, so treat thresholds as a local measurement, not a constant. The cheap version: collect 200 to 500 labelled examples from your own traffic, run them through the exact questions you will ship, bucket the answers into ten confidence bins, and plot observed accuracy per bin against the bin centre. You want three numbers out of it: the expected calibration error, the confidence floor below which accuracy falls off a cliff, and the automation rate at your target accuracy, which is the fraction of decisions you can take unattended if you route everything under that floor to a human. Re-run it whenever you move off a pinned model id, because an alias moving silently invalidates every threshold you tuned. Use the full probability distribution rather than the scalar confidence if your options are not mutually exclusive, since a flat distribution over four plausible options and a flat distribution over one plausible and three nonsense options mean different things.
 
 **One application note for this corpus's own tooling.** Two places in our stack have the shape this is for. First, tool selection: the mx MCP server publishes 47 tools in one flat list, which sits inside the band where model tool-selection accuracy is known to degrade, and the jev-chat design is a working demonstration of the alternative, where a Choice over every tool plus per-tool argument questions is answered in one speculative request and code owns the dispatch. That would be a rebuild rather than a tweak, but it is the clearest local instance of "classify, then act". Second, and cheaper to try: technique-research claim verification. Every doc this skill ships asserts that a quoted figure appears verbatim on a cited page, and that check is currently done by an expensive model reading the page. It is really a per-claim Noul against a fetched state, which is exactly a guardrail-behind-the-LLM placement, with confidence gating which claims a human needs to look at. Both are worth a spike, not a commitment, until the calibration evidence settles.
+
+## Applied here: Jev as an opt-in relevance stage in the mx techniques corpus (measured 2026-11-25)
+
+This section reports a trial run in this repository, not vendor material. The stage sits behind retrieval in `crates/mx-lib/src/corpus/rerank.rs`: each retrieved chunk is put to Jev as one closed question (does this passage help answer the query), chunks under the threshold are dropped, and if none are left the tool answers that nothing relevant was found. It filters and never re-sorts, and it fails open: a failed call keeps the chunk.
+
+**Switches.** Off by default. `MX_RAG_RERANK=jev` plus a key (`MX_RAG_JEV_API_KEY`, else `JEV_API_KEY`, else `TYPESAFE_API_KEY`) turns it on; a key alone does nothing. `MX_RAG_JEV_THRESHOLD` defaults to 0.3 and `MX_RAG_JEV_MODEL` to `jev-1.13.0`. Chunks under `repos/` are never sent to the provider unless `MX_RAG_JEV_PRIVATE_PREFIXES` is set to an empty string.
+
+**Results, top 3.** "Useful" means at least one shown chunk was judged directly helpful; "junk" means something was shown for a query with no helpful candidate. The easy set is 57 authored questions; the hard set is 38 reworded and near-miss questions; the real set is 60 queries sampled from this corpus's own query log. Hard and real passages were labelled by a separate model judge that saw no scores.
+
+| | Easy: hits | Easy: junk | Hard: useful | Hard: junk | Real: useful | Real: junk |
+|---|---|---|---|---|---|---|
+| Retrieval only | 41/41 | 16/16 | 10/13 | 25/25 | 24/27 | 33/33 |
+| Retrieval score floor 0.42 | 39/41 | 1/16 | 8/13 | 13/25 | 23/27 | 23/33 |
+| Jev, threshold 0.3 | 41/41 | 1/16 | 13/13 | 9/25 | 25/27 | 19/33 |
+| Jev, threshold 0.5 | 41/41 | 0/16 | 13/13 | 5/25 | 21/27 | 9/33 |
+
+- Added latency was about 130 to 160 ms at the median and about 200 ms at the 95th percentile; cost was about $0.15 per 1,000 queries at list price; no judge call failed in roughly 1,370.
+- On near-miss questions the retrieval score carried almost no signal (ranking quality 0.53, against 0.98 for Jev), so a score floor is not a substitute there.
+- 0.5 abstained on 3 of 27 answerable real queries; 0.3 lost none, which is why 0.3 is the default.
+- Jev's probabilities ran low on long, multi-part task descriptions.
+
+**Limits of this evidence.** 155 queries in total, one model judge per passage with no second rater, and the 0.3 threshold was chosen on the same data. The stage roughly doubled the share of shown chunks that were useful and removed about 40 percent of junk answers on real queries; it did not eliminate them. That is the reason it ships opt-in and not as the default. The harness is `scripts/rag-eval/`.
+
+**Model id note.** The vendor's examples showed `jev-1.14.0` on 2026-11-25 while `jev-1.13.0` was still accepted; the default stays pinned because a moving alias would invalidate the tuned threshold.
