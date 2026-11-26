@@ -9,7 +9,8 @@ pub mod config;
 pub mod embed;
 pub mod frontmatter;
 pub mod ingest;
+pub mod rerank;
 pub mod store;
 
-pub use config::RagConfig;
+pub use config::{RagConfig, RerankConfig};
 pub use store::{BackendKind, CorpusStore, DocMeta, GapTheme, SearchMode, TechHit, TechQuery};

@@ -1,0 +1,268 @@
+[
+ {
+  "id": "hard-pos-01",
+  "group": "hard-positive",
+  "query": "stop a tokio server cleanly when SIGTERM arrives",
+  "expect": [
+   "rust-async-cancellation-graceful-shutdown.md"
+  ]
+ },
+ {
+  "id": "hard-pos-02",
+  "group": "hard-positive",
+  "query": "two offline devices edit the same note, how do the edits converge",
+  "expect": [
+   "local-first-sync-engines-crdts-in-practice.md"
+  ]
+ },
+ {
+  "id": "hard-pos-03",
+  "group": "hard-positive",
+  "query": "make sure only one copy of my background process runs at a time",
+  "expect": [
+   "unix-socket-ipc-singleton-daemons.md"
+  ]
+ },
+ {
+  "id": "hard-pos-04",
+  "group": "hard-positive",
+  "query": "match URL paths against thousands of route patterns quickly",
+  "expect": [
+   "tries-and-radix-dispatch.md"
+  ]
+ },
+ {
+  "id": "hard-pos-05",
+  "group": "hard-positive",
+  "query": "replay production requests against a release candidate without affecting users",
+  "expect": [
+   "shadow-traffic-and-dark-launches.md"
+  ]
+ },
+ {
+  "id": "hard-pos-06",
+  "group": "hard-positive",
+  "query": "why does my model keep calling the wrong tool when I expose too many",
+  "expect": [
+   "mcp-server-tool-design.md",
+   "system-one-decision-models-jev.md",
+   "multi-agent-systems-in-practice.md"
+  ]
+ },
+ {
+  "id": "hard-pos-07",
+  "group": "hard-positive",
+  "query": "cut the bill for repeated long system prompts",
+  "expect": [
+   "llm-token-cache-efficiency.md"
+  ]
+ },
+ {
+  "id": "hard-pos-08",
+  "group": "hard-positive",
+  "query": "a malicious crate update steals credentials at build time, how to defend",
+  "expect": [
+   "supply-chain-security-cargo-npm.md"
+  ]
+ },
+ {
+  "id": "hard-pos-09",
+  "group": "hard-positive",
+  "query": "browser shows a certificate warning for my local dev domain",
+  "expect": [
+   "traefik-https-acme-and-local-certs.md"
+  ]
+ },
+ {
+  "id": "hard-pos-10",
+  "group": "hard-positive",
+  "query": "nodes disagree about who the leader is after a network partition",
+  "expect": [
+   "appendix-consensus.md",
+   "appendix-consistency-models.md",
+   "appendix-coordination-models.md"
+  ]
+ },
+ {
+  "id": "hard-pos-11",
+  "group": "hard-positive",
+  "query": "insert thousands of embedding vectors into Postgres efficiently",
+  "expect": [
+   "pgvector-rust-batch-embedding.md"
+  ]
+ },
+ {
+  "id": "hard-pos-12",
+  "group": "hard-positive",
+  "query": "combine keyword search and vector search results into one ranking",
+  "expect": [
+   "rag-retrieval-fusion-and-chunking.md",
+   "appendix-rag.md",
+   "rag-context-engineering-ladder.md"
+  ]
+ },
+ {
+  "id": "hard-pos-13",
+  "group": "hard-positive",
+  "query": "get paged when the alerting pipeline itself is broken",
+  "expect": [
+   "grafana-observability-practices.md"
+  ]
+ },
+ {
+  "id": "hard-pos-14",
+  "group": "hard-positive",
+  "query": "test code that talks to S3 and SQS without an AWS account",
+  "expect": [
+   "local-aws-emulation-architecture.md"
+  ]
+ },
+ {
+  "id": "hard-pos-15",
+  "group": "hard-positive",
+  "query": "cheap fast classifier with calibrated confidence to route requests before the expensive model",
+  "expect": [
+   "system-one-decision-models-jev.md"
+  ]
+ },
+ {
+  "id": "hard-pos-16",
+  "group": "hard-positive",
+  "query": "which of our tools records calls and writes up the action items",
+  "expect": [
+   "repos/meetnotes.md"
+  ]
+ },
+ {
+  "id": "near-miss-01",
+  "group": "near-miss",
+  "query": "Raft joint consensus for cluster membership changes",
+  "expect": []
+ },
+ {
+  "id": "near-miss-02",
+  "group": "near-miss",
+  "query": "Raft log compaction and snapshot installation",
+  "expect": []
+ },
+ {
+  "id": "near-miss-03",
+  "group": "near-miss",
+  "query": "Paxos flexible quorums",
+  "expect": []
+ },
+ {
+  "id": "near-miss-04",
+  "group": "near-miss",
+  "query": "Django Channels websocket consumers",
+  "expect": []
+ },
+ {
+  "id": "near-miss-05",
+  "group": "near-miss",
+  "query": "Rust async cancellation on embedded with embassy and no_std",
+  "expect": []
+ },
+ {
+  "id": "near-miss-06",
+  "group": "near-miss",
+  "query": "OAuth authorization flow for a remote MCP server",
+  "expect": []
+ },
+ {
+  "id": "near-miss-07",
+  "group": "near-miss",
+  "query": "Lambda layers in a local AWS emulator",
+  "expect": []
+ },
+ {
+  "id": "near-miss-08",
+  "group": "near-miss",
+  "query": "mirroring gRPC streaming calls with shadow traffic",
+  "expect": []
+ },
+ {
+  "id": "near-miss-09",
+  "group": "near-miss",
+  "query": "a2a dispatching Gemini CLI workers",
+  "expect": []
+ },
+ {
+  "id": "near-miss-10",
+  "group": "near-miss",
+  "query": "running meetnotes on Linux with PulseAudio",
+  "expect": []
+ },
+ {
+  "id": "near-miss-11",
+  "group": "near-miss",
+  "query": "hq iOS mobile app",
+  "expect": []
+ },
+ {
+  "id": "near-miss-12",
+  "group": "near-miss",
+  "query": "cupcake Spotify playlist import",
+  "expect": []
+ },
+ {
+  "id": "near-miss-13",
+  "group": "near-miss",
+  "query": "devloop verification on an Android emulator",
+  "expect": []
+ },
+ {
+  "id": "near-miss-14",
+  "group": "near-miss",
+  "query": "understudy Zoom SDK integration",
+  "expect": []
+ },
+ {
+  "id": "near-miss-15",
+  "group": "near-miss",
+  "query": "Solana program derived addresses with Anchor",
+  "expect": []
+ },
+ {
+  "id": "near-miss-16",
+  "group": "near-miss",
+  "query": "PowerShell script error handling",
+  "expect": []
+ },
+ {
+  "id": "near-miss-17",
+  "group": "near-miss",
+  "query": "Celery beat periodic task scheduling",
+  "expect": []
+ },
+ {
+  "id": "near-miss-18",
+  "group": "near-miss",
+  "query": "Temporal durable workflow execution",
+  "expect": []
+ },
+ {
+  "id": "near-miss-19",
+  "group": "near-miss",
+  "query": "SQLite FTS5 full text search",
+  "expect": []
+ },
+ {
+  "id": "near-miss-20",
+  "group": "near-miss",
+  "query": "htmx partial page updates",
+  "expect": []
+ },
+ {
+  "id": "near-miss-21",
+  "group": "near-miss",
+  "query": "SEC Regulation Crowdfunding offering limits",
+  "expect": []
+ },
+ {
+  "id": "near-miss-22",
+  "group": "near-miss",
+  "query": "pgvector with SQLAlchemy in Python",
+  "expect": []
+ }
+]

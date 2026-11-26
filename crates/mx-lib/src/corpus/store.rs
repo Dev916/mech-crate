@@ -11,6 +11,7 @@ use uuid::Uuid;
 use super::chunk::Chunk;
 use super::config::RagConfig;
 use super::embed::{EmbeddingProvider, OpenAiCompatEmbedder};
+use super::rerank::RerankStage;
 
 /// Which database the store connected to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +46,8 @@ pub struct CorpusStore {
     backend: BackendKind,
     embedder: Option<Arc<dyn EmbeddingProvider>>,
     model: String,
+    /// Optional relevance stage behind retrieval; `None` unless switched on.
+    rerank: Option<RerankStage>,
     last_log_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -74,8 +77,19 @@ impl CorpusStore {
             backend,
             embedder,
             model: cfg.embedding_model.clone(),
+            rerank: RerankStage::from_config(&cfg.rerank),
             last_log_task: tokio::sync::Mutex::new(None),
         })
+    }
+
+    /// Replace the relevance stage (tests inject a scripted judge).
+    pub fn with_rerank(mut self, stage: Option<RerankStage>) -> Self {
+        self.rerank = stage;
+        self
+    }
+
+    pub fn has_rerank(&self) -> bool {
+        self.rerank.is_some()
     }
 
     async fn connect_pool(cfg: &RagConfig) -> anyhow::Result<(PgPool, BackendKind)> {
@@ -320,7 +334,27 @@ impl CorpusStore {
             },
             None => None,
         };
-        let (hits, mode) = self.search_with_embedding(q, embedding).await?;
+        let (hits, mode) = match &self.rerank {
+            None => self.search_with_embedding(q, embedding).await?,
+            // Over-fetch so hits the stage drops can be backfilled.
+            Some(stage) => {
+                let wide = TechQuery {
+                    text: q.text,
+                    category: q.category,
+                    language: q.language,
+                    limit: stage.candidates(q.limit),
+                    tool: q.tool,
+                };
+                self.search_with_embedding(&wide, embedding).await?
+            }
+        };
+        // Logged before the relevance stage, so gap mining keeps seeing the
+        // retrieval score whether or not the stage is on.
+        let top_score = hits.first().map(|h| h.score);
+        let hits = match &self.rerank {
+            None => hits,
+            Some(stage) => stage.apply(q.text, hits, q.limit.max(0) as usize).await,
+        };
 
         // Fire-and-forget query logging for gap mining. This is an edge effect:
         // it runs in a spawned task, and every failure is mapped to a trace and
@@ -332,7 +366,7 @@ impl CorpusStore {
             tool: q.tool.to_string(),
             category: q.category.map(String::from),
             language: q.language.map(String::from),
-            top_score: hits.first().map(|h| h.score),
+            top_score,
             mode: match mode {
                 SearchMode::Hybrid => "hybrid",
                 SearchMode::TrigramOnly => "trigram_only",
@@ -732,6 +766,67 @@ mod tests {
         let st = store.status().await.unwrap();
         assert_eq!(st["docs"], 2);
         assert_eq!(st["chunks"], 2);
+    }
+
+    #[tokio::test]
+    async fn rerank_stage_filters_search_and_is_off_by_default() {
+        use crate::corpus::rerank::testing::FakeJudge;
+        let Some(cfg) = test_cfg() else { return };
+        let _guard = db_lock().lock().await;
+        let store = CorpusStore::connect(&cfg).await.unwrap();
+        assert!(!store.has_rerank(), "stage must be off without config");
+        store.clear().await.unwrap();
+
+        let m = meta("docs/rerank.md");
+        let id = store.upsert_doc(&m, &sha256_hex("rr")).await.unwrap();
+        for body in ["retry with backoff", "retry storms and jitter"] {
+            let c = Chunk {
+                heading_path: "T > R".into(),
+                content: body.into(),
+            };
+            store.insert_chunk(id, &c, &m, None).await.unwrap();
+        }
+        let q = TechQuery {
+            text: "retry",
+            category: None,
+            language: None,
+            limit: 5,
+            tool: "test",
+        };
+        let (hits, _) = store.search(&q).await.unwrap();
+        assert_eq!(hits.len(), 2, "baseline returns both chunks");
+        store.flush_query_log().await;
+
+        let judge = Arc::new(FakeJudge::new(&[
+            ("retry with backoff", 0.9),
+            ("retry storms and jitter", 0.1),
+        ]));
+        let store = store.with_rerank(Some(RerankStage::new(judge, 0.5, vec![])));
+        let (hits, _) = store.search(&q).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].content, "retry with backoff");
+        store.flush_query_log().await;
+
+        // Abstention: every chunk judged irrelevant -> no hits, but the query
+        // log still carries the retrieval score.
+        let judge = Arc::new(FakeJudge::new(&[
+            ("retry with backoff", 0.1),
+            ("retry storms and jitter", 0.1),
+        ]));
+        let store = store.with_rerank(Some(RerankStage::new(judge, 0.5, vec![])));
+        let (hits, _) = store.search(&q).await.unwrap();
+        assert!(hits.is_empty());
+        store.flush_query_log().await;
+        let logged: Option<f64> = sqlx::query_scalar(
+            "SELECT top_score FROM rag_queries WHERE tool = 'test' ORDER BY created_at DESC LIMIT 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert!(
+            logged.is_some(),
+            "retrieval score logged despite abstention"
+        );
     }
 
     #[tokio::test]
